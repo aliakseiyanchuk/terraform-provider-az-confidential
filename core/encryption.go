@@ -22,6 +22,7 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwk"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/youmark/pkcs8"
 )
@@ -404,5 +405,39 @@ func ParsePEMBlocks(data []byte) ([]*pem.Block, error) {
 		}
 	}
 
+	if len(rv) == 0 {
+		return rv, errors.New("no PEM blocks found")
+	}
+
 	return rv, nil
+}
+
+func FindPrivateKeyBlock(blocks []*pem.Block) *pem.Block {
+	if len(blocks) == 0 {
+		return nil
+	}
+
+	for _, block := range blocks {
+		if strings.HasSuffix(block.Type, "PRIVATE KEY") {
+			return block
+		}
+	}
+
+	return nil
+}
+
+func FindCertificateBlocks(blocks []*pem.Block) []*pem.Block {
+	if len(blocks) == 0 {
+		return nil
+	}
+
+	var rv []*pem.Block
+
+	for _, block := range blocks {
+		if block.Type == "CERTIFICATE" {
+			rv = append(rv, block)
+		}
+	}
+
+	return rv
 }

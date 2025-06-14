@@ -62,6 +62,7 @@ func TryReadFromStandardInput(prompt string, multiline bool) ([]byte, error) {
 		}
 	} else if (stdinStat.Mode() & os.ModeCharDevice) != 0 {
 		fmt.Printf("%s:", prompt)
+		fmt.Println()
 		fmt.Print(">")
 
 		outBuf := bytes.Buffer{}

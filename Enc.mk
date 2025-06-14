@@ -32,7 +32,7 @@ encrypt_password_openssl_no_label:
 # Encrypt text secret read from the command-line
 encrypt_secret:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-secret ${OUTPUT_VAULT_SECRET} \
+	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_SECRET} \
 	${OAEP_ENFORCEMENT} \
 	secret
 
@@ -45,11 +45,11 @@ encrypt_password:
 encrypt_key:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
 	${OAEP_ENFORCEMENT} \
-	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-secret ${OUTPUT_VAULT_SECRET} \
+	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_SECRET} \
 	key
 
 encrypt_cert:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
 	${OAEP_ENFORCEMENT} \
-	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-secret ${OUTPUT_VAULT_SECRET} \
+	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_SECRET} \
 	certificate

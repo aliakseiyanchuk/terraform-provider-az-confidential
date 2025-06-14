@@ -41,8 +41,9 @@ generate_ephemeral_keys:
 		openssl req -subj='/DC=github.com/DC=aliakseiyanchuk/DC=az-confidential/CN=demo-app' -newkey rsa:2048 -new -nodes -x509 -days 3650 -keyout cert-key.pem -out cert-pub.pem && \
 		cat cert-key.pem cert-pub.pem > ephemeral-certificate.pem && \
 		openssl pkcs12 -export -out cert.pkcs12 -inkey cert-key.pem -in cert-pub.pem -password pass:s1cr3t && \
+		openssl pkcs12 -in cert.pkcs12 -passin pass:s1cr3t -out cert.pkcs12.pem -nodes && \
 		openssl req -subj='/DC=github.com/DC=aliakseiyanchuk/DC=az-confidential/CN=demo-app' -newkey rsa:2048 -new -passout pass:s1cr3t -x509 -days 3650 -keyout cert-key_encrypted.pem -out cert-pub_certyped.pem && \
-		cat cert-key_encrypted.pem cert-pub_certyped.pem > ephemeral-certficate-encrypted.pem
+		cat cert-key_encrypted.pem cert-pub_certyped.pem > ephemeral-certificate-encrypted.pem && \
 
 generate:
 	cd tools; go generate ./...

@@ -128,9 +128,9 @@ func init() {
 		"Output vault name")
 
 	baseFlags.StringVar(&baseParams.DestinationCoordinate.Name,
-		"output-vault-secret",
+		"output-vault-object",
 		"",
-		"Output vault secret name")
+		"Output vault object name")
 
 	baseFlags.StringVar(&baseParams.WrappingKeyCoordinate.VaultName,
 		"wrapping-key-vault",

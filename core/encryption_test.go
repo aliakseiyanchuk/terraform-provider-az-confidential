@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/crypto/pkcs12"
 	"testing"
 )
 import _ "github.com/stretchr/testify/assert"
@@ -228,4 +229,12 @@ func TestPrivateKeyToJSONWebKey(t *testing.T) {
 	rsaEncDERJWK := azkeys.JSONWebKey{}
 	rsaErr = PrivateKeyTOJSONWebKey(ephemeralEncryptedRsaKeyDERForm, "s1cr3t", &rsaEncDERJWK)
 	assert.Nil(t, rsaErr)
+}
+
+//go:embed cert.pkcs12
+var pkcs12File []byte
+
+func TestPKCS12Import(t *testing.T) {
+	_, _, pwdErr := pkcs12.Decode(pkcs12File, "s1cr3t")
+	assert.Nil(t, pwdErr)
 }
