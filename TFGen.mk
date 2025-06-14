@@ -25,6 +25,11 @@ CERT_PKCS12_CONVERTED=./core/cert.pkcs12.pem
 
 PWD_FILE=./ephemeral-password.txt
 
+# Generate the wrapping key for testing TF generator
+generate_wrapping_public_key:
+	openssl genrsa -out ./wrapping_key.pem 4096 && \
+	openssl genrsa -in ./wrapping_key.pem  -pubout -out wrapping_key_pk.pem 4096 && \
+
 test_secret_gen:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
     	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_SECRET} \

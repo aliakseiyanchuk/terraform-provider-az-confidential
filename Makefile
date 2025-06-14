@@ -25,7 +25,7 @@ install: build
 	mv ${BINARY} ${LOCAL_MIRROR_PATH}
 
 
-# Supported curve: secp521r1, secp384r1, prime256v1, secp256k1
+# Generate ephemeral (=safe to throw away and re-generate) keys for unit testing
 generate_ephemeral_keys:
 	cd core && \
 		openssl genrsa -out ephemeral-rsa-private-key.pem 4096 && \
@@ -44,6 +44,8 @@ generate_ephemeral_keys:
 		openssl pkcs12 -in cert.pkcs12 -passin pass:s1cr3t -out cert.pkcs12.pem -nodes && \
 		openssl req -subj='/DC=github.com/DC=aliakseiyanchuk/DC=az-confidential/CN=demo-app' -newkey rsa:2048 -new -passout pass:s1cr3t -x509 -days 3650 -keyout cert-key_encrypted.pem -out cert-pub_certyped.pem && \
 		cat cert-key_encrypted.pem cert-pub_certyped.pem > ephemeral-certificate-encrypted.pem && \
+
+
 
 generate:
 	cd tools; go generate ./...
