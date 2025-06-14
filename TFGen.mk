@@ -10,6 +10,8 @@ OAEP_ENFORCEMENT?=-fixed-oaep-label testing
 
 PUBKEY?=wrapping_key_pk.pem
 
+SECRET_FILE=./example-secret-file.txt
+
 RSA_KEY=./core/ephemeral-rsa-private-key.pem
 EC_KEY=./core/private-ec-key-prime256v1.pem
 RSA_KEY_DER_FORM=./core/ephemeral-rsa-private-key.der
@@ -17,6 +19,13 @@ ENC_RSA_KEY=./core/ephemeral-rsa-private-key-encrypted.pem
 ENC_RSA_KEY_DER_FORM=./core/ephemeral-rsa-private-key-encrypted.der
 
 PWD_FILE=./ephemeral-password.txt
+
+test_secret_gen:
+	${TFGEN_EXEC} -pubkey ${PUBKEY} \
+    	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-secret ${OUTPUT_VAULT_SECRET} \
+    	${OAEP_ENFORCEMENT} \
+    	secret \
+    	-secret-file ${SECRET_FILE}
 
 test_rsa_key_gen:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \

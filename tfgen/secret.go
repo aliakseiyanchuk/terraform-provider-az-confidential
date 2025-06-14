@@ -3,6 +3,7 @@ package main
 import (
 	_ "embed"
 	"flag"
+	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 )
 
@@ -53,6 +54,10 @@ func generateConfidentialSecretTerraformTemplate(kwp KeyWrappingParams, args []s
 
 	secretDataAsStr := string(secretData)
 	payloadBytes := core.WrapStringPayload(secretDataAsStr, "secret", kwp.GetLabels())
+
+	if _, unwrapErr := core.UnwrapPayload(payloadBytes); unwrapErr != nil {
+		return "", fmt.Errorf("internal problem: the secret would not be unwrapped correctly: %s, Please report this problem", unwrapErr.Error())
+	}
 
 	em, emErr := core.CreateEncryptedMessage(kwp.loadedRsaPublicKey, payloadBytes)
 	if emErr != nil {
