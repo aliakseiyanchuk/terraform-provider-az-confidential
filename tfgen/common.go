@@ -21,6 +21,33 @@ func ReadInput(prompt, fn string, base64Decode bool, multiline bool) ([]byte, er
 		}
 	}
 
+	// If no input has been provided, attempt to read the input
+	// from the standard input.
+	if len(outputBytes) == 0 {
+		var consoleIoErr error
+		outputBytes, consoleIoErr = TryReadFromStandardInput(prompt, multiline)
+		if consoleIoErr != nil {
+			return nil, consoleIoErr
+		}
+	}
+
+	if outputBytes == nil {
+		return nil, errors.New("no input file found")
+	} else if base64Decode {
+		dst := make([]byte, base64.StdEncoding.DecodedLen(len(outputBytes)))
+		n, b64Err := base64.StdEncoding.Decode(dst, outputBytes)
+		if b64Err != nil {
+			return nil, b64Err
+		}
+		outputBytes = dst[:n]
+	}
+
+	return outputBytes, nil
+}
+
+func TryReadFromStandardInput(prompt string, multiline bool) ([]byte, error) {
+	var rv []byte
+
 	stdinStat, err := os.Stdin.Stat()
 	if err != nil {
 		return nil, err
@@ -31,7 +58,7 @@ func ReadInput(prompt, fn string, base64Decode bool, multiline bool) ([]byte, er
 		if stdinBytes, stdinErr := io.ReadAll(os.Stdin); stdinErr != nil {
 			return nil, stdinErr
 		} else {
-			outputBytes = stdinBytes
+			rv = stdinBytes
 		}
 	} else if (stdinStat.Mode() & os.ModeCharDevice) != 0 {
 		fmt.Println(prompt)
@@ -57,19 +84,8 @@ func ReadInput(prompt, fn string, base64Decode bool, multiline bool) ([]byte, er
 			}
 		}
 
-		outputBytes = outBuf.Bytes()
+		rv = outBuf.Bytes()
 	}
 
-	if outputBytes == nil {
-		return nil, errors.New("no input file found")
-	} else if base64Decode {
-		dst := make([]byte, base64.StdEncoding.DecodedLen(len(outputBytes)))
-		n, b64Err := base64.StdEncoding.Decode(dst, outputBytes)
-		if b64Err != nil {
-			return nil, b64Err
-		}
-		outputBytes = dst[:n]
-	}
-
-	return outputBytes, nil
+	return rv, nil
 }

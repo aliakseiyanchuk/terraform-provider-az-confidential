@@ -22,7 +22,7 @@ type VersionedConfidentialData struct {
 	Uuid          string
 	Type          string
 	Payload       []byte
-	StringPayload *string
+	StringPayload string
 	Labels        []string
 }
 
@@ -70,7 +70,7 @@ func UnwrapPayload(input []byte) (VersionedConfidentialData, error) {
 	}
 
 	if mdl.StringPayload != nil {
-		rv.StringPayload = mdl.StringPayload
+		rv.StringPayload = *mdl.StringPayload
 	}
 
 	return rv, nil

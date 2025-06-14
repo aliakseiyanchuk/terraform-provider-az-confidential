@@ -22,6 +22,8 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwk"
 	"io"
 	"os"
+
+	"github.com/youmark/pkcs8"
 )
 
 type AESData struct {
@@ -232,10 +234,31 @@ func SymmetricKeyTOJSONWebKey(input []byte, outKey *azkeys.JSONWebKey) error {
 	}
 }
 
-func PrivateKeyTOJSONWebKey(input []byte, outKey *azkeys.JSONWebKey) error {
-	key, err := BytesToPrivateKey(input)
-	if err != nil {
-		return err
+func PrivateKeyTOJSONWebKey(input []byte, password string, outKey *azkeys.JSONWebKey) error {
+	var key any
+	var keyLoadErr error
+
+	if IsPEMEncoded(input) {
+		block, blockErr := ParseSinglePEMBlock(input)
+		if blockErr != nil {
+			return blockErr
+		}
+		if RequiresPassword(block) {
+			key, keyLoadErr = PrivateKeyFromEncryptedBlock(block, password)
+		} else {
+			key, keyLoadErr = PrivateKeyFromBlock(block)
+		}
+	} else {
+		// The private key is a DER-encoded private key.
+		if len(password) == 0 {
+			key, keyLoadErr = x509.ParsePKCS8PrivateKey(input)
+		} else {
+			key, keyLoadErr = PrivateKeyFromDER(input, password)
+		}
+	}
+
+	if keyLoadErr != nil {
+		return keyLoadErr
 	}
 
 	jwkKey, jwkErr := jwk.Import(key)
@@ -292,16 +315,22 @@ func port(target *[]byte, supplier func() ([]byte, bool)) {
 	if data, exists := supplier(); exists {
 		*target = data
 	}
-
 }
 
-// BytesToPrivateKey converts arbitrary bytes to a private key
-func BytesToPrivateKey(priv []byte) (any, error) {
-	block, _ := pem.Decode(priv)
-	if block == nil {
-		return nil, errors.New("input is not a valid PEM-encoded block")
+func RequiresPassword(block *pem.Block) bool {
+	if block != nil {
+		return block.Type == "ENCRYPTED PRIVATE KEY"
 	}
 
+	return false
+}
+
+func PrivateKeyFromDER(data []byte, password string) (any, error) {
+	return pkcs8.ParsePKCS8PrivateKey(data, []byte(password))
+}
+
+// PrivateKeyFromBlock converts arbitrary bytes to a private key
+func PrivateKeyFromBlock(block *pem.Block) (any, error) {
 	b := block.Bytes
 
 	if block.Type == "EC PRIVATE KEY" {
@@ -321,6 +350,19 @@ func BytesToPrivateKey(priv []byte) (any, error) {
 	}
 }
 
+// PrivateKeyFromEncryptedBlock converts encrypted private key block to an RSA key
+func PrivateKeyFromEncryptedBlock(block *pem.Block, password string) (any, error) {
+	if block.Type == "ENCRYPTED PRIVATE KEY" {
+		if decryptedKey, err := pkcs8.ParsePKCS8PrivateKey(block.Bytes, []byte(password)); err != nil {
+			return nil, err
+		} else {
+			return decryptedKey, nil
+		}
+	} else {
+		return nil, fmt.Errorf("unsupported encrypted block type %q", block.Type)
+	}
+}
+
 // IsPEMEncoded returns true if teh data source represents a valid PEM-encoded
 // stream, comprising valid blocks.
 func IsPEMEncoded(data []byte) bool {
@@ -336,6 +378,16 @@ func IsPEMEncoded(data []byte) bool {
 	}
 
 	return true
+}
+
+func ParseSinglePEMBlock(data []byte) (*pem.Block, error) {
+	if blocks, pemErr := ParsePEMBlocks(data); pemErr != nil {
+		return nil, pemErr
+	} else if len(blocks) != 1 {
+		return nil, fmt.Errorf("input must contain exactly 1 block, but %d where found", len(blocks))
+	} else {
+		return blocks[0], nil
+	}
 }
 
 func ParsePEMBlocks(data []byte) ([]*pem.Block, error) {

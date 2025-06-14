@@ -337,7 +337,7 @@ func (d *ConfidentialAzVaultKeyResource) Create(ctx context.Context, req resourc
 	params := d.convertToImportKeyParam(&data)
 
 	if unwrappedPayload.Type == "key" {
-		if azJWKErr := core.PrivateKeyTOJSONWebKey(unwrappedPayload.Payload, params.Key); azJWKErr != nil {
+		if azJWKErr := core.PrivateKeyTOJSONWebKey(unwrappedPayload.Payload, unwrappedPayload.StringPayload, params.Key); azJWKErr != nil {
 			resp.Diagnostics.AddError("Error converting private key to JSONWebKey", azJWKErr.Error())
 			return
 		}

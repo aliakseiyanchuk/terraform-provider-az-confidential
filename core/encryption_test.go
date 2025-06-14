@@ -10,8 +10,17 @@ import (
 )
 import _ "github.com/stretchr/testify/assert"
 
-//go:embed ephemeral-rsa-public-key.pem
+//go:embed ephemeral-rsa-private-key.pem
 var ephemeralRsaKeyText []byte
+
+//go:embed ephemeral-rsa-private-key.der
+var ephemeralRsaKeyDERForm []byte
+
+//go:embed ephemeral-rsa-private-key-encrypted.pem
+var ephemeralEncryptedRsaKeyText []byte
+
+//go:embed ephemeral-rsa-private-key-encrypted.der
+var ephemeralEncryptedRsaKeyDERForm []byte
 
 func TestAESEncryption(t *testing.T) {
 	plainText := []byte("this is a secret string")
@@ -94,14 +103,14 @@ func TestPrivateKeyToJWKConversion(t *testing.T) {
 
 	for i, keyTxt := range keys {
 		jwkOut := azkeys.JSONWebKey{}
-		err := PrivateKeyTOJSONWebKey([]byte(keyTxt), &jwkOut)
+		err := PrivateKeyTOJSONWebKey([]byte(keyTxt), "", &jwkOut)
 		assert.Nilf(t, err, "Failed to convert key to JSONWebKey; key elem %d", i)
 
 		assert.Equal(t, azkeys.KeyTypeEC, *jwkOut.Kty)
 	}
 
 	rsaJwkOut := azkeys.JSONWebKey{}
-	rsaJwkErr := PrivateKeyTOJSONWebKey([]byte(rsaPrivateKey), &rsaJwkOut)
+	rsaJwkErr := PrivateKeyTOJSONWebKey([]byte(rsaPrivateKey), "", &rsaJwkOut)
 	assert.Nil(t, rsaJwkErr)
 	assert.Equal(t, azkeys.KeyTypeRSA, *rsaJwkOut.Kty)
 }
@@ -112,7 +121,7 @@ func BenchmarkOldStyle(b *testing.B) {
 	for range b.N {
 		outKey := azkeys.JSONWebKey{}
 		inbytes := []byte(rsaPrivateKey)
-		err := PrivateKeyTOJSONWebKey(inbytes, &outKey)
+		err := PrivateKeyTOJSONWebKey(inbytes, "", &outKey)
 		assert.Nil(b, err)
 	}
 	b.StopTimer()
@@ -123,7 +132,7 @@ func BenchmarkRSAKeyConversion(b *testing.B) {
 	for b.Loop() {
 		outKey := azkeys.JSONWebKey{}
 		inbytes := []byte(rsaPrivateKey)
-		err := PrivateKeyTOJSONWebKey(inbytes, &outKey)
+		err := PrivateKeyTOJSONWebKey(inbytes, "", &outKey)
 		assert.Nil(b, err)
 	}
 }
@@ -132,7 +141,7 @@ func BenchmarkECKeyConversion(b *testing.B) {
 	for b.Loop() {
 		outKey := azkeys.JSONWebKey{}
 		inbytes := []byte(prime256v1EcPrivateKey)
-		err := PrivateKeyTOJSONWebKey(inbytes, &outKey)
+		err := PrivateKeyTOJSONWebKey(inbytes, "", &outKey)
 		assert.Nil(b, err)
 	}
 }
@@ -181,4 +190,42 @@ func TestBlockExtraction(t *testing.T) {
 	blocks, err = ParsePEMBlocks(ephemeralCertPFX12)
 	assert.Equal(t, 0, len(blocks))
 	assert.NotNil(t, err)
+}
+
+func TestBytesToPrivateKey(t *testing.T) {
+	block, blockErr := ParseSinglePEMBlock(ephemeralRsaKeyText)
+	assert.Nil(t, blockErr)
+	assert.False(t, RequiresPassword(block))
+
+	key, err := PrivateKeyFromBlock(block)
+	assert.Nil(t, err)
+	assert.NotNil(t, key)
+}
+
+func TestBytesToPrivateKeyWithPassword(t *testing.T) {
+	block, blockErr := ParseSinglePEMBlock(ephemeralEncryptedRsaKeyText)
+	assert.Nil(t, blockErr)
+	assert.True(t, RequiresPassword(block))
+
+	key, err := PrivateKeyFromEncryptedBlock(block, "s1cr3t")
+	assert.Nil(t, err)
+	assert.NotNil(t, key)
+}
+
+func TestPrivateKeyToJSONWebKey(t *testing.T) {
+	rsaOutJWK := azkeys.JSONWebKey{}
+	rsaErr := PrivateKeyTOJSONWebKey(ephemeralRsaKeyText, "", &rsaOutJWK)
+	assert.Nil(t, rsaErr)
+
+	rsaOutDERJWK := azkeys.JSONWebKey{}
+	rsaErr = PrivateKeyTOJSONWebKey(ephemeralRsaKeyDERForm, "", &rsaOutDERJWK)
+	assert.Nil(t, rsaErr)
+
+	rsaEncJWK := azkeys.JSONWebKey{}
+	rsaErr = PrivateKeyTOJSONWebKey(ephemeralEncryptedRsaKeyText, "s1cr3t", &rsaEncJWK)
+	assert.Nil(t, rsaErr)
+
+	rsaEncDERJWK := azkeys.JSONWebKey{}
+	rsaErr = PrivateKeyTOJSONWebKey(ephemeralEncryptedRsaKeyDERForm, "s1cr3t", &rsaEncDERJWK)
+	assert.Nil(t, rsaErr)
 }
