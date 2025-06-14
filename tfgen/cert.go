@@ -1,4 +1,4 @@
-package main
+package tfgen
 
 import (
 	_ "embed"
@@ -47,7 +47,7 @@ func init() {
 		"Do not try parsing DER-encode files")
 }
 
-func generateConfidentialCertificateTerraformTemplate(kwp KeyWrappingParams, args []string) (string, error) {
+func GenerateConfidentialCertificateTerraformTemplate(kwp KeyWrappingParams, args []string) (string, error) {
 	if vErr := kwp.ValidateHasDestination(); vErr != nil {
 		return "", vErr
 	}
@@ -130,7 +130,7 @@ func generateConfidentialCertificateTerraformTemplate(kwp KeyWrappingParams, arg
 		return "", fmt.Errorf("internal problem: the certificate would not be unwrapped correctly: %s, Please report this problem", unwrapErr.Error())
 	}
 
-	em, emErr := core.CreateEncryptedMessage(kwp.loadedRsaPublicKey, payloadBytes)
+	em, emErr := core.CreateEncryptedMessage(kwp.LoadedRsaPublicKey, payloadBytes)
 	if emErr != nil {
 		return "", emErr
 	}

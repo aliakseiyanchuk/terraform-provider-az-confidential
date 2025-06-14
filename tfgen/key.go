@@ -1,4 +1,4 @@
-package main
+package tfgen
 
 import (
 	"crypto/rsa"
@@ -49,7 +49,7 @@ func init() {
 		"Create symmetric key")
 }
 
-func generateConfidentialKeyTerraformTemplate(kwp KeyWrappingParams, args []string) (string, error) {
+func GenerateConfidentialKeyTerraformTemplate(kwp KeyWrappingParams, args []string) (string, error) {
 	if vErr := kwp.ValidateHasDestination(); vErr != nil {
 		return "", vErr
 	}
@@ -146,7 +146,7 @@ func generateConfidentialKeyTerraformTemplate(kwp KeyWrappingParams, args []stri
 	}
 
 	// Creation of the payload has succeeded.
-	em, emErr := core.CreateEncryptedMessage(kwp.loadedRsaPublicKey, payloadBytes)
+	em, emErr := core.CreateEncryptedMessage(kwp.LoadedRsaPublicKey, payloadBytes)
 	if emErr != nil {
 		return "", emErr
 	}

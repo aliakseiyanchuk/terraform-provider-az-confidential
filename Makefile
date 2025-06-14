@@ -51,5 +51,5 @@ generate:
 	cd tools; go generate ./...
 
 build_tf_generator:
-	go build -o ${TF_GEN_BINARY} ./tfgen
+	go build -o ${TF_GEN_BINARY} ./bin/tfgen
 	chmod u+x ${TF_GEN_BINARY}

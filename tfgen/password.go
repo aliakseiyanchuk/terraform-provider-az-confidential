@@ -1,4 +1,4 @@
-package main
+package tfgen
 
 import (
 	_ "embed"
@@ -26,7 +26,7 @@ func init() {
 		"Input is base-64 encoded")
 }
 
-func generateConfidentialPasswordTemplate(kwp KeyWrappingParams, args []string) (string, error) {
+func GenerateConfidentialPasswordTemplate(kwp KeyWrappingParams, args []string) (string, error) {
 	if parseErr := secretCmd.Parse(args); parseErr != nil {
 		return "", parseErr
 	}
@@ -40,10 +40,13 @@ func generateConfidentialPasswordTemplate(kwp KeyWrappingParams, args []string) 
 		return "", readErr
 	}
 
-	secretDataAsStr := string(passwordData)
+	return OutputDatasourcePasswordTerraformCode(kwp, string(passwordData))
+}
+
+func OutputDatasourcePasswordTerraformCode(kwp KeyWrappingParams, secretDataAsStr string) (string, error) {
 	payloadBytes := core.WrapStringPayload(secretDataAsStr, "password", kwp.GetLabels())
 
-	em, emErr := core.CreateEncryptedMessage(kwp.loadedRsaPublicKey, payloadBytes)
+	em, emErr := core.CreateEncryptedMessage(kwp.LoadedRsaPublicKey, payloadBytes)
 	if emErr != nil {
 		return "", emErr
 	}
