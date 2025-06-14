@@ -118,6 +118,7 @@ func init() {
 		"secret",
 		"password",
 		"key",
+		"certificate",
 	}
 
 	baseFlags.SetOutput(os.Stdout)
@@ -194,6 +195,8 @@ func main() {
 		generator = generateConfidentialPasswordTemplate
 	case "key":
 		generator = generateConfidentialKeyTerraformTemplate
+	case "certificate":
+		generator = generateConfidentialCertificateTerraformTemplate
 	default:
 		_, _ = fmt.Printf("Unknown subcommand: %s", subCmd)
 		printSubcommandSelectionHelp()

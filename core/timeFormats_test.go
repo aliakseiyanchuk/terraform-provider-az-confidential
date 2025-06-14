@@ -8,10 +8,10 @@ import (
 )
 
 func TestFormatTime(t *testing.T) {
-	assert.Equal(t, "", FormatTime(nil))
+	assert.True(t, FormatTime(nil).IsNull())
 
 	refEpoch := time.Unix(1749158767, 0)
-	assert.Equal(t, "2025-06-05T21:26:07Z", FormatTime(&refEpoch))
+	assert.Equal(t, "2025-06-05T21:26:07Z", FormatTime(&refEpoch).ValueString())
 }
 
 func TestParseTime(t *testing.T) {

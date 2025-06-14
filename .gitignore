@@ -1,2 +1,4 @@
 /core/*.pem
 /az_auth.sh
+/**/terraform.tfstate
+/**/terraform.tfstate.backup

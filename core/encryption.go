@@ -126,21 +126,21 @@ func AESEncrypt(plaintext []byte) ([]byte, AESData, error) {
 		return nil, rv, gcmErr
 	}
 
-	// Initialization vector and additional authentication data are added
-	// to
+	// Initialization vector is best randomly generated. It's
+	// not a part of ciphertext and can be exchanged.
 	rv.IV = make([]byte, gcm.NonceSize())
 	if _, err := rand.Reader.Read(rv.IV); err != nil {
 		return nil, rv, err
 	}
 
+	// Additional authentication data; e.g., reference an object
+	// to detect unintended copying.
 	rv.AAD = make([]byte, gcm.NonceSize())
 	if _, err := rand.Reader.Read(rv.AAD); err != nil {
 		return nil, rv, err
 	}
 
-	output := make([]byte, len(plaintext))
-	output = gcm.Seal(nil, rv.IV, plaintext, rv.AAD)
-
+	output := gcm.Seal(nil, rv.IV, plaintext, rv.AAD)
 	return output, rv, nil
 }
 
@@ -295,7 +295,7 @@ func port(target *[]byte, supplier func() ([]byte, bool)) {
 
 }
 
-// BytesToPrivateKey bytes to private key
+// BytesToPrivateKey converts arbitrary bytes to a private key
 func BytesToPrivateKey(priv []byte) (any, error) {
 	block, _ := pem.Decode(priv)
 	if block == nil {
@@ -309,8 +309,48 @@ func BytesToPrivateKey(priv []byte) (any, error) {
 		return key, err
 	} else if block.Type == "PRIVATE KEY" {
 		key, err := x509.ParsePKCS8PrivateKey(b)
+		if rsaKey, ok := key.(*rsa.PrivateKey); ok {
+			rsaKey.Precompute()
+			if rsaKeyValidErr := rsaKey.Validate(); rsaKeyValidErr != nil {
+				return nil, rsaKeyValidErr
+			}
+		}
 		return key, err
 	} else {
 		return nil, fmt.Errorf("unsupported block type %q", block.Type)
 	}
+}
+
+// IsPEMEncoded returns true if teh data source represents a valid PEM-encoded
+// stream, comprising valid blocks.
+func IsPEMEncoded(data []byte) bool {
+	// Ensure that PEM blocks are well-formed.
+	remainder := data
+	var block *pem.Block
+
+	for len(remainder) > 0 {
+		block, remainder = pem.Decode(remainder)
+		if block == nil {
+			return false
+		}
+	}
+
+	return true
+}
+
+func ParsePEMBlocks(data []byte) ([]*pem.Block, error) {
+	remainder := data
+	var rv []*pem.Block
+
+	for len(remainder) > 0 {
+		var block *pem.Block
+		block, remainder = pem.Decode(remainder)
+		if block == nil {
+			return rv, errors.New(fmt.Sprintf("cannot read block #{%d} in this chaiun", len(rv)+1))
+		} else {
+			rv = append(rv, block)
+		}
+	}
+
+	return rv, nil
 }

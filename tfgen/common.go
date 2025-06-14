@@ -38,7 +38,6 @@ func ReadInput(prompt, fn string, base64Decode bool, multiline bool) ([]byte, er
 
 		outBuf := bytes.Buffer{}
 		reader := bufio.NewReader(os.Stdin)
-
 		readInput := true
 
 		for readInput {

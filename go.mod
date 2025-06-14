@@ -1,16 +1,17 @@
 module github.com/aliakseiyanchuk/terraform-provider-az-confidential
 
-require github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets v1.3.1
-
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.18.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.8.2
+	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azadmin v1.3.0
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azcertificates v1.3.1
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys v1.3.1
+	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets v1.3.1
 
 )
 
 require (
+	github.com/hashicorp/go-azure-sdk/resource-manager v0.20250606.1221725
 	github.com/hashicorp/terraform-plugin-framework v1.14.1
 	github.com/hashicorp/terraform-plugin-framework-validators v0.18.0
 	github.com/hashicorp/terraform-plugin-log v0.9.0
@@ -47,7 +48,6 @@ require (
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
-	golang.org/x/crypto v0.38.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.25.0 // indirect
@@ -61,6 +61,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/lestrrat-go/jwx/v3 v3.0.3
 	github.com/stretchr/testify v1.10.0
+	golang.org/x/crypto v0.38.0
 )
 
 go 1.24

@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -24,6 +25,16 @@ type VersionedConfidentialData struct {
 	StringPayload *string
 	Labels        []string
 }
+
+func (vcd *VersionedConfidentialData) PayloadAsB64Ptr() *string {
+	if len(vcd.Payload) == 0 {
+		return nil
+	} else {
+		out := base64.StdEncoding.EncodeToString(vcd.Payload)
+		return &out
+	}
+}
+
 type VersionedConfidentialDataJSONModel struct {
 	Uuid          string   `json:"u"`
 	Type          string   `json:"t"`
@@ -56,9 +67,10 @@ func UnwrapPayload(input []byte) (VersionedConfidentialData, error) {
 		} else {
 			rv.Payload = b
 		}
-	} else if mdl.StringPayload != nil {
+	}
+
+	if mdl.StringPayload != nil {
 		rv.StringPayload = mdl.StringPayload
-		rv.Payload = []byte(*mdl.StringPayload)
 	}
 
 	return rv, nil
@@ -83,6 +95,21 @@ func WrapBinaryPayload(value []byte, objType string, labels []string) []byte {
 		Uuid:          uuid.New().String(),
 		Type:          objType,
 		BinaryPayload: &encStr,
+		Labels:        labels,
+	}
+
+	jsonStr, _ := json.Marshal(rv)
+	return GZipCompress(jsonStr)
+}
+
+func WrapDualPayload(value []byte, strValue *string, objType string, labels []string) []byte {
+	encStr := base64.StdEncoding.EncodeToString(value)
+
+	rv := VersionedConfidentialDataJSONModel{
+		Uuid:          uuid.New().String(),
+		Type:          objType,
+		BinaryPayload: &encStr,
+		StringPayload: strValue,
 		Labels:        labels,
 	}
 
@@ -122,6 +149,30 @@ type AzKeyVaultObjectVersionedCoordinate struct {
 	Version string
 }
 
+func (c *AzKeyVaultObjectVersionedCoordinate) FromId(id string) error {
+	if parsedURL, err := url.Parse(id); err != nil {
+		return err
+	} else {
+		c.idHostName = parsedURL.Host
+		c.VaultName = strings.Split(parsedURL.Host, ".")[0]
+		parsedPath := strings.Split(strings.Trim(parsedURL.Path, "/"), "/")
+
+		if len(parsedPath) != 3 {
+			return fmt.Errorf("invalid reosurce path: %s (id=%s)", parsedURL.Path, id)
+		}
+
+		c.Type = parsedPath[0]
+		c.Name = parsedPath[1]
+		c.Version = parsedPath[2]
+
+		return nil
+	}
+}
+
+func (c *AzKeyVaultObjectVersionedCoordinate) VersionlessId() string {
+	return fmt.Sprintf("https://%s/%s/%s", c.idHostName, c.Type, c.Name)
+}
+
 type AzKeyVaultObjectVersionedCoordinateModel struct {
 	AzResourceCoordinateModel
 	AzKeyVaultObjectCoordinateModel
@@ -135,8 +186,10 @@ func (mdl *AzKeyVaultObjectVersionedCoordinateModel) IsEmpty() bool {
 
 // AzKeyVaultObjectCoordinate computed runtime coordinate
 type AzKeyVaultObjectCoordinate struct {
-	VaultName string
-	Name      string
+	VaultName  string
+	idHostName string // Name of the host as fully specified
+	Name       string
+	Type       string
 }
 
 func (c *AzKeyVaultObjectCoordinate) DefinesVaultName() bool {
@@ -229,25 +282,29 @@ func (w *WrappedPlainText) Unwrap(ctx context.Context, factory AZClientsFactory)
 		}
 		return decrResp.Result, nil
 	} else {
+		tflog.Trace(ctx, "CEK IS specified; performing two-step decryption using vault")
 		options := azkeys.KeyOperationParameters{
 			Algorithm: &w.WrappingKeyCoordinate.AzEncryptionAlg,
-			Value:     w.EncryptedText,
+			Value:     w.EncryptedContentKey,
 		}
 
-		decrResp, decrErr := client.UnwrapKey(ctx, w.WrappingKeyCoordinate.KeyName, w.WrappingKeyCoordinate.KeyVersion, options, nil)
+		decrResp, decrErr := client.Decrypt(ctx, w.WrappingKeyCoordinate.KeyName, w.WrappingKeyCoordinate.KeyVersion, options, nil)
 		if decrErr != nil {
+			tflog.Error(ctx, fmt.Sprintf("Key unwrapping error: %s", decrErr.Error()))
 			return nil, decrErr
 		}
 
 		// Decr response contains an AES decryption key that is additionally GZipped
 		jsonBytes, gzipErr := GZipDecompress(decrResp.Result)
 		if gzipErr != nil {
+			tflog.Error(ctx, fmt.Sprintf("GZip decompression error: %s", gzipErr.Error()))
 			return nil, gzipErr
 		}
 
 		var aesData AESData
 		jsonErr := json.Unmarshal(jsonBytes, &aesData)
 		if jsonErr != nil {
+			tflog.Error(ctx, fmt.Sprintf("JSON unmarshal error: %s", jsonErr.Error()))
 			return nil, jsonErr
 		}
 
@@ -319,4 +376,12 @@ func (w *WrappingKeyCoordinate) Validate() []diag.Diagnostic {
 	}
 
 	return rv
+}
+
+func mustMarshalJSON(v interface{}) string {
+	if b, err := json.Marshal(v); err != nil {
+		panic(err)
+	} else {
+		return string(b)
+	}
 }

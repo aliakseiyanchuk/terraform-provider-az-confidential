@@ -31,6 +31,12 @@ type WrappedConfidentialMaterialModel struct {
 	SecretEncryptionKey types.String `tfsdk:"content_encryption_key"`
 }
 
+func (wcmm *WrappedConfidentialMaterialModel) GetDestinationCoordinateFromId() (core.AzKeyVaultObjectVersionedCoordinate, error) {
+	rv := core.AzKeyVaultObjectVersionedCoordinate{}
+	err := rv.FromId(wcmm.Id.ValueString())
+	return rv, err
+}
+
 // WrappedAzKeyVaultObjectConfidentialMaterialModel a model for the Azure KeyVault
 // object. It includes wrapped confidential data and repeated elements (not-before, not-after,
 // tags, and enabled)
@@ -243,8 +249,8 @@ func WrappedConfidentialMaterialModelDatasourceSchema(moreAttrs map[string]datas
 	return baseSchema
 }
 
-func (cm *WrappedConfidentialMaterialModel) GetEncryptedTextValue() []byte {
-	v := cm.EncryptedSecret.ValueString()
+func (wcmm *WrappedConfidentialMaterialModel) GetEncryptedTextValue() []byte {
+	v := wcmm.EncryptedSecret.ValueString()
 	if len(v) == 0 {
 		return nil
 	} else {
@@ -253,8 +259,8 @@ func (cm *WrappedConfidentialMaterialModel) GetEncryptedTextValue() []byte {
 	}
 }
 
-func (cm *WrappedConfidentialMaterialModel) GetEncryptedWrappingKeyValue() []byte {
-	v := cm.SecretEncryptionKey.ValueString()
+func (wcmm *WrappedConfidentialMaterialModel) GetEncryptedWrappingKeyValue() []byte {
+	v := wcmm.SecretEncryptionKey.ValueString()
 	if len(v) == 0 {
 		return nil
 	} else {
@@ -307,13 +313,18 @@ func (d *ConfidentialResourceBase) Unwrap(ctx context.Context, mdl WrappedConfid
 		return core.VersionedConfidentialData{}
 	}
 
-	tflog.Trace(ctx, "Confidential payload has been unwrapped")
+	tflog.Trace(ctx, "Confidential payload has been decrypted")
+	tflog.Trace(ctx, base64.StdEncoding.EncodeToString(plainTextBytes))
 
 	unwrappedPayload, unwrapError := core.UnwrapPayload(plainTextBytes)
 	if unwrapError != nil {
+		tflog.Error(ctx, fmt.Sprintf("Wasn't able to unwrap the payload: %s", unwrapError.Error()))
 		diagnostics.AddError("error unwrapping secret value", unwrapError.Error())
 		return core.VersionedConfidentialData{}
 	}
+
+	tflog.Trace(ctx, "Confidential payload has been unwrapped")
+
 	if objIsTracked, trackerCheckErr := d.factory.IsObjectIdTracked(ctx, unwrappedPayload.Uuid); trackerCheckErr != nil {
 		diagnostics.AddError("cannot check tracking status of this secret", trackerCheckErr.Error())
 		return core.VersionedConfidentialData{}

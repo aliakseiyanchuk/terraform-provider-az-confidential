@@ -345,6 +345,7 @@ func (p *AZConnectorProviderImpl) Resources(ctx context.Context) []func() resour
 	return []func() resource.Resource{
 		resources.NewConfidentialAzVaultSecretResource,
 		resources.NewConfidentialAzVaultKeyResource,
+		resources.NewConfidentialAzVaultCertificateResource,
 	}
 }
 

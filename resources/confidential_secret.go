@@ -10,9 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"net/url"
 	"regexp"
-	"strings"
 )
 
 type ConfidentialSecretModel struct {
@@ -33,22 +31,6 @@ func (cm *ConfidentialSecretModel) ContentTypeAsPtr() *string {
 	}
 
 	return rv
-}
-
-func (cm *ConfidentialSecretModel) GetDestinationSecretCoordinateFromId() (core.AzKeyVaultObjectVersionedCoordinate, error) {
-	// String to parse: "https://myvaultname.vault.azure.net/keys/key1053998307/b86c2e6ad9054f4abf69cc185b99aa60"
-
-	rv := core.AzKeyVaultObjectVersionedCoordinate{}
-	if parsedURL, err := url.Parse(cm.Id.ValueString()); err != nil {
-		return rv, err
-	} else {
-		rv.VaultName = strings.Split(parsedURL.Host, ".")[0]
-		parsedPath := strings.Split(strings.Trim(parsedURL.Path, "/"), "/")
-		rv.Name = parsedPath[1]
-		rv.Version = parsedPath[2]
-
-		return rv, nil
-	}
 }
 
 func (cm *ConfidentialSecretModel) GetDestinationSecretCoordinate(defaultVaultName string) core.AzKeyVaultObjectCoordinate {
@@ -162,7 +144,7 @@ func (d *ConfidentialAzVaultSecretResource) Read(ctx context.Context, req resour
 		return
 	}
 
-	destSecretCoordinate, err := data.GetDestinationSecretCoordinateFromId()
+	destSecretCoordinate, err := data.GetDestinationCoordinateFromId()
 	if err != nil {
 		resp.Diagnostics.AddError("cannot establish reference to the created secret version", err.Error())
 		return
@@ -284,7 +266,7 @@ func (d *ConfidentialAzVaultSecretResource) Update(ctx context.Context, req reso
 		return
 	}
 
-	destSecretCoordinate, err := data.GetDestinationSecretCoordinateFromId()
+	destSecretCoordinate, err := data.GetDestinationCoordinateFromId()
 	if err != nil {
 		resp.Diagnostics.AddError("Error getting destination secret coordinate", err.Error())
 		return
@@ -322,7 +304,7 @@ func (d *ConfidentialAzVaultSecretResource) Delete(ctx context.Context, req reso
 		return
 	}
 
-	destCoordinate, err := data.GetDestinationSecretCoordinateFromId()
+	destCoordinate, err := data.GetDestinationCoordinateFromId()
 	if err != nil {
 		resp.Diagnostics.AddError("Error getting destination secret coordinate", err.Error())
 		return

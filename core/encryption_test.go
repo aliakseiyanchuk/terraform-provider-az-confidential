@@ -2,6 +2,8 @@ package core
 
 import (
 	_ "embed"
+	"encoding/json"
+	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -102,4 +104,81 @@ func TestPrivateKeyToJWKConversion(t *testing.T) {
 	rsaJwkErr := PrivateKeyTOJSONWebKey([]byte(rsaPrivateKey), &rsaJwkOut)
 	assert.Nil(t, rsaJwkErr)
 	assert.Equal(t, azkeys.KeyTypeRSA, *rsaJwkOut.Kty)
+}
+
+func BenchmarkOldStyle(b *testing.B) {
+	// let's assume I'll do the init
+	b.ResetTimer() // if setup may be expensive
+	for range b.N {
+		outKey := azkeys.JSONWebKey{}
+		inbytes := []byte(rsaPrivateKey)
+		err := PrivateKeyTOJSONWebKey(inbytes, &outKey)
+		assert.Nil(b, err)
+	}
+	b.StopTimer()
+	// And here we'll need to d the tear-down
+}
+
+func BenchmarkRSAKeyConversion(b *testing.B) {
+	for b.Loop() {
+		outKey := azkeys.JSONWebKey{}
+		inbytes := []byte(rsaPrivateKey)
+		err := PrivateKeyTOJSONWebKey(inbytes, &outKey)
+		assert.Nil(b, err)
+	}
+}
+
+func BenchmarkECKeyConversion(b *testing.B) {
+	for b.Loop() {
+		outKey := azkeys.JSONWebKey{}
+		inbytes := []byte(prime256v1EcPrivateKey)
+		err := PrivateKeyTOJSONWebKey(inbytes, &outKey)
+		assert.Nil(b, err)
+	}
+}
+
+type CrazyZeroType int
+
+func (z CrazyZeroType) IsZero() bool {
+	return int(z) < 100
+}
+
+type CrazyZeroStruct struct {
+	Message string        `json:"message"`
+	Number  CrazyZeroType `json:"number,omitempty,omitzero"`
+}
+
+func TestCrazyZero(t *testing.T) {
+	v := &CrazyZeroStruct{
+		Message: "this is a message",
+		Number:  CrazyZeroType(50),
+	}
+	jsTxt, err := json.Marshal(v)
+	assert.Nil(t, err)
+	fmt.Println(string(jsTxt))
+}
+
+//go:embed ephemeral-certificate.pem
+var ephemeralCertificatePEM []byte
+
+//go:embed cert.pkcs12
+var ephemeralCertPFX12 []byte
+
+func TestIsPEMEncoded(t *testing.T) {
+	assert.True(t, IsPEMEncoded(ephemeralRsaKeyText))
+	assert.True(t, IsPEMEncoded(ephemeralCertificatePEM))
+
+	assert.False(t, IsPEMEncoded(ephemeralCertPFX12))
+}
+
+func TestBlockExtraction(t *testing.T) {
+	blocks, err := ParsePEMBlocks(ephemeralCertificatePEM)
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(blocks))
+	assert.Equal(t, "PRIVATE KEY", blocks[0].Type)
+	assert.Equal(t, "CERTIFICATE", blocks[1].Type)
+
+	blocks, err = ParsePEMBlocks(ephemeralCertPFX12)
+	assert.Equal(t, 0, len(blocks))
+	assert.NotNil(t, err)
 }

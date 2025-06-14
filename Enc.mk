@@ -5,7 +5,7 @@ PASSWORD ?= "a very confidential password"
 TFGEN_EXEC=./tfgen-az-confidential
 
 OUTPUT_VAULT_NAME?="demo-vault"
-OUTPUT_VAULT_SECRET="example-secret"
+OUTPUT_VAULT_SECRET="example-certificate"
 PUBKEY?=wrapping_key_pk.pem
 
 OAEP_LABEL?=$(shell LC_CTYPE=C tr -dc 'A-Za-z0-9' </dev/random | head -c 13)
@@ -47,3 +47,9 @@ encrypt_key:
 	${OAEP_ENFORCEMENT} \
 	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-secret ${OUTPUT_VAULT_SECRET} \
 	key
+
+encrypt_cert:
+	${TFGEN_EXEC} -pubkey ${PUBKEY} \
+	${OAEP_ENFORCEMENT} \
+	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-secret ${OUTPUT_VAULT_SECRET} \
+	certificate

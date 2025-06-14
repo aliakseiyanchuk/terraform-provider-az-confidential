@@ -19,8 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"golang.org/x/crypto/ssh"
 	"math/big"
-	"net/url"
-	"strings"
 )
 
 type ConfidentialKeyModel struct {
@@ -53,25 +51,6 @@ func (cm *ConfidentialKeyModel) GetKeyOperations() []*azkeys.KeyOperation {
 	}
 
 	return rv
-}
-
-func (cm *ConfidentialKeyModel) GetDestinationKeyCoordinateFromId() (core.AzKeyVaultObjectVersionedCoordinate, error) {
-	rv := core.AzKeyVaultObjectVersionedCoordinate{}
-	if parsedURL, err := url.Parse(cm.Id.ValueString()); err != nil {
-		return rv, err
-	} else {
-		rv.VaultName = strings.Split(parsedURL.Host, ".")[0]
-		parsedPath := strings.Split(strings.Trim(parsedURL.Path, "/"), "/")
-
-		if len(parsedPath) != 3 {
-			return rv, fmt.Errorf(fmt.Sprintf("invalid reosurce path: %s (id=%s)", parsedURL.Path, cm.Id.ValueString()))
-		}
-
-		rv.Name = parsedPath[1]
-		rv.Version = parsedPath[2]
-
-		return rv, nil
-	}
 }
 
 func (cm *ConfidentialKeyModel) GetDestinationKeyCoordinate(defaultVaultName string) core.AzKeyVaultObjectCoordinate {
@@ -254,7 +233,7 @@ func (d *ConfidentialAzVaultKeyResource) Read(ctx context.Context, req resource.
 		return
 	}
 
-	destSecretCoordinate, err := data.GetDestinationKeyCoordinateFromId()
+	destSecretCoordinate, err := data.GetDestinationCoordinateFromId()
 	tflog.Info(ctx, fmt.Sprintf("Received read ident: %s", data.Id.ValueString()))
 	if err != nil {
 		resp.Diagnostics.AddError("cannot establish reference to the created key version", err.Error())
@@ -396,7 +375,7 @@ func (d *ConfidentialAzVaultKeyResource) Update(ctx context.Context, req resourc
 
 	tflog.Info(ctx, fmt.Sprintf("Available object Id: %s", stateData.Id.ValueString()))
 
-	destSecretCoordinate, err := stateData.GetDestinationKeyCoordinateFromId()
+	destSecretCoordinate, err := stateData.GetDestinationCoordinateFromId()
 	if err != nil {
 		resp.Diagnostics.AddError("Error getting destination secret coordinate", err.Error())
 		return
@@ -440,7 +419,7 @@ func (d *ConfidentialAzVaultKeyResource) Delete(ctx context.Context, req resourc
 		return
 	}
 
-	destCoordinate, err := data.GetDestinationKeyCoordinateFromId()
+	destCoordinate, err := data.GetDestinationCoordinateFromId()
 	if err != nil {
 		resp.Diagnostics.AddError("Error getting destination secret coordinate", err.Error())
 		return
