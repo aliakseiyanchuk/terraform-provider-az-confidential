@@ -242,7 +242,7 @@ func (d *ConfidentialAzVaultSecretResource) Create(ctx context.Context, req reso
 	}
 
 	params := d.convertToSetSecretParam(&data)
-	params.Value = unwrappedPayload.StringPayload
+	params.Value = &unwrappedPayload.StringPayload
 
 	setResp, setErr := secretClient.SetSecret(ctx, destSecretCoordinate.Name, params, nil)
 	if setErr != nil {

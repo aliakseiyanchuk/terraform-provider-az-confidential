@@ -70,8 +70,8 @@ func (d *ConfidentialPasswordDataSource) Read(ctx context.Context, req datasourc
 	// For this example code, hardcoding a response value to
 	// save into the Terraform state.
 	data.Id = types.StringValue(unwrappedPayload.Uuid)
-	if unwrappedPayload.StringPayload != nil {
-		strVal := *unwrappedPayload.StringPayload
+	if len(unwrappedPayload.StringPayload) > 0 {
+		strVal := unwrappedPayload.StringPayload
 
 		data.PlaintextPassword = types.StringValue(strVal)
 		data.PlaintextPasswordBase64 = types.StringValue(base64.StdEncoding.EncodeToString([]byte(strVal)))

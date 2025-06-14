@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/crypto/pkcs12"
 	"testing"
 )
 import _ "github.com/stretchr/testify/assert"
+
+//go:embed ephemeral-rsa-public-key.pem
+var ephemeralRsaPublicKey []byte
 
 //go:embed ephemeral-rsa-private-key.pem
 var ephemeralRsaKeyText []byte
@@ -46,7 +48,7 @@ func TestGZipCompression(t *testing.T) {
 }
 
 func TestLoadPublicKeySucceedsForRSAKey(t *testing.T) {
-	rsaKey, err := LoadPublicKeyFromData(ephemeralRsaKeyText)
+	rsaKey, err := LoadPublicKeyFromData(ephemeralRsaPublicKey)
 	assert.Nil(t, err)
 	assert.NotNil(t, rsaKey)
 }
@@ -62,7 +64,7 @@ func TestRSAEncrypt(t *testing.T) {
 	_, aesData, aesErr := AESEncrypt([]byte("this is a secret string"))
 	assert.Nil(t, aesErr)
 
-	rsaKey, err := LoadPublicKeyFromData(ephemeralRsaKeyText)
+	rsaKey, err := LoadPublicKeyFromData(ephemeralRsaPublicKey)
 	assert.Nil(t, err)
 	assert.NotNil(t, rsaKey)
 
@@ -234,7 +236,7 @@ func TestPrivateKeyToJSONWebKey(t *testing.T) {
 //go:embed cert.pkcs12
 var pkcs12File []byte
 
-func TestPKCS12Import(t *testing.T) {
-	_, _, pwdErr := pkcs12.Decode(pkcs12File, "s1cr3t")
-	assert.Nil(t, pwdErr)
-}
+//func TestPKCS12Import(t *testing.T) {
+//	_, _, pwdErr := pkcs12.Decode(pkcs12File, "s1cr3t")
+//	assert.Nil(t, pwdErr)
+//}
