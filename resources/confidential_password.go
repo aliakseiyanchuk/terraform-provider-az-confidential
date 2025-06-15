@@ -108,14 +108,7 @@ func (d *ConfidentialPasswordDataSource) Read(ctx context.Context, req datasourc
 	}
 
 	data.Accept(unwrappedPayload)
-
-	// Save data into Terraform state
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-	if trackErr := d.factory.TrackObjectId(ctx, unwrappedPayload.Uuid); trackErr != nil {
-		errMsg := fmt.Sprintf("Could not track the password entered into the state: %s", trackErr.Error())
-		tflog.Error(ctx, errMsg)
-		resp.Diagnostics.AddError("incoming object tracking", errMsg)
-	}
+	d.FlushState(ctx, unwrappedPayload.Uuid, &data, resp)
 }
 
 // Ensure provider defined types fully satisfy framework interfaces.

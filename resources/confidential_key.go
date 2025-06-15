@@ -362,11 +362,7 @@ func (d *ConfidentialAzVaultKeyResource) Create(ctx context.Context, req resourc
 	}
 
 	data.Accept(setResp.KeyBundle)
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-
-	if trackErr := d.factory.TrackObjectId(ctx, unwrappedPayload.Uuid); trackErr != nil {
-		resp.Diagnostics.AddError("Failed to track object id after creating secret", trackErr.Error())
-	}
+	d.FlushState(ctx, unwrappedPayload.Uuid, &data, resp)
 }
 
 func (d *ConfidentialAzVaultKeyResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {

@@ -5,12 +5,10 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"regexp"
 )
 
 type ConfidentialSecretModel struct {
@@ -23,14 +21,7 @@ type ConfidentialSecretModel struct {
 }
 
 func (cm *ConfidentialSecretModel) ContentTypeAsPtr() *string {
-	var rv *string
-
-	s := cm.ContentType.ValueString()
-	if len(s) > 0 {
-		rv = &s
-	}
-
-	return rv
+	return cm.StringTypeAsPtr(&cm.ContentType)
 }
 
 func (cm *ConfidentialSecretModel) GetDestinationSecretCoordinate(defaultVaultName string) core.AzKeyVaultObjectCoordinate {
@@ -43,42 +34,24 @@ func (cm *ConfidentialSecretModel) GetDestinationSecretCoordinate(defaultVaultNa
 	return core.AzKeyVaultObjectCoordinate{
 		VaultName: vaultName,
 		Name:      secretName,
+		Type:      "secret",
 	}
 }
 
 func (cm *ConfidentialSecretModel) Accept(secret azsecrets.Secret) {
 	cm.Id = types.StringValue(string(*secret.ID))
 
-	if secret.ContentType != nil {
-		cm.ContentType = types.StringValue(*secret.ContentType)
-	} else {
-		cm.ContentType = types.StringNull()
-	}
-
-	if secret.Tags != nil {
-		tfTags := map[string]attr.Value{}
-
-		for k, v := range secret.Tags {
-			if v != nil {
-				tfTags[k] = types.StringValue(*v)
-			}
-		}
-		cm.Tags, _ = types.MapValue(types.StringType, tfTags)
-	}
+	cm.ConvertAzString(secret.ContentType, &cm.ContentType)
+	cm.ConvertAzMap(secret.Tags, &cm.Tags)
 
 	if secret.Attributes != nil {
 		cm.NotBefore = core.FormatTime(secret.Attributes.NotBefore)
 		cm.NotAfter = core.FormatTime(secret.Attributes.Expires)
-
-		if secret.Attributes.Enabled != nil {
-			cm.Enabled = types.BoolValue(*secret.Attributes.Enabled)
-		}
+		cm.ConvertAzBool(secret.Attributes.Enabled, &cm.Enabled)
 	}
 
 	cm.SecretVersion = types.StringValue(secret.ID.Version())
 }
-
-var validDateTime = regexp.MustCompile(`^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z`)
 
 type ConfidentialAzVaultSecretResource struct {
 	ConfidentialResourceBase
@@ -258,11 +231,7 @@ func (d *ConfidentialAzVaultSecretResource) Create(ctx context.Context, req reso
 	}
 
 	data.Accept(setResp.Secret)
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-
-	if trackErr := d.factory.TrackObjectId(ctx, unwrappedPayload.Uuid); trackErr != nil {
-		resp.Diagnostics.AddError("Failed to track object id after creating secret", trackErr.Error())
-	}
+	d.FlushState(ctx, unwrappedPayload.Uuid, &data, resp)
 }
 
 func (d *ConfidentialAzVaultSecretResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {

@@ -7,6 +7,7 @@ import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/schemasupport"
 	tfstringvalidators "github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	datasourceSchema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -17,9 +18,13 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"regexp"
 	"time"
 )
+
+var validDateTime = regexp.MustCompile(`^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z`)
 
 // Basis for the confidential object processing and creation.
 
@@ -50,6 +55,17 @@ type WrappedAzKeyVaultObjectConfidentialMaterialModel struct {
 	Enabled   types.Bool   `tfsdk:"enabled"`
 }
 
+func (cm *WrappedAzKeyVaultObjectConfidentialMaterialModel) StringTypeAsPtr(tfVal *types.String) *string {
+	if tfVal == nil {
+		return nil
+	} else if tfVal.IsNull() || tfVal.IsUnknown() {
+		return nil
+	} else {
+		rv := tfVal.ValueString()
+		return &rv
+	}
+}
+
 func (cm *WrappedAzKeyVaultObjectConfidentialMaterialModel) TagsAsPtr() map[string]*string {
 	if cm.Tags.IsNull() {
 		return nil
@@ -70,6 +86,61 @@ func (cm *WrappedAzKeyVaultObjectConfidentialMaterialModel) TagsAsPtr() map[stri
 	}
 
 	return rv
+}
+
+func (cm *WrappedAzKeyVaultObjectConfidentialMaterialModel) TagsAsStr() map[string]string {
+	if cm.Tags.IsNull() {
+		return nil
+	}
+
+	rawVals := cm.Tags.Elements()
+	if len(rawVals) == 0 {
+		return nil
+	}
+
+	rv := map[string]string{}
+
+	for k, v := range rawVals {
+		if strAttr, ok := v.(types.String); ok {
+			valueString := strAttr.ValueString()
+			rv[k] = valueString
+		}
+	}
+
+	return rv
+}
+
+func (cm *WrappedAzKeyVaultObjectConfidentialMaterialModel) ConvertAzMap(p map[string]*string, into *basetypes.MapValue) {
+	if p != nil {
+		tfTags := map[string]attr.Value{}
+
+		for k, v := range p {
+			if v != nil {
+				tfTags[k] = types.StringValue(*v)
+			}
+		}
+
+		mapVal, _ := types.MapValue(types.StringType, tfTags)
+		*into = mapVal
+	} else {
+		*into = types.MapNull(types.StringType)
+	}
+}
+
+func (cm *WrappedAzKeyVaultObjectConfidentialMaterialModel) ConvertAzString(p *string, into *basetypes.StringValue) {
+	if p == nil {
+		*into = types.StringNull()
+	} else {
+		*into = types.StringValue(*p)
+	}
+}
+
+func (cm *WrappedAzKeyVaultObjectConfidentialMaterialModel) ConvertAzBool(p *bool, into *basetypes.BoolValue) {
+	if p == nil {
+		*into = types.BoolNull()
+	} else {
+		*into = types.BoolValue(*p)
+	}
 }
 
 func (cm *WrappedAzKeyVaultObjectConfidentialMaterialModel) NotBeforeDateAtPtr() *time.Time {
@@ -339,6 +410,16 @@ func (d *ConfidentialDatasourceBase) Configure(ctx context.Context, req datasour
 	d.factory = factory
 }
 
+func (d *ConfidentialDatasourceBase) FlushState(ctx context.Context, uuid string, data interface{}, resp *datasource.ReadResponse) {
+	// Save data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	if trackErr := d.factory.TrackObjectId(ctx, uuid); trackErr != nil {
+		errMsg := fmt.Sprintf("could not track the password entered into the state: %s", trackErr.Error())
+		tflog.Error(ctx, errMsg)
+		resp.Diagnostics.AddError("incoming object tracking", errMsg)
+	}
+}
+
 type ConfidentialResourceBase struct {
 	CommonConfidentialResource
 }
@@ -362,4 +443,14 @@ func (d *ConfidentialResourceBase) Configure(ctx context.Context, req resource.C
 	}
 
 	d.factory = factory
+}
+
+func (d *ConfidentialResourceBase) FlushState(ctx context.Context, uuid string, data interface{}, resp *resource.CreateResponse) {
+	// Save data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	if trackErr := d.factory.TrackObjectId(ctx, uuid); trackErr != nil {
+		errMsg := fmt.Sprintf("could not track the password entered into the state: %s", trackErr.Error())
+		tflog.Error(ctx, errMsg)
+		resp.Diagnostics.AddError("incoming object tracking", errMsg)
+	}
 }
