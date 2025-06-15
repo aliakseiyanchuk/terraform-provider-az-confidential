@@ -8,9 +8,9 @@ import (
 )
 
 var baseParams = tfgen.KeyWrappingParams{
-	NoOAEPLabel:     false,
-	FixedOAEPLabel:  "",
-	StrictOAEPLabel: false,
+	NoLabels:              false,
+	Labels:                "",
+	TargetCoordinateLabel: false,
 }
 
 var baseFlags = flag.NewFlagSet("base", flag.ExitOnError)
@@ -57,19 +57,19 @@ func init() {
 		"RSA public key to encrypt secrets/content encryption keys",
 	)
 
-	baseFlags.BoolVar(&baseParams.NoOAEPLabel,
+	baseFlags.BoolVar(&baseParams.NoLabels,
 		"no-oaep-label",
 		true,
 		"No not use any labels",
 	)
 
-	baseFlags.StringVar(&baseParams.FixedOAEPLabel,
+	baseFlags.StringVar(&baseParams.Labels,
 		"fixed-oaep-label",
 		"",
 		"Fixed OAEP label to use",
 	)
 
-	baseFlags.BoolVar(&baseParams.StrictOAEPLabel,
+	baseFlags.BoolVar(&baseParams.TargetCoordinateLabel,
 		"strict-oaep-label",
 		true,
 		"Use strict OAEP label",

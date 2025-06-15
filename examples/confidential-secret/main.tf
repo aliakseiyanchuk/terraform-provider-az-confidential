@@ -20,4 +20,6 @@ provider "az-confidential" {
     name = var.az_default_wrapping_key
     version = var.az_default_wrapping_key_version
   }
+
+  default_destination_vault_name = var.az_default_vault_name
 }

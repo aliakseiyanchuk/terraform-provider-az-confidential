@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -11,7 +10,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
-	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/schemasupport"
 	tfstringvalidators "github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -32,21 +30,13 @@ type ObjectHashTracker interface {
 	TrackObjectId(ctx context.Context, id string) error
 }
 
-type OAEPLabelType int
-
-const (
-	NoOAEPLabelling OAEPLabelType = iota
-	FixedOAEPLabel
-	StrictOAEPLabel
-)
-
 type AZClientsFactoryImpl struct {
 	Credential              azcore.TokenCredential
 	DefaultWrappingKey      *core.WrappingKeyCoordinateModel
 	DefaultDestinationVault string
 
-	OAEPLabel       []byte
-	OAEPEnforcement OAEPLabelType
+	ProviderLabels        []string
+	LabelMatchRequirement LabelMatchRequirement
 
 	secretClients      map[string]*azsecrets.Client
 	keysClients        map[string]*azkeys.Client
@@ -68,24 +58,6 @@ func (cm *AZClientsFactoryImpl) GetDestinationVaultObjectCoordinate(coord core.A
 	}
 }
 
-func (f *AZClientsFactoryImpl) GetOAEPLabelFor(d core.AzKeyVaultObjectCoordinate) []byte {
-	if f.OAEPEnforcement == NoOAEPLabelling {
-		return nil
-	} else if f.OAEPEnforcement == FixedOAEPLabel {
-		return []byte(f.OAEPLabel)
-	} else {
-		return nil
-	}
-}
-
-func (f *AZClientsFactoryImpl) GetOAEPLabelForProvider() []byte {
-	if f.OAEPEnforcement == NoOAEPLabelling {
-		return nil
-	} else {
-		return []byte(f.OAEPLabel)
-	}
-}
-
 func (f *AZClientsFactoryImpl) IsObjectIdTracked(ctx context.Context, id string) (bool, error) {
 	if f.hashTacker != nil {
 		return f.hashTacker.IsObjectIdTracked(ctx, id)
@@ -104,11 +76,28 @@ func (f *AZClientsFactoryImpl) TrackObjectId(ctx context.Context, id string) err
 
 var _ core.AZClientsFactory = &AZClientsFactoryImpl{}
 
-func (f *AZClientsFactoryImpl) GetOAEPLabelAsByteSlice() []byte {
-	return f.OAEPLabel
+func (f *AZClientsFactoryImpl) EnsureCanPlace(ctx context.Context, unwrappedPayload core.VersionedConfidentialData, targetCoord *core.AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics) {
+	if objIsTracked, trackerCheckErr := f.IsObjectIdTracked(ctx, unwrappedPayload.Uuid); trackerCheckErr != nil {
+		diagnostics.AddError("cannot check tracking status of this secret", trackerCheckErr.Error())
+	} else if objIsTracked {
+		diagnostics.AddError("secret is already tracked", "Potential malfeasance detected: someone is trying to create a secret from records that were previously used")
+	}
+
+	if f.LabelMatchRequirement == TargetCoordinate && targetCoord != nil {
+		if !core.Contains(targetCoord.GetLabel(), unwrappedPayload.Labels) {
+			diagnostics.AddError("mismatched placement", fmt.Sprintf("This %s cannot be unwrapped into %s in vault %s/%s", unwrappedPayload.Type, targetCoord.Type, targetCoord.VaultName, targetCoord.Name))
+		}
+	} else if f.LabelMatchRequirement == ProviderLabels || (f.LabelMatchRequirement == TargetCoordinate && targetCoord == nil) {
+		// This situation with nil target coordinate will only when unwrapping the password,
+		//which doesn't have a target Vault object to be associated with.
+		if !core.AnyIsIn(f.ProviderLabels, unwrappedPayload.Labels) {
+			diagnostics.AddError("mismatched placement", fmt.Sprintf("This %s cannot be unwrapped by this provider", unwrappedPayload.Type))
+		}
+	}
+	// If no label matching is required, no actions would be performed.
 }
 
-func (f *AZClientsFactoryImpl) GetMergedWrappingKeyCoordinate(ctx context.Context, param *core.WrappingKeyCoordinateModel, diag diag.Diagnostics) core.WrappingKeyCoordinate {
+func (f *AZClientsFactoryImpl) GetMergedWrappingKeyCoordinate(ctx context.Context, param *core.WrappingKeyCoordinateModel, diag *diag.Diagnostics) core.WrappingKeyCoordinate {
 
 	base := core.WrappingKeyCoordinate{
 		VaultName:  core.GetFirstString(func(m *core.WrappingKeyCoordinateModel) types.String { return m.VaultName }, param, f.DefaultWrappingKey),
@@ -217,18 +206,27 @@ type AZConnectorProviderImplModel struct {
 	DefaultWrappingKeyCoordinate *core.WrappingKeyCoordinateModel `tfsdk:"default_wrapping_key"`
 
 	DefaultDestinationVaultName types.String                `tfsdk:"default_destination_vault_name"`
-	OAEPLabel                   types.String                `tfsdk:"oaep_label"`
-	OAEPEnforcement             types.String                `tfsdk:"oaep_enforcement"`
+	Labels                      types.Set                   `tfsdk:"labels"`
+	LabelMatch                  types.String                `tfsdk:"require_label_match"`
 	FileHashTrackerConfig       *FileHashTrackerConfigModel `tfsdk:"file_hash_tracker"`
 }
 
-func (pm *AZConnectorProviderImplModel) GetOAEPLabelAsByteSlice() ([]byte, error) {
-	v := pm.OAEPLabel.ValueString()
-	if len(v) == 0 {
-		return nil, nil
-	}
+func (pm *AZConnectorProviderImplModel) GetProviderLabels(ctx context.Context) []string {
+	rv := make([]string, len(pm.Labels.Elements()))
+	pm.Labels.ElementsAs(ctx, &rv, false)
+	return rv
+}
 
-	return base64.StdEncoding.DecodeString(v)
+func (pm *AZConnectorProviderImplModel) GetLabelMatchRequirement() LabelMatchRequirement {
+	v := pm.LabelMatch.ValueString()
+
+	if v == TargetCoordinate.AsString() {
+		return TargetCoordinate
+	} else if v == ProviderLabels.AsString() {
+		return ProviderLabels
+	} else {
+		return NoMatching
+	}
 }
 
 func (pm *AZConnectorProviderImplModel) SpecifiesCredentialParameters() bool {
@@ -250,6 +248,18 @@ func (pm *AZConnectorProviderImplModel) GetExplicitCredential() (azcore.TokenCre
 func (p *AZConnectorProviderImpl) Metadata(ctx context.Context, req tfprovider.MetadataRequest, resp *tfprovider.MetadataResponse) {
 	resp.TypeName = "az-confidential"
 	resp.Version = p.version
+}
+
+type LabelMatchRequirement string
+
+const (
+	TargetCoordinate LabelMatchRequirement = "target-coordinate"
+	ProviderLabels   LabelMatchRequirement = "provider-labels"
+	NoMatching       LabelMatchRequirement = "none"
+)
+
+func (lm LabelMatchRequirement) AsString() string {
+	return string(lm)
 }
 
 func (p *AZConnectorProviderImpl) Schema(ctx context.Context, req tfprovider.SchemaRequest, resp *tfprovider.SchemaResponse) {
@@ -280,20 +290,21 @@ func (p *AZConnectorProviderImpl) Schema(ctx context.Context, req tfprovider.Sch
 					tfstringvalidators.LengthAtLeast(1),
 				},
 			},
-			"oaep_label": schema.StringAttribute{
-				MarkdownDescription: "OAEP Label to use during the encrypted data unwrapping",
-				Description:         "OAEP Label to use use during the encrypted data unwrapping",
+			"labels": schema.SetAttribute{
+				MarkdownDescription: "Provider labels",
+				Description:         "Provider labels",
 				Optional:            true,
-				Validators: []validator.String{
-					schemasupport.Base64StringValidator{},
-				},
+				ElementType:         types.StringType,
 			},
-			"oaep_enforcement": schema.StringAttribute{
-				MarkdownDescription: "OAEP label enforcement; default to strict",
-				Description:         "OAEP label enforcement; default to strict",
+			"require_label_match": schema.StringAttribute{
+				MarkdownDescription: "Match required between unwrapped ciphertext and labels of this provider",
+				Description:         "Match required between unwrapped ciphertext and labels of this provider",
 				Optional:            true,
 				Validators: []validator.String{
-					tfstringvalidators.OneOf("strict", "fixed", "none"),
+					tfstringvalidators.OneOf(
+						TargetCoordinate.AsString(),
+						ProviderLabels.AsString(),
+						NoMatching.AsString()),
 				},
 			},
 			"file_hash_tracker": schema.SingleNestedAttribute{
@@ -383,24 +394,6 @@ func (p *AZConnectorProviderImpl) Configure(ctx context.Context, req tfprovider.
 		return
 	}
 
-	oaepLabel, oaepErr := data.GetOAEPLabelAsByteSlice()
-	if oaepErr != nil {
-		tflog.Error(ctx, "Unable to obtain the OAEP label that must be used")
-		resp.Diagnostics.AddError("Invalid OAEP Label (must be base-64)", oaepErr.Error())
-		return
-	}
-
-	oaepEnforcementLevel := StrictOAEPLabel
-	if !data.OAEPEnforcement.IsNull() {
-		v := data.OAEPEnforcement.ValueString()
-		switch v {
-		case "fixed":
-			oaepEnforcementLevel = FixedOAEPLabel
-		case "none":
-			oaepEnforcementLevel = NoOAEPLabelling
-		}
-	}
-
 	hashTracker, hashTrackerInitErr := p.ConfigureHashTracker(ctx, data)
 	if hashTrackerInitErr != nil {
 		resp.Diagnostics.AddError("Failed to initialize hash tracker", hashTrackerInitErr.Error())
@@ -414,8 +407,8 @@ func (p *AZConnectorProviderImpl) Configure(ctx context.Context, req tfprovider.
 		DefaultWrappingKey: data.DefaultWrappingKeyCoordinate,
 
 		DefaultDestinationVault: data.DefaultDestinationVaultName.ValueString(),
-		OAEPLabel:               oaepLabel,
-		OAEPEnforcement:         oaepEnforcementLevel,
+		ProviderLabels:          data.GetProviderLabels(ctx),
+		LabelMatchRequirement:   data.GetLabelMatchRequirement(),
 		hashTacker:              hashTracker,
 	}
 
@@ -423,6 +416,13 @@ func (p *AZConnectorProviderImpl) Configure(ctx context.Context, req tfprovider.
 	resp.ResourceData = factory
 
 	tflog.Info(ctx, "AzConfidential provider has been configured")
+
+	if factory.LabelMatchRequirement == NoMatching {
+		resp.Diagnostics.AddWarning("Insecure provider configuration", "The provider is currently configured to ignore labelling match of unwrapped ciphertext. This setting is discouraged to be used in production setting")
+	}
+	if factory.hashTacker == nil {
+		resp.Diagnostics.AddWarning("Insecure provider configuration", "The provider is not keeping a track of created confidential objects. This setting is discouraged to be used in production setting")
+	}
 }
 
 func (p *AZConnectorProviderImpl) Functions(ctx context.Context) []func() function.Function {

@@ -125,7 +125,7 @@ type AZClientsFactory interface {
 
 	// GetMergedWrappedKeyCoordinate get merged wrapping key coordinate providing
 	// the values the parameter doesn't specify from teh provider's default settings
-	GetMergedWrappingKeyCoordinate(ctx context.Context, param *WrappingKeyCoordinateModel, diag diag.Diagnostics) WrappingKeyCoordinate
+	GetMergedWrappingKeyCoordinate(ctx context.Context, param *WrappingKeyCoordinateModel, diag *diag.Diagnostics) WrappingKeyCoordinate
 
 	// GetDestinationVaultObjectCoordinate GetDestinationSecretCoordinate retrieve the target coordinate where the
 	//object needs to be created. This
@@ -133,8 +133,9 @@ type AZClientsFactory interface {
 	// specify this.
 	GetDestinationVaultObjectCoordinate(coordinate AzKeyVaultObjectCoordinateModel) AzKeyVaultObjectCoordinate
 
-	GetOAEPLabelFor(d AzKeyVaultObjectCoordinate) []byte
-	GetOAEPLabelForProvider() []byte
+	// EnsureCanPlace ensure that this object can be placed in the destination vault.
+	// EnsureCanPlace ensure that this object can be placed in the destination vault.
+	EnsureCanPlace(ctx context.Context, unwrappedPayload VersionedConfidentialData, targetCoord *AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics)
 
 	IsObjectIdTracked(ctx context.Context, id string) (bool, error)
 	TrackObjectId(ctx context.Context, id string) error
@@ -196,8 +197,8 @@ func (c *AzKeyVaultObjectCoordinate) DefinesVaultName() bool {
 	return len(c.VaultName) > 0
 }
 
-func (c *AzKeyVaultObjectCoordinate) GetOAEPLabel() string {
-	return fmt.Sprintf("oaep://%s/@%s;", c.VaultName, c.Name)
+func (c *AzKeyVaultObjectCoordinate) GetLabel() string {
+	return fmt.Sprintf("az-c-label://%s/%s@%s;", c.VaultName, c.Name, c.Type)
 }
 
 // AzKeyVaultPayload payload transferred to the vault coordinate
@@ -313,7 +314,7 @@ func (w *WrappedPlainText) Unwrap(ctx context.Context, factory AZClientsFactory)
 	}
 }
 
-func (w *WrappingKeyCoordinate) FillDefaults(ctx context.Context, client *azkeys.Client, diag diag.Diagnostics) {
+func (w *WrappingKeyCoordinate) FillDefaults(ctx context.Context, client *azkeys.Client, diag *diag.Diagnostics) {
 	if len(w.KeyVersion) == 0 {
 		tflog.Trace(ctx, fmt.Sprintf("Attempting establish the latest version of the key %s in vault %s", w.KeyName, w.VaultName))
 

@@ -7,6 +7,7 @@ import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/schemasupport"
 	tfstringvalidators "github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	datasourceSchema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -269,8 +270,77 @@ func (wcmm *WrappedConfidentialMaterialModel) GetEncryptedWrappingKeyValue() []b
 	}
 }
 
-type ConfidentialResourceBase struct {
+// CommonConfidentialResource common methods for all confidential resources
+type CommonConfidentialResource struct {
 	factory core.AZClientsFactory
+}
+
+func (d *CommonConfidentialResource) Unwrap(ctx context.Context, mdl WrappedConfidentialMaterialModel, diagnostics *diag.Diagnostics) core.VersionedConfidentialData {
+	if d.factory == nil {
+		diagnostics.AddError("incomplete provider configuration", "provider does no have an initialized Azure objects factory")
+		return core.VersionedConfidentialData{}
+	}
+
+	// To create a secret, a coordinate of the wrapping key needs to be established and known
+	wrappingKeyCoordinate := d.factory.GetMergedWrappingKeyCoordinate(ctx, mdl.WrappingKeyCoordinate, diagnostics)
+	if diagnostics.HasError() {
+		tflog.Error(ctx, "Wrapping key coordinate resulted in error diagnostics; this is probably incomplete/inconsistent configuration")
+		return core.VersionedConfidentialData{}
+	}
+
+	wrappedText := core.WrappedPlainText{
+		EncryptedText:         mdl.GetEncryptedTextValue(),
+		EncryptedContentKey:   mdl.GetEncryptedWrappingKeyValue(),
+		WrappingKeyCoordinate: wrappingKeyCoordinate,
+	}
+
+	plainTextBytes, decrErr := wrappedText.Unwrap(ctx, d.factory)
+	if decrErr != nil {
+		diagnostics.AddError("Error unwrapping encrypted secret data", decrErr.Error())
+		return core.VersionedConfidentialData{}
+	}
+
+	tflog.Trace(ctx, "Confidential payload has been decrypted")
+
+	unwrappedPayload, unwrapError := core.UnwrapPayload(plainTextBytes)
+	if unwrapError != nil {
+		tflog.Error(ctx, fmt.Sprintf("Wasn't able to unwrap the payload: %s", unwrapError.Error()))
+		diagnostics.AddError("error unwrapping secret value", unwrapError.Error())
+		return unwrappedPayload
+	}
+
+	tflog.Trace(ctx, "Confidential payload has been unwrapped")
+
+	return unwrappedPayload
+}
+
+type ConfidentialDatasourceBase struct {
+	CommonConfidentialResource
+}
+
+func (d *ConfidentialDatasourceBase) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		tflog.Trace(ctx, "Confidential Az Vault Secret datasource configuration is deferred: provider not yet configured")
+		return
+	}
+
+	tflog.Debug(ctx, "Attempting to configure confidential Az Vault Secret resource")
+	factory, ok := req.ProviderData.(core.AZClientsFactory)
+
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Data Source Configure Type",
+			fmt.Sprintf("Expected provider.AZClientsFactory, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	d.factory = factory
+}
+
+type ConfidentialResourceBase struct {
+	CommonConfidentialResource
 }
 
 func (d *ConfidentialResourceBase) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -292,46 +362,4 @@ func (d *ConfidentialResourceBase) Configure(ctx context.Context, req resource.C
 	}
 
 	d.factory = factory
-}
-
-func (d *ConfidentialResourceBase) Unwrap(ctx context.Context, mdl WrappedConfidentialMaterialModel, diagnostics diag.Diagnostics) core.VersionedConfidentialData {
-	// To create a secret, a coordinate of the wrapping key needs to be established and known
-	wrappingKeyCoordinate := d.factory.GetMergedWrappingKeyCoordinate(ctx, mdl.WrappingKeyCoordinate, diagnostics)
-	if diagnostics.HasError() {
-		return core.VersionedConfidentialData{}
-	}
-
-	wrappedText := core.WrappedPlainText{
-		EncryptedText:         mdl.GetEncryptedTextValue(),
-		EncryptedContentKey:   mdl.GetEncryptedWrappingKeyValue(),
-		WrappingKeyCoordinate: wrappingKeyCoordinate,
-	}
-
-	plainTextBytes, decrErr := wrappedText.Unwrap(ctx, d.factory)
-	if decrErr != nil {
-		diagnostics.AddError("Error unwrapping encrypted secret data", decrErr.Error())
-		return core.VersionedConfidentialData{}
-	}
-
-	tflog.Trace(ctx, "Confidential payload has been decrypted")
-	tflog.Trace(ctx, base64.StdEncoding.EncodeToString(plainTextBytes))
-
-	unwrappedPayload, unwrapError := core.UnwrapPayload(plainTextBytes)
-	if unwrapError != nil {
-		tflog.Error(ctx, fmt.Sprintf("Wasn't able to unwrap the payload: %s", unwrapError.Error()))
-		diagnostics.AddError("error unwrapping secret value", unwrapError.Error())
-		return core.VersionedConfidentialData{}
-	}
-
-	tflog.Trace(ctx, "Confidential payload has been unwrapped")
-
-	if objIsTracked, trackerCheckErr := d.factory.IsObjectIdTracked(ctx, unwrappedPayload.Uuid); trackerCheckErr != nil {
-		diagnostics.AddError("cannot check tracking status of this secret", trackerCheckErr.Error())
-		return core.VersionedConfidentialData{}
-	} else if objIsTracked {
-		diagnostics.AddError("secret is already tracked", "Potential malfeasance detected: someone is trying to create a secret from records that were previously used")
-		return core.VersionedConfidentialData{}
-	}
-
-	return unwrappedPayload
 }

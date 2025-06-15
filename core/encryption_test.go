@@ -10,19 +10,19 @@ import (
 )
 import _ "github.com/stretchr/testify/assert"
 
-//go:embed ephemeral-rsa-public-key.pem
+//go:embed test-key-material/ephemeral-rsa-public-key.pem
 var ephemeralRsaPublicKey []byte
 
-//go:embed ephemeral-rsa-private-key.pem
+//go:embed test-key-material/ephemeral-rsa-private-key.pem
 var ephemeralRsaKeyText []byte
 
-//go:embed ephemeral-rsa-private-key.der
+//go:embed test-key-material/ephemeral-rsa-private-key.der
 var ephemeralRsaKeyDERForm []byte
 
-//go:embed ephemeral-rsa-private-key-encrypted.pem
+//go:embed test-key-material/ephemeral-rsa-private-key-encrypted.pem
 var ephemeralEncryptedRsaKeyText []byte
 
-//go:embed ephemeral-rsa-private-key-encrypted.der
+//go:embed test-key-material/ephemeral-rsa-private-key-encrypted.der
 var ephemeralEncryptedRsaKeyDERForm []byte
 
 func TestAESEncryption(t *testing.T) {
@@ -76,24 +76,24 @@ func TestRSAEncrypt(t *testing.T) {
 
 // This is "P-521" curve
 //
-//go:embed private-ec-key-secp521r1.pem
+//go:embed test-key-material/private-ec-key-secp521r1.pem
 var secp256r1EcPrivateKey string
 
 // THis is "P-384" curve
 //
-//go:embed private-ec-key-secp384r1.pem
+//go:embed test-key-material/private-ec-key-secp384r1.pem
 var secp384r1EcPrivateKey string
 
 // This is "P-256"
 //
-//go:embed private-ec-key-prime256v1.pem
+//go:embed test-key-material/private-ec-key-prime256v1.pem
 var prime256v1EcPrivateKey string
 
 // This is "P-256K" curve; however it isn't supported.
 // DISABLED go:embed private-ec-key-secp256k1.pem
 //var secp256k1EcPrivateKey string
 
-//go:embed ephemeral-rsa-private-key.pem
+//go:embed test-key-material/ephemeral-rsa-private-key.pem
 var rsaPrivateKey string
 
 func TestPrivateKeyToJWKConversion(t *testing.T) {
@@ -170,10 +170,10 @@ func TestCrazyZero(t *testing.T) {
 	fmt.Println(string(jsTxt))
 }
 
-//go:embed ephemeral-certificate.pem
+//go:embed test-key-material/ephemeral-certificate.pem
 var ephemeralCertificatePEM []byte
 
-//go:embed cert.pkcs12
+//go:embed test-key-material/cert.pkcs12
 var ephemeralCertPFX12 []byte
 
 func TestIsPEMEncoded(t *testing.T) {
@@ -233,7 +233,7 @@ func TestPrivateKeyToJSONWebKey(t *testing.T) {
 	assert.Nil(t, rsaErr)
 }
 
-//go:embed cert.pkcs12
+//go:embed test-key-material/cert.pkcs12
 var pkcs12File []byte
 
 //func TestPKCS12Import(t *testing.T) {

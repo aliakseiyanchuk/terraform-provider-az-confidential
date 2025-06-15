@@ -317,7 +317,7 @@ func (d *ConfidentialAzVaultKeyResource) Create(ctx context.Context, req resourc
 		return
 	}
 
-	unwrappedPayload := d.Unwrap(ctx, data.WrappedConfidentialMaterialModel, resp.Diagnostics)
+	unwrappedPayload := d.Unwrap(ctx, data.WrappedConfidentialMaterialModel, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -328,6 +328,13 @@ func (d *ConfidentialAzVaultKeyResource) Create(ctx context.Context, req resourc
 	}
 
 	destSecretCoordinate := d.factory.GetDestinationVaultObjectCoordinate(data.DestinationKey)
+
+	d.factory.EnsureCanPlace(ctx, unwrappedPayload, &destSecretCoordinate, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		tflog.Error(ctx, "checking possibility to place this object raised an error")
+		return
+	}
+
 	keysClient, secErr := d.factory.GetKeysClient(destSecretCoordinate.VaultName)
 	if secErr != nil {
 		resp.Diagnostics.AddError("Error acquiring secret client", secErr.Error())

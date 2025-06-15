@@ -13,21 +13,21 @@ import (
 )
 
 type KeyWrappingParams struct {
-	RSAPublicKeyFile   string
-	NoOAEPLabel        bool
-	FixedOAEPLabel     string
-	StrictOAEPLabel    bool
-	LoadedRsaPublicKey *rsa.PublicKey
+	RSAPublicKeyFile      string
+	NoLabels              bool
+	Labels                string
+	TargetCoordinateLabel bool
+	LoadedRsaPublicKey    *rsa.PublicKey
 
 	WrappingKeyCoordinate core.WrappingKeyCoordinate
 	DestinationCoordinate core.AzKeyVaultObjectCoordinate
 }
 
 func (kwp *KeyWrappingParams) GetLabels() []string {
-	if kwp.StrictOAEPLabel {
-		return []string{kwp.DestinationCoordinate.GetOAEPLabel()}
-	} else if len(kwp.FixedOAEPLabel) > 0 {
-		return strings.Split(kwp.FixedOAEPLabel, ",")
+	if kwp.TargetCoordinateLabel {
+		return []string{kwp.DestinationCoordinate.GetLabel()}
+	} else if len(kwp.Labels) > 0 {
+		return strings.Split(kwp.Labels, ",")
 	} else {
 		return nil
 	}
@@ -61,7 +61,7 @@ func (kwp *KeyWrappingParams) Validate() error {
 		kwp.LoadedRsaPublicKey = loadedRSAKey
 	}
 
-	if !kwp.StrictOAEPLabel && len(kwp.FixedOAEPLabel) == 0 && !kwp.NoOAEPLabel {
+	if !kwp.TargetCoordinateLabel && len(kwp.Labels) == 0 && !kwp.NoLabels {
 		return errors.New("missing instruction for OAEP label; did you forget -no-oaep-label")
 	}
 

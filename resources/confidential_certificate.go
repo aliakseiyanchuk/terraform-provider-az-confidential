@@ -238,7 +238,7 @@ func (d *ConfidentialAzVaultCertificateResource) Create(ctx context.Context, req
 		return
 	}
 
-	unwrappedPayload := d.Unwrap(ctx, data.WrappedConfidentialMaterialModel, resp.Diagnostics)
+	unwrappedPayload := d.Unwrap(ctx, data.WrappedConfidentialMaterialModel, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -254,6 +254,12 @@ func (d *ConfidentialAzVaultCertificateResource) Create(ctx context.Context, req
 	}
 
 	destSecretCoordinate := d.factory.GetDestinationVaultObjectCoordinate(data.DestinationCert)
+
+	d.factory.EnsureCanPlace(ctx, unwrappedPayload, nil, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		tflog.Error(ctx, "checking possibility to place this object raised an error")
+		return
+	}
 
 	tflog.Info(ctx, fmt.Sprintf("Will import certificate into %s/%s vault/certficiate", data.DestinationCert.VaultName, data.DestinationCert.Name))
 

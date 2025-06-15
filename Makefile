@@ -28,6 +28,8 @@ install: build
 # Generate ephemeral (=safe to throw away and re-generate) keys for unit testing
 generate_ephemeral_keys:
 	cd core && \
+		mkdir test-key-material && \
+		cd test-key-material && \
 		openssl genrsa -out ephemeral-rsa-private-key.pem 4096 && \
 		openssl rsa -in ephemeral-rsa-private-key.pem -outform der -out ephemeral-rsa-private-key.der && \
 		openssl rsa -in ephemeral-rsa-private-key.pem -pubout -out ephemeral-rsa-public-key.pem && \

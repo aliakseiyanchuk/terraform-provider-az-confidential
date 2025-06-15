@@ -1,4 +1,4 @@
-package provider
+package acceptance
 
 import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen"
@@ -11,7 +11,8 @@ import (
 func generatePasswordDataSource(t *testing.T) string {
 	kwp := tfgen.KeyWrappingParams{
 		RSAPublicKeyFile: wrappingKey,
-		NoOAEPLabel:      true,
+		Labels:           "acceptance-testing",
+		NoLabels:         false,
 	}
 
 	if vErr := kwp.Validate(); vErr != nil {
@@ -22,11 +23,12 @@ func generatePasswordDataSource(t *testing.T) string {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {
+		print(rv)
 		return rv
 	}
 }
 
-func TestAccConfidentialPasswordDataSource(t *testing.T) {
+func TestAccConfidentialPasswordDataSourceBasicStringConfiguration(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -35,7 +37,7 @@ func TestAccConfidentialPasswordDataSource(t *testing.T) {
 				Config: providerConfig + generatePasswordDataSource(t),
 				Check: resource.ComposeTestCheckFunc(
 					// Validate that the message is set
-					resource.TestCheckResourceAttr("plaintext_password", "plaintext_password", "this is a very secret string"),
+					resource.TestCheckResourceAttr("data.az-confidential_password.confidential_password", "plaintext_password", "this is a very secret string"),
 				),
 			},
 		},
