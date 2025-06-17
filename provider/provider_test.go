@@ -201,3 +201,7 @@ func Test_EnsureCanPlace_Errs_OnLabelMismatchForDataSource(t *testing.T) {
 
 	assert.True(t, hashTracker.AssertExpectations(t))
 }
+
+func Test_AZCFI_GetMergedWrappingKeyCoordinate(t *testing.T) {
+
+}

@@ -11,7 +11,7 @@ import (
 
 const certCliArg = "cert"
 
-//go:embed cert_template.tmpl
+//go:embed templates/cert_template.tmpl
 var certTFTemplate string
 
 var certCmd = flag.NewFlagSet(certCliArg, flag.ContinueOnError)
@@ -47,7 +47,7 @@ func init() {
 		"Do not try parsing DER-encode files")
 }
 
-func GenerateConfidentialCertificateTerraformTemplate(kwp KeyWrappingParams, args []string) (string, error) {
+func GenerateConfidentialCertificateTerraformTemplate(kwp ContentWrappingParams, args []string) (string, error) {
 	if vErr := kwp.ValidateHasDestination(); vErr != nil {
 		return "", vErr
 	}

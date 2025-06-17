@@ -358,8 +358,8 @@ func (w *WrappingKeyCoordinate) AddressesKey() bool {
 	return len(w.VaultName) > 0 && len(w.KeyName) > 0
 }
 
-func (w *WrappingKeyCoordinate) Validate() []diag.Diagnostic {
-	var rv []diag.Diagnostic
+func (w *WrappingKeyCoordinate) Validate() diag.Diagnostics {
+	var rv diag.Diagnostics
 
 	if !w.AddressesKey() {
 		summary := "Incomplete wrapping key address"

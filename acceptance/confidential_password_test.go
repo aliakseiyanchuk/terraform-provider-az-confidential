@@ -9,7 +9,7 @@ import (
 )
 
 func generatePasswordDataSource(t *testing.T) string {
-	kwp := tfgen.KeyWrappingParams{
+	kwp := tfgen.ContentWrappingParams{
 		RSAPublicKeyFile: wrappingKey,
 		Labels:           "acceptance-testing",
 		NoLabels:         false,

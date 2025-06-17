@@ -6,24 +6,79 @@ import (
 	"errors"
 	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"os"
 	"strings"
 	"text/template"
 	"time"
 )
 
-type KeyWrappingParams struct {
+type WrappingKeyCoordinateTFCode struct {
+	core.WrappingKeyCoordinate
+
+	VaultNameIsExpr  bool
+	KeyNameIsExpr    bool
+	KeyVersionIsExpr bool
+}
+
+func (w *WrappingKeyCoordinateTFCode) VaultNameExpr() string {
+	if w.VaultNameIsExpr {
+		return w.VaultName
+	} else {
+		return types.StringValue(w.VaultName).String()
+	}
+}
+
+func (w *WrappingKeyCoordinateTFCode) KeyNameExpr() string {
+	if w.KeyNameIsExpr {
+		return w.KeyName
+	} else {
+		return types.StringValue(w.KeyName).String()
+	}
+}
+
+func (w *WrappingKeyCoordinateTFCode) KeyVersionExpr() string {
+	if w.KeyVersionIsExpr {
+		return w.KeyVersion
+	} else {
+		return types.StringValue(w.KeyName).String()
+	}
+}
+
+type AzKeyVaultObjectCoordinateTFCode struct {
+	core.AzKeyVaultObjectCoordinate
+	VaultNameIsExpr  bool
+	ObjectNameIsExpr bool
+}
+
+func (w *AzKeyVaultObjectCoordinateTFCode) GetVaultNameExpr() string {
+	if w.VaultNameIsExpr {
+		return w.VaultName
+	} else {
+		return types.StringValue(w.VaultName).String()
+	}
+}
+
+func (w *AzKeyVaultObjectCoordinateTFCode) GetObjectNameExpr() string {
+	if w.ObjectNameIsExpr {
+		return w.Name
+	} else {
+		return types.StringValue(w.Name).String()
+	}
+}
+
+type ContentWrappingParams struct {
 	RSAPublicKeyFile      string
 	NoLabels              bool
 	Labels                string
 	TargetCoordinateLabel bool
 	LoadedRsaPublicKey    *rsa.PublicKey
 
-	WrappingKeyCoordinate core.WrappingKeyCoordinate
-	DestinationCoordinate core.AzKeyVaultObjectCoordinate
+	WrappingKeyCoordinate WrappingKeyCoordinateTFCode
+	DestinationCoordinate AzKeyVaultObjectCoordinateTFCode
 }
 
-func (kwp *KeyWrappingParams) GetLabels() []string {
+func (kwp *ContentWrappingParams) GetLabels() []string {
 	if kwp.TargetCoordinateLabel {
 		return []string{kwp.DestinationCoordinate.GetLabel()}
 	} else if len(kwp.Labels) > 0 {
@@ -33,7 +88,7 @@ func (kwp *KeyWrappingParams) GetLabels() []string {
 	}
 }
 
-func (kwp *KeyWrappingParams) ValidateHasDestination() error {
+func (kwp *ContentWrappingParams) ValidateHasDestination() error {
 	if len(kwp.DestinationCoordinate.Name) == 0 {
 		return fmt.Errorf("destination key name is required; use -output-vault-secret option")
 	}
@@ -44,7 +99,7 @@ func (kwp *KeyWrappingParams) ValidateHasDestination() error {
 	return nil
 }
 
-func (kwp *KeyWrappingParams) Validate() error {
+func (kwp *ContentWrappingParams) Validate() error {
 
 	if len(kwp.RSAPublicKeyFile) == 0 {
 		return fmt.Errorf("public key to use required; use -pubkey option")
@@ -61,8 +116,8 @@ func (kwp *KeyWrappingParams) Validate() error {
 		kwp.LoadedRsaPublicKey = loadedRSAKey
 	}
 
-	if !kwp.TargetCoordinateLabel && len(kwp.Labels) == 0 && !kwp.NoLabels {
-		return errors.New("missing instruction for OAEP label; did you forget -no-oaep-label")
+	if !kwp.TargetCoordinateLabel && (len(kwp.Labels) == 0 && !kwp.NoLabels) {
+		return errors.New("missing instruction for provider label matching; ensure to use -no-label if you intend to disable label matchig")
 	}
 
 	return nil
@@ -72,8 +127,27 @@ type BaseTFTemplateParms struct {
 	EncryptedContent     string
 	ContentEncryptionKey string
 
-	WrappingKeyCoordinate core.WrappingKeyCoordinate
-	DestinationCoordinate core.AzKeyVaultObjectCoordinate
+	WrappingKeyCoordinate WrappingKeyCoordinateTFCode
+	DestinationCoordinate AzKeyVaultObjectCoordinateTFCode
+
+	Tags map[string]string
+}
+
+func (p *BaseTFTemplateParms) HasTags() bool {
+	return len(p.Tags) > 0
+}
+
+func (p *BaseTFTemplateParms) TerraformValueTags() map[string]string {
+	if p.Tags == nil {
+		return nil
+	}
+
+	rv := make(map[string]string, len(p.Tags))
+	for k, v := range p.Tags {
+		rv[k] = types.StringValue(v).String()
+	}
+
+	return rv
 }
 
 func (p *BaseTFTemplateParms) NotBeforeExample() string {
@@ -87,7 +161,11 @@ func (p *BaseTFTemplateParms) NotAfterExample() string {
 }
 
 func (p *BaseTFTemplateParms) Render(templateName, templateStr string) (string, error) {
-	tmpl, _ := template.New(templateName).Parse(templateStr)
+	tmpl, templErr := template.New(templateName).Parse(templateStr)
+	if templErr != nil {
+		panic(templErr)
+	}
+
 	var rv bytes.Buffer
 	err := tmpl.Execute(&rv, p)
 

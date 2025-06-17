@@ -258,11 +258,15 @@ func (d *ConfidentialAzVaultSecretResource) Update(ctx context.Context, req reso
 	}
 
 	param := d.convertToUpdateSecretPropertiesParam(&data)
-	_, updateErr := secretClient.UpdateSecretProperties(ctx, destSecretCoordinate.Name, destSecretCoordinate.Version, param, nil)
+	secretResp, updateErr := secretClient.UpdateSecretProperties(ctx, destSecretCoordinate.Name, destSecretCoordinate.Version, param, nil)
 
 	if updateErr != nil {
 		resp.Diagnostics.AddError("Error updating secret properties", updateErr.Error())
+		return
 	}
+
+	data.Accept(secretResp.Secret)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 // Delete Performs DELETE operation on the created secret. The implementation disables the secret version
@@ -277,6 +281,7 @@ func (d *ConfidentialAzVaultSecretResource) Delete(ctx context.Context, req reso
 
 	if data.SecretVersion.IsUnknown() {
 		tflog.Warn(ctx, "Deleting resource that doesn't have recorded versioned coordinate.")
+		resp.Diagnostics.AddWarning("incomplete configuration", "secret version is not specified when the resource is being deleted; did it ever exist?")
 		return
 	}
 

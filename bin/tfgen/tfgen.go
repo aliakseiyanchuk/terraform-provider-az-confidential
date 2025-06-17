@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-var baseParams = tfgen.KeyWrappingParams{
+var baseParams = tfgen.ContentWrappingParams{
 	NoLabels:              false,
 	Labels:                "",
 	TargetCoordinateLabel: false,
@@ -90,7 +90,7 @@ func main() {
 	}
 
 	subCmd := baseFlags.Args()[0]
-	var generator func(tfgen.KeyWrappingParams, []string) (string, error)
+	var generator func(tfgen.ContentWrappingParams, []string) (string, error)
 
 	switch subCmd {
 	case "secret":

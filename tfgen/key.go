@@ -13,7 +13,7 @@ import (
 
 const keyCliArg = "key"
 
-//go:embed key_template.tmpl
+//go:embed templates/key_template.tmpl
 var keyTFTemplate string
 
 var keyCmd = flag.NewFlagSet(keyCliArg, flag.ContinueOnError)
@@ -49,7 +49,7 @@ func init() {
 		"Create symmetric key")
 }
 
-func GenerateConfidentialKeyTerraformTemplate(kwp KeyWrappingParams, args []string) (string, error) {
+func GenerateConfidentialKeyTerraformTemplate(kwp ContentWrappingParams, args []string) (string, error) {
 	if vErr := kwp.ValidateHasDestination(); vErr != nil {
 		return "", vErr
 	}

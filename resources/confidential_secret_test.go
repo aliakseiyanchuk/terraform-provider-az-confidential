@@ -4,6 +4,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -69,4 +70,25 @@ func Test_CSM_Accept(t *testing.T) {
 	receivedTags := mdl.TagsAsStr()
 	assert.Equal(t, "b", receivedTags["a"])
 	assert.Equal(t, 1, len(receivedTags))
+}
+
+func Test_CAzVSR_Metadata(t *testing.T) {
+	r := ConfidentialAzVaultSecretResource{}
+	req := resource.MetadataRequest{
+		ProviderTypeName: "az-confidential",
+	}
+	resp := resource.MetadataResponse{}
+
+	r.Metadata(nil, req, &resp)
+	assert.Equal(t, "az-confidential_secret", resp.TypeName)
+}
+
+func Test_CAzVSR_Schema(t *testing.T) {
+	r := ConfidentialAzVaultSecretResource{}
+	req := resource.SchemaRequest{}
+	resp := resource.SchemaResponse{}
+
+	r.Schema(nil, req, &resp)
+	assert.NotNil(t, resp.Schema)
+	assert.False(t, resp.Diagnostics.HasError())
 }

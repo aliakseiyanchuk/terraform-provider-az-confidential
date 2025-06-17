@@ -8,7 +8,7 @@ import (
 
 const passwordCliArg = "password"
 
-//go:embed password_template.tmpl
+//go:embed templates/password_template.tmpl
 var passwordTFTemplate string
 
 var passwordCmd = flag.NewFlagSet(passwordCliArg, flag.ContinueOnError)
@@ -26,7 +26,7 @@ func init() {
 		"Input is base-64 encoded")
 }
 
-func GenerateConfidentialPasswordTemplate(kwp KeyWrappingParams, args []string) (string, error) {
+func GenerateConfidentialPasswordTemplate(kwp ContentWrappingParams, args []string) (string, error) {
 	if parseErr := secretCmd.Parse(args); parseErr != nil {
 		return "", parseErr
 	}
@@ -43,7 +43,7 @@ func GenerateConfidentialPasswordTemplate(kwp KeyWrappingParams, args []string) 
 	return OutputDatasourcePasswordTerraformCode(kwp, string(passwordData))
 }
 
-func OutputDatasourcePasswordTerraformCode(kwp KeyWrappingParams, secretDataAsStr string) (string, error) {
+func OutputDatasourcePasswordTerraformCode(kwp ContentWrappingParams, secretDataAsStr string) (string, error) {
 	payloadBytes := core.WrapStringPayload(secretDataAsStr, "password", kwp.GetLabels())
 
 	em, emErr := core.CreateEncryptedMessage(kwp.LoadedRsaPublicKey, payloadBytes)

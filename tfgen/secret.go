@@ -9,7 +9,7 @@ import (
 
 const secretCliArg = "secret"
 
-//go:embed secret_template.tmpl
+//go:embed templates/secret_template.tmpl
 var secretTFTemplate string
 
 var secretCmd = flag.NewFlagSet(secretCliArg, flag.ContinueOnError)
@@ -34,7 +34,7 @@ func init() {
 		"Input is base-64 encoded")
 }
 
-func GenerateConfidentialSecretTerraformTemplate(kwp KeyWrappingParams, args []string) (string, error) {
+func GenerateConfidentialSecretTerraformTemplate(kwp ContentWrappingParams, args []string) (string, error) {
 	if vErr := kwp.ValidateHasDestination(); vErr != nil {
 		return "", vErr
 	}
@@ -53,6 +53,11 @@ func GenerateConfidentialSecretTerraformTemplate(kwp KeyWrappingParams, args []s
 	}
 
 	secretDataAsStr := string(secretData)
+
+	return OutputSecretTerraformCode(kwp, secretDataAsStr, nil)
+}
+
+func OutputSecretTerraformCode(kwp ContentWrappingParams, secretDataAsStr string, tags map[string]string) (string, error) {
 	payloadBytes := core.WrapStringPayload(secretDataAsStr, "secret", kwp.GetLabels())
 
 	if _, unwrapErr := core.UnwrapPayload(payloadBytes); unwrapErr != nil {
@@ -70,6 +75,8 @@ func GenerateConfidentialSecretTerraformTemplate(kwp KeyWrappingParams, args []s
 
 		WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 		DestinationCoordinate: kwp.DestinationCoordinate,
+
+		Tags: tags,
 	}
 
 	return rv.Render("secret", secretTFTemplate)

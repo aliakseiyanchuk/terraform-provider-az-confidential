@@ -441,3 +441,20 @@ func FindCertificateBlocks(blocks []*pem.Block) []*pem.Block {
 
 	return rv
 }
+
+// GenerateEphemeralKeyPair generates the ephemeral key pari to be used for testing purposes, e.g. where
+// actual decryption/encryption needs to be exercised.
+func GenerateEphemeralKeyPair() (*rsa.PrivateKey, *rsa.PublicKey) {
+	// Generate RSA key.
+	bitSize := 4096
+	key, err := rsa.GenerateKey(rand.Reader, bitSize)
+	if err != nil {
+		panic(err)
+	}
+
+	// Extract public component.
+	pub := key.Public()
+	rsaPubPrt := pub.(*rsa.PublicKey)
+
+	return key, rsaPubPrt
+}
