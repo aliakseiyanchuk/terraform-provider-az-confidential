@@ -1,7 +1,10 @@
+// Copyright (c) HashiCorp, Inc.
+
 package provider
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -121,8 +124,9 @@ func (ccs *CachedAzClientsSupplier) CacheWrappingKeyCoordinate(cacheKey string, 
 type AZClientsFactoryImpl struct {
 	CachedAzClientsSupplier
 
-	DefaultWrappingKey      *core.WrappingKeyCoordinateModel
-	DefaultDestinationVault string
+	DisallowResourceSpecifiedWrappingKey bool
+	DefaultWrappingKey                   *core.WrappingKeyCoordinateModel
+	DefaultDestinationVault              string
 
 	ProviderLabels        []string
 	LabelMatchRequirement LabelMatchRequirement
@@ -157,6 +161,14 @@ func (f *AZClientsFactoryImpl) GetDecrypterFor(ctx context.Context, coord core.W
 }
 
 func (f *AZClientsFactoryImpl) GetMergedWrappingKeyCoordinate(ctx context.Context, param *core.WrappingKeyCoordinateModel, diag *diag.Diagnostics) core.WrappingKeyCoordinate {
+
+	if f.DisallowResourceSpecifiedWrappingKey {
+		pc := param.AsCoordinate()
+		if !pc.IsEmpty() {
+			diag.AddError("Inadmissible configuration", "Provider configuration explicitly prohibits the use of resource-level wrapping keys")
+			return pc
+		}
+	}
 
 	base := core.WrappingKeyCoordinate{
 		VaultName:  core.GetFirstString(func(m *core.WrappingKeyCoordinateModel) types.String { return m.VaultName }, param, f.DefaultWrappingKey),
@@ -260,10 +272,11 @@ type AZConnectorProviderImplModel struct {
 	ClientSecret                 types.String                     `tfsdk:"client_secret"`
 	DefaultWrappingKeyCoordinate *core.WrappingKeyCoordinateModel `tfsdk:"default_wrapping_key"`
 
-	DefaultDestinationVaultName types.String                `tfsdk:"default_destination_vault_name"`
-	Labels                      types.Set                   `tfsdk:"labels"`
-	LabelMatch                  types.String                `tfsdk:"require_label_match"`
-	FileHashTrackerConfig       *FileHashTrackerConfigModel `tfsdk:"file_hash_tracker"`
+	DisallowResourceSpecifiedWrappingKey types.Bool                  `tfsdk:"disallow_resource_specified_wrapping_key"`
+	DefaultDestinationVaultName          types.String                `tfsdk:"default_destination_vault_name"`
+	Labels                               types.Set                   `tfsdk:"labels"`
+	LabelMatch                           types.String                `tfsdk:"require_label_match"`
+	FileHashTrackerConfig                *FileHashTrackerConfigModel `tfsdk:"file_hash_tracker"`
 }
 
 func (pm *AZConnectorProviderImplModel) GetProviderLabels(ctx context.Context) []string {
@@ -317,8 +330,13 @@ func (lm LabelMatchRequirement) AsString() string {
 	return string(lm)
 }
 
+//go:embed provider_description.md
+var providerDescription string
+
 func (p *AZConnectorProviderImpl) Schema(_ context.Context, _ tfprovider.SchemaRequest, resp *tfprovider.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description:         "Provider importing sensitive secrets, keys, and certificates from Terraform code into Azure KeyVault without exposing plain-text secrets in the state",
+		MarkdownDescription: providerDescription,
 		Attributes: map[string]schema.Attribute{
 			"tenant_id": schema.StringAttribute{
 				MarkdownDescription: "Tenant ID to use",
@@ -396,6 +414,11 @@ func (p *AZConnectorProviderImpl) Schema(_ context.Context, _ tfprovider.SchemaR
 				Optional:    true,
 				Description: "Default location of the wrapping key",
 			},
+			"disallow_resource_specified_wrapping_key": schema.BoolAttribute{
+				Optional:            true,
+				Description:         "Disallow individual resources to specify resource-level unwrapping keys",
+				MarkdownDescription: "Disallow individual resources to specify resource-level unwrapping keys",
+			},
 		},
 	}
 }
@@ -458,12 +481,19 @@ func (p *AZConnectorProviderImpl) Configure(ctx context.Context, req tfprovider.
 
 	tflog.Info(ctx, "AzConfidential provider was able to obtain access token to Azure API")
 
+	disallowResourceLevelWrappingKey := false
+
+	if !data.DisallowResourceSpecifiedWrappingKey.IsNull() {
+		disallowResourceLevelWrappingKey = data.DisallowResourceSpecifiedWrappingKey.ValueBool()
+	}
+
 	factory := &AZClientsFactoryImpl{
 		CachedAzClientsSupplier: CachedAzClientsSupplier{
 			Credential: cred,
 		},
 
-		DefaultWrappingKey: data.DefaultWrappingKeyCoordinate,
+		DefaultWrappingKey:                   data.DefaultWrappingKeyCoordinate,
+		DisallowResourceSpecifiedWrappingKey: disallowResourceLevelWrappingKey,
 
 		DefaultDestinationVault: data.DefaultDestinationVaultName.ValueString(),
 		ProviderLabels:          data.GetProviderLabels(ctx),

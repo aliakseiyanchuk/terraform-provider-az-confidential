@@ -5,13 +5,10 @@ PASSWORD ?= "a very confidential password"
 TFGEN_EXEC=./tfgen-az-confidential
 
 OUTPUT_VAULT_NAME?="demo-vault"
-OUTPUT_VAULT_SECRET="example-certificate"
+OUTPUT_VAULT_OBJECT="demo"
 PUBKEY?=wrapping_key_pk.pem
 
-OAEP_LABEL?=$(shell LC_CTYPE=C tr -dc 'A-Za-z0-9' </dev/random | head -c 13)
-OAEP_LABEL_HEX=$(shell printf ${OAEP_LABEL} | xxd -ps)
-OAEP_LABEL_B64=$(shell printf ${OAEP_LABEL} | base64 -w 0)
-OAEP_ENFORCEMENT?=-fixed-oaep-label ${OAEP_LABEL_B64}
+LABELS?=-fixed-labels demo,testing
 
 encrypt_password_openssl:
 	printf "${PASSWORD}" \
@@ -32,24 +29,24 @@ encrypt_password_openssl_no_label:
 # Encrypt text secret read from the command-line
 encrypt_secret:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_SECRET} \
-	${OAEP_ENFORCEMENT} \
+	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_OBJECT} \
+	${LABELS} \
 	secret
 
 # Encrypt text secret read from the command-line
 encrypt_password:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-	${OAEP_ENFORCEMENT} \
+	${LABELS} \
 	password
 
 encrypt_key:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-	${OAEP_ENFORCEMENT} \
-	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_SECRET} \
+	${LABELS} \
+	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_OBJECT} \
 	key
 
 encrypt_cert:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-	${OAEP_ENFORCEMENT} \
-	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_SECRET} \
+	${LABELS} \
+	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_OBJECT} \
 	certificate

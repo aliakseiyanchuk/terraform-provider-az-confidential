@@ -1,3 +1,5 @@
+# Copyright (c) HashiCorp, Inc.
+
 variable "az_tenant_id" {
   type = string
 }

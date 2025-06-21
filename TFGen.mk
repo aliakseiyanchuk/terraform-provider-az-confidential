@@ -32,56 +32,56 @@ generate_wrapping_public_key:
 
 test_secret_gen:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-    	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_SECRET} \
+    	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_OBJECT} \
     	${OAEP_ENFORCEMENT} \
     	secret \
     	-secret-file ${SECRET_FILE}
 
 test_rsa_key_gen:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-    	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_SECRET} \
+    	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_OBJECT} \
     	${OAEP_ENFORCEMENT} \
     	key \
     	-key-file ${RSA_KEY}
 
 test_ec_key_gen:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-    	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_SECRET} \
+    	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_OBJECT} \
     	${OAEP_ENFORCEMENT} \
     	key \
     	-key-file ${EC_KEY} ; test "$?" -eq 2
 
 test_rsa_key_gen_der:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-    	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_SECRET} \
+    	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_OBJECT} \
     	${OAEP_ENFORCEMENT} \
     	key \
     	-key-file ${RSA_KEY_DER_FORM}
 
 test_enc_rsa_key_gen:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-    	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_SECRET} \
+    	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_OBJECT} \
     	${OAEP_ENFORCEMENT} \
     	key \
     	-key-file ${ENC_RSA_KEY} -password-file=${PWD_FILE}
 
 test_enc_rsa_key_manual_pwd:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-    	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_SECRET} \
+    	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_OBJECT} \
     	${OAEP_ENFORCEMENT} \
     	key \
     	-key-file ${ENC_RSA_KEY}
 
 test_enc_rsa_key_gen_der:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-    	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_SECRET} \
+    	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_OBJECT} \
     	${OAEP_ENFORCEMENT} \
     	key \
     	-key-file ${ENC_RSA_KEY_DER_FORM} -password-file=${PWD_FILE}
 
 test_enc_rsa_key_manual_pwd_der:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-		-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_SECRET} \
+		-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_OBJECT} \
 		${OAEP_ENFORCEMENT} \
 		key \
 		-key-file ${ENC_RSA_KEY_DER_FORM}

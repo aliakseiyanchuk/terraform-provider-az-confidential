@@ -15,15 +15,8 @@ GOPATH?=/Users/aliakseiyanchuk/go
 GOROOT?=/usr/local/go
 GO111MODULE=on
 
-
-build:
-	GOPROXY=${GOPROXY} GOPATH=${GOPATH} GOROOT=${GOROOT} GO111MODULE=${GO111MODULE}
-	go build -o ${BINARY}
-
-install: build
-	mkdir -p ${LOCAL_MIRROR_PATH}
-	mv ${BINARY} ${LOCAL_MIRROR_PATH}
-
+install:
+	go install -v ./...
 
 # Generate ephemeral (=safe to throw away and re-generate) keys for unit testing
 generate_ephemeral_keys:
@@ -52,6 +45,12 @@ generate_ephemeral_keys:
 
 generate:
 	cd tools; go generate ./...
+
+test:
+	go test ${TEST}
+
+acceptance_test:
+	TF_ACC=1 go test ./acceptance
 
 build_tf_generator:
 	go build -o ${TF_GEN_BINARY} ./bin/tfgen

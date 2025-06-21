@@ -19,11 +19,11 @@ resource "az-confidential_key" "{{ .TFBlockName }}" {
     "wrapKey"
   ])
 
-  # The secret version cannot be used before this date
+  # The key version cannot be used before this date
   # Needs to be formatted yyyy-mm-ddTHH:MM:SS'Z'
   # not_before_date = "{{ .NotBeforeExample }}"
 
-  # The secret version cannot be used after this date
+  # The key version cannot be used after this date
   # Needs to be formatted yyyy-mm-dd'T'HH:MM:SS'Z'
   # not_after_date = "{{ .NotAfterExample }}"
 

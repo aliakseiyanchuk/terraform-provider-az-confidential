@@ -1,3 +1,5 @@
+// Copyright (c) HashiCorp, Inc.
+
 package core
 
 import "github.com/hashicorp/terraform-plugin-framework/types"

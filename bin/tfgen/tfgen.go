@@ -1,3 +1,5 @@
+// Copyright (c) HashiCorp, Inc.
+
 package main
 
 import (
@@ -79,7 +81,7 @@ func init() {
 
 	baseFlags.BoolVar(&outputCiphertextOnly,
 		"ciphertext-only",
-		true,
+		false,
 		"Output only ciphertext (i.e. do not output associated Terraform code template)`",
 	)
 }

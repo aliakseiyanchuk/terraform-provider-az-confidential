@@ -1,3 +1,5 @@
+// Copyright (c) HashiCorp, Inc.
+
 package core
 
 func Contains(v string, values []string) bool {

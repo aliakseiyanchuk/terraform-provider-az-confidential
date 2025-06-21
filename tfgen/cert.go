@@ -1,3 +1,5 @@
+// Copyright (c) HashiCorp, Inc.
+
 package tfgen
 
 import (
@@ -32,7 +34,7 @@ func init() {
 		"Read certificate from specified file")
 
 	certCmd.StringVar(&certParams.certPasswordFile,
-		"cert-password",
+		"password-file",
 		"",
 		"Read password from specified file (for PKCS12 files)")
 
@@ -123,6 +125,8 @@ func GenerateConfidentialCertificateTerraformTemplate(kwp ContentWrappingParams,
 			}
 		}
 	}
+
+	kwp.TFBlockNameIfUndefined("cert")
 
 	if outputTFCOde {
 		return OutputConfidentialCertificateTerraformCode(kwp, certData, certPass, nil)

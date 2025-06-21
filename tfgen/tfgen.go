@@ -1,3 +1,5 @@
+// Copyright (c) HashiCorp, Inc.
+
 package tfgen
 
 import (
@@ -81,7 +83,7 @@ type ContentWrappingParams struct {
 }
 
 func (kpw *ContentWrappingParams) TFBlockNameIfUndefined(v string) {
-	if len(kpw.TFBlockName) > 0 {
+	if len(kpw.TFBlockName) == 0 {
 		kpw.TFBlockName = v
 	}
 }
