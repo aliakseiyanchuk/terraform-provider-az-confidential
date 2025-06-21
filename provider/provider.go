@@ -30,19 +30,164 @@ type ObjectHashTracker interface {
 	TrackObjectId(ctx context.Context, id string) error
 }
 
+type CachedAzClientsSupplier struct {
+	Credential azcore.TokenCredential
+
+	secretClients      map[string]*azsecrets.Client
+	keysClients        map[string]*azkeys.Client
+	certificateClients map[string]*azcertificates.Client
+
+	keysCache map[string]core.WrappingKeyCoordinate
+}
+
+// GetSecretsClient return (potentially cached) secrets client to connect to the specified
+// vault name. The `vaultName` is the (url) name of the vault to have the client connect to
+func (ccs *CachedAzClientsSupplier) GetSecretsClient(vaultName string) (*azsecrets.Client, error) {
+	if ccs.secretClients == nil {
+		ccs.secretClients = map[string]*azsecrets.Client{}
+	}
+
+	vaultUrl := fmt.Sprintf("https://%s.vault.azure.net", vaultName)
+
+	if client, ok := ccs.secretClients[vaultUrl]; ok {
+		return client, nil
+	}
+
+	client, err := azsecrets.NewClient(vaultUrl, ccs.Credential, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	ccs.secretClients[vaultUrl] = client
+	return client, nil
+}
+
+// GetKeysClient return (potentially cached) secrets client to connect to the specified
+// vault name. The `vaultName` is the (url) name of the vault to have the client connect to
+func (ccs *CachedAzClientsSupplier) GetKeysClient(vaultName string) (*azkeys.Client, error) {
+	if ccs.keysClients == nil {
+		ccs.keysClients = map[string]*azkeys.Client{}
+	}
+
+	vaultUrl := fmt.Sprintf("https://%s.vault.azure.net", vaultName)
+
+	if client, ok := ccs.keysClients[vaultUrl]; ok {
+		return client, nil
+	}
+
+	client, err := azkeys.NewClient(vaultUrl, ccs.Credential, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	ccs.keysClients[vaultUrl] = client
+	return client, nil
+}
+
+// GetCertificateClient return (potentially cached) secrets client to connect to the specified
+// vault name. The `vaultName` is the (url) name of the vault to have the client connect to
+func (ccs *CachedAzClientsSupplier) GetCertificateClient(vaultName string) (*azcertificates.Client, error) {
+	if ccs.certificateClients == nil {
+		ccs.certificateClients = map[string]*azcertificates.Client{}
+	}
+
+	vaultUrl := fmt.Sprintf("https://%s.vault.azure.net", vaultName)
+
+	if client, ok := ccs.certificateClients[vaultUrl]; ok {
+		return client, nil
+	}
+
+	client, err := azcertificates.NewClient(vaultUrl, ccs.Credential, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	ccs.certificateClients[vaultUrl] = client
+	return client, nil
+}
+
+func (ccs *CachedAzClientsSupplier) CacheWrappingKeyCoordinate(cacheKey string, coordinate core.WrappingKeyCoordinate) {
+	if ccs.keysCache == nil {
+		ccs.keysCache = map[string]core.WrappingKeyCoordinate{}
+	}
+
+	ccs.keysCache[cacheKey] = coordinate
+}
+
+// --------------------------------------------------------------------------------
+// AzClientsFactory
+
+// AZClientsFactoryImpl Factory implementation
 type AZClientsFactoryImpl struct {
-	Credential              azcore.TokenCredential
+	CachedAzClientsSupplier
+
 	DefaultWrappingKey      *core.WrappingKeyCoordinateModel
 	DefaultDestinationVault string
 
 	ProviderLabels        []string
 	LabelMatchRequirement LabelMatchRequirement
 
-	secretClients      map[string]*azsecrets.Client
-	keysClients        map[string]*azkeys.Client
-	certificateClients map[string]*azcertificates.Client
-
 	hashTacker ObjectHashTracker
+}
+
+func (f *AZClientsFactoryImpl) AzKeyVaultRSADecrypt(ctx context.Context, input []byte, coord core.WrappingKeyCoordinate) ([]byte, error) {
+	client, err := f.GetKeysClient(coord.VaultName)
+	if err != nil {
+		return nil, err
+	}
+
+	options := azkeys.KeyOperationParameters{
+		Algorithm: &coord.AzEncryptionAlg,
+		Value:     input,
+	}
+
+	decrResp, decrErr := client.Decrypt(ctx, coord.KeyName, coord.KeyVersion, options, nil)
+	if decrErr != nil {
+		tflog.Trace(ctx, fmt.Sprintf("Decryption error: %s", decrErr.Error()))
+
+		return nil, decrErr
+	}
+	return decrResp.Result, nil
+}
+
+func (f *AZClientsFactoryImpl) GetDecrypterFor(ctx context.Context, coord core.WrappingKeyCoordinate) core.RSADecrypter {
+	return func(input []byte) ([]byte, error) {
+		return f.AzKeyVaultRSADecrypt(ctx, input, coord)
+	}
+}
+
+func (f *AZClientsFactoryImpl) GetMergedWrappingKeyCoordinate(ctx context.Context, param *core.WrappingKeyCoordinateModel, diag *diag.Diagnostics) core.WrappingKeyCoordinate {
+
+	base := core.WrappingKeyCoordinate{
+		VaultName:  core.GetFirstString(func(m *core.WrappingKeyCoordinateModel) types.String { return m.VaultName }, param, f.DefaultWrappingKey),
+		KeyName:    core.GetFirstString(func(m *core.WrappingKeyCoordinateModel) types.String { return m.KeyName }, param, f.DefaultWrappingKey),
+		KeyVersion: core.GetFirstString(func(m *core.WrappingKeyCoordinateModel) types.String { return m.KeyVersion }, param, f.DefaultWrappingKey),
+		Algorithm:  core.GetFirstString(func(m *core.WrappingKeyCoordinateModel) types.String { return m.Algorithm }, param, f.DefaultWrappingKey),
+	}
+
+	if base.AddressesKey() {
+		// Cache the results of the wrapping keys caches
+		cacheKey := fmt.Sprintf("%s/%s/%s", base.VaultName, base.KeyName, base.KeyVersion)
+
+		if f.keysCache != nil {
+			if rv, ok := f.keysCache[cacheKey]; ok {
+				return rv
+			}
+		}
+
+		if kClient, err := f.GetKeysClient(base.VaultName); err != nil {
+			diag.AddError("cannot obtain key client", err.Error())
+		} else {
+			base.FillDefaults(ctx, kClient, diag)
+			f.CacheWrappingKeyCoordinate(cacheKey, base)
+		}
+	} else {
+		diag.AddError("incomplete coordinate of a wrapping key", "at least vault and key name are required")
+	}
+
+	diag.Append(base.Validate()...)
+
+	return base
 }
 
 func (cm *AZClientsFactoryImpl) GetDestinationVaultObjectCoordinate(coord core.AzKeyVaultObjectCoordinateModel) core.AzKeyVaultObjectCoordinate {
@@ -95,96 +240,6 @@ func (f *AZClientsFactoryImpl) EnsureCanPlace(ctx context.Context, unwrappedPayl
 		}
 	}
 	// If no label matching is required, no actions would be performed.
-}
-
-func (f *AZClientsFactoryImpl) GetMergedWrappingKeyCoordinate(ctx context.Context, param *core.WrappingKeyCoordinateModel, diag *diag.Diagnostics) core.WrappingKeyCoordinate {
-
-	base := core.WrappingKeyCoordinate{
-		VaultName:  core.GetFirstString(func(m *core.WrappingKeyCoordinateModel) types.String { return m.VaultName }, param, f.DefaultWrappingKey),
-		KeyName:    core.GetFirstString(func(m *core.WrappingKeyCoordinateModel) types.String { return m.KeyName }, param, f.DefaultWrappingKey),
-		KeyVersion: core.GetFirstString(func(m *core.WrappingKeyCoordinateModel) types.String { return m.KeyVersion }, param, f.DefaultWrappingKey),
-		Algorithm:  core.GetFirstString(func(m *core.WrappingKeyCoordinateModel) types.String { return m.Algorithm }, param, f.DefaultWrappingKey),
-	}
-
-	if base.AddressesKey() {
-		if kClient, err := f.GetKeysClient(base.VaultName); err != nil {
-			diag.AddError("cannot obtain key client", err.Error())
-		} else {
-			base.FillDefaults(ctx, kClient, diag)
-		}
-	} else {
-		diag.AddError("incomplete coordinate of a wrapping key", "at least vault and key name are required")
-	}
-
-	diag.Append(base.Validate()...)
-
-	return base
-}
-
-// GetSecretsClient return (potentially cached) secrets client to connect to the specified
-// vault name. The `vaultName` is the (url) name of the vault to have the client connect to
-func (f *AZClientsFactoryImpl) GetSecretsClient(vaultName string) (*azsecrets.Client, error) {
-	if f.secretClients == nil {
-		f.secretClients = map[string]*azsecrets.Client{}
-	}
-
-	vaultUrl := fmt.Sprintf("https://%s.vault.azure.net", vaultName)
-
-	if client, ok := f.secretClients[vaultUrl]; ok {
-		return client, nil
-	}
-
-	client, err := azsecrets.NewClient(vaultUrl, f.Credential, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	f.secretClients[vaultUrl] = client
-	return client, nil
-}
-
-// GetKeysClient return (potentially cached) secrets client to connect to the specified
-// vault name. The `vaultName` is the (url) name of the vault to have the client connect to
-func (f *AZClientsFactoryImpl) GetKeysClient(vaultName string) (*azkeys.Client, error) {
-	if f.keysClients == nil {
-		f.keysClients = map[string]*azkeys.Client{}
-	}
-
-	vaultUrl := fmt.Sprintf("https://%s.vault.azure.net", vaultName)
-
-	if client, ok := f.keysClients[vaultUrl]; ok {
-		return client, nil
-	}
-
-	client, err := azkeys.NewClient(vaultUrl, f.Credential, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	f.keysClients[vaultUrl] = client
-	return client, nil
-}
-
-// GetCertificateClient return (potentially cached) secrets client to connect to the specified
-// vault name. The `vaultName` is the (url) name of the vault to have the client connect to
-func (f *AZClientsFactoryImpl) GetCertificateClient(vaultName string) (*azcertificates.Client, error) {
-	if f.certificateClients == nil {
-		f.certificateClients = map[string]*azcertificates.Client{}
-	}
-
-	vaultUrl := fmt.Sprintf("https://%s.vault.azure.net", vaultName)
-
-	if client, ok := f.certificateClients[vaultUrl]; ok {
-		return client, nil
-	}
-
-	client, err := azcertificates.NewClient(vaultUrl, f.Credential, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	f.certificateClients[vaultUrl] = client
-	return client, nil
 }
 
 type AZConnectorProviderImpl struct {
@@ -245,7 +300,7 @@ func (pm *AZConnectorProviderImplModel) GetExplicitCredential() (azcore.TokenCre
 	)
 }
 
-func (p *AZConnectorProviderImpl) Metadata(ctx context.Context, req tfprovider.MetadataRequest, resp *tfprovider.MetadataResponse) {
+func (p *AZConnectorProviderImpl) Metadata(_ context.Context, _ tfprovider.MetadataRequest, resp *tfprovider.MetadataResponse) {
 	resp.TypeName = "az-confidential"
 	resp.Version = p.version
 }
@@ -262,7 +317,7 @@ func (lm LabelMatchRequirement) AsString() string {
 	return string(lm)
 }
 
-func (p *AZConnectorProviderImpl) Schema(ctx context.Context, req tfprovider.SchemaRequest, resp *tfprovider.SchemaResponse) {
+func (p *AZConnectorProviderImpl) Schema(_ context.Context, _ tfprovider.SchemaRequest, resp *tfprovider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"tenant_id": schema.StringAttribute{
@@ -353,6 +408,7 @@ func (p *AZConnectorProviderImpl) DataSources(ctx context.Context) []func() data
 }
 
 func (p *AZConnectorProviderImpl) Resources(ctx context.Context) []func() resource.Resource {
+	tflog.Debug(ctx, "AzConfidential: initializing resources")
 	return []func() resource.Resource{
 		resources.NewConfidentialAzVaultSecretResource,
 		resources.NewConfidentialAzVaultKeyResource,
@@ -403,7 +459,10 @@ func (p *AZConnectorProviderImpl) Configure(ctx context.Context, req tfprovider.
 	tflog.Info(ctx, "AzConfidential provider was able to obtain access token to Azure API")
 
 	factory := &AZClientsFactoryImpl{
-		Credential:         cred,
+		CachedAzClientsSupplier: CachedAzClientsSupplier{
+			Credential: cred,
+		},
+
 		DefaultWrappingKey: data.DefaultWrappingKeyCoordinate,
 
 		DefaultDestinationVault: data.DefaultDestinationVaultName.ValueString(),
@@ -425,7 +484,7 @@ func (p *AZConnectorProviderImpl) Configure(ctx context.Context, req tfprovider.
 	}
 }
 
-func (p *AZConnectorProviderImpl) Functions(ctx context.Context) []func() function.Function {
+func (p *AZConnectorProviderImpl) Functions(_ context.Context) []func() function.Function {
 	return []func() function.Function{}
 }
 

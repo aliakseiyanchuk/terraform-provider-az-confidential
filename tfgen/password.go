@@ -26,7 +26,7 @@ func init() {
 		"Input is base-64 encoded")
 }
 
-func GenerateConfidentialPasswordTemplate(kwp ContentWrappingParams, args []string) (string, error) {
+func GenerateConfidentialPasswordTemplate(kwp ContentWrappingParams, outputTFCode bool, args []string) (string, error) {
 	if parseErr := secretCmd.Parse(args); parseErr != nil {
 		return "", parseErr
 	}
@@ -40,24 +40,29 @@ func GenerateConfidentialPasswordTemplate(kwp ContentWrappingParams, args []stri
 		return "", readErr
 	}
 
-	return OutputDatasourcePasswordTerraformCode(kwp, string(passwordData))
+	if outputTFCode {
+		return OutputDatasourcePasswordTerraformCode(kwp, string(passwordData))
+	} else {
+		return OutputPasswordEncryptedContent(kwp, string(passwordData))
+	}
 }
 
-func OutputDatasourcePasswordTerraformCode(kwp ContentWrappingParams, secretDataAsStr string) (string, error) {
-	payloadBytes := core.WrapStringPayload(secretDataAsStr, "password", kwp.GetLabels())
-
-	em, emErr := core.CreateEncryptedMessage(kwp.LoadedRsaPublicKey, payloadBytes)
-	if emErr != nil {
-		return "", emErr
+func OutputDatasourcePasswordTerraformCode(kwp ContentWrappingParams, passwordString string) (string, error) {
+	ciphertext, err := OutputPasswordEncryptedContent(kwp, passwordString)
+	if err != nil {
+		return ciphertext, err
 	}
 
 	rv := BaseTFTemplateParms{
-		EncryptedContent:     em.GetSecretExpr(),
-		ContentEncryptionKey: em.GetContentEncryptionKeyExpr(),
+		EncryptedContent: ciphertext,
 
 		WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 		DestinationCoordinate: kwp.DestinationCoordinate,
 	}
 
 	return rv.Render("password", passwordTFTemplate)
+}
+
+func OutputPasswordEncryptedContent(kwp ContentWrappingParams, passwordString string) (string, error) {
+	return OutputEncryptedConfidentialData(kwp, core.CreateConfidentialStringData(passwordString, "password", kwp.GetLabels()))
 }

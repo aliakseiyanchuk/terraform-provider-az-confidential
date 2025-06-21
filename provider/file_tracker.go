@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"os"
-	"time"
 )
 
 type LocalFileTracker struct {
@@ -32,7 +31,7 @@ func (tracker *LocalFileTracker) TrackObjectId(ctx context.Context, id string) e
 	}
 
 	key := core.Sha256Of(id)
-	tracker.hashes[key] = time.Now().Unix()
+	tracker.hashes[key] = 1
 
 	data, _ := json.Marshal(tracker.hashes)
 	data = core.GZipCompress(data)
@@ -44,7 +43,7 @@ func (tracker *LocalFileTracker) TrackObjectId(ctx context.Context, id string) e
 	return nil
 }
 
-func (tracker *LocalFileTracker) Open(ctx context.Context, id string) error {
+func (tracker *LocalFileTracker) Open(ctx context.Context) error {
 	if fileInfo, readErr := os.Stat(tracker.file); readErr == nil {
 		return readErr
 	} else if fileInfo != nil && fileInfo.IsDir() {
@@ -69,6 +68,6 @@ func (tracker *LocalFileTracker) Open(ctx context.Context, id string) error {
 
 func NewLocalFileTracker(ctx context.Context, file string) (*LocalFileTracker, error) {
 	rv := &LocalFileTracker{file: file}
-	loadErr := rv.Open(ctx, file)
+	loadErr := rv.Open(ctx)
 	return rv, loadErr
 }

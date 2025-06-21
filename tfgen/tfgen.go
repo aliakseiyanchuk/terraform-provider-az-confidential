@@ -74,8 +74,16 @@ type ContentWrappingParams struct {
 	TargetCoordinateLabel bool
 	LoadedRsaPublicKey    *rsa.PublicKey
 
+	TFBlockName string
+
 	WrappingKeyCoordinate WrappingKeyCoordinateTFCode
 	DestinationCoordinate AzKeyVaultObjectCoordinateTFCode
+}
+
+func (kpw *ContentWrappingParams) TFBlockNameIfUndefined(v string) {
+	if len(kpw.TFBlockName) > 0 {
+		kpw.TFBlockName = v
+	}
 }
 
 func (kwp *ContentWrappingParams) GetLabels() []string {
@@ -124,8 +132,9 @@ func (kwp *ContentWrappingParams) Validate() error {
 }
 
 type BaseTFTemplateParms struct {
-	EncryptedContent     string
-	ContentEncryptionKey string
+	EncryptedContent string
+
+	TFBlockName string
 
 	WrappingKeyCoordinate WrappingKeyCoordinateTFCode
 	DestinationCoordinate AzKeyVaultObjectCoordinateTFCode
@@ -138,11 +147,12 @@ func (p *BaseTFTemplateParms) HasTags() bool {
 }
 
 func (p *BaseTFTemplateParms) TerraformValueTags() map[string]string {
+	rv := make(map[string]string, len(p.Tags))
+
 	if p.Tags == nil {
-		return nil
+		return rv
 	}
 
-	rv := make(map[string]string, len(p.Tags))
 	for k, v := range p.Tags {
 		rv[k] = types.StringValue(v).String()
 	}
@@ -170,10 +180,6 @@ func (p *BaseTFTemplateParms) Render(templateName, templateStr string) (string, 
 	err := tmpl.Execute(&rv, p)
 
 	return rv.String(), err
-}
-
-func (p *BaseTFTemplateParms) DefinesCEK() bool {
-	return len(p.ContentEncryptionKey) > 0
 }
 
 func (p *BaseTFTemplateParms) DefinesWrappingCoordinate() bool {

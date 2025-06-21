@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
@@ -12,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -66,7 +68,7 @@ func (cm *ConfidentialKeyModel) GetDestinationKeyCoordinate(defaultVaultName str
 	}
 }
 
-func (cm *ConfidentialKeyModel) Accept(key azkeys.KeyBundle) {
+func (cm *ConfidentialKeyModel) Accept(key azkeys.KeyBundle, diagnostics *diag.Diagnostics) {
 	cm.Id = types.StringValue(string(*key.Key.KID))
 
 	if key.Tags != nil {
@@ -83,20 +85,17 @@ func (cm *ConfidentialKeyModel) Accept(key azkeys.KeyBundle) {
 	if key.Attributes != nil {
 		cm.NotBefore = core.FormatTime(key.Attributes.NotBefore)
 		cm.NotAfter = core.FormatTime(key.Attributes.Expires)
-
-		if key.Attributes.Enabled != nil {
-			cm.Enabled = types.BoolValue(*key.Attributes.Enabled)
-		}
+		cm.ConvertAzBool(key.Attributes.Enabled, &cm.Enabled)
 	}
 
 	cm.KeyVersion = types.StringValue(key.Key.KID.Version())
 	cm.PublicKeyPem = types.StringNull()
 	cm.PublicKeyOpenSSH = types.StringNull()
 
-	cm.acceptPublicKey(key)
+	cm.acceptPublicKey(key, diagnostics)
 }
 
-func (cm *ConfidentialKeyModel) acceptPublicKey(key azkeys.KeyBundle) {
+func (cm *ConfidentialKeyModel) acceptPublicKey(key azkeys.KeyBundle, diagnostics *diag.Diagnostics) {
 	if key.Key.Kty == nil {
 		return
 	}
@@ -108,17 +107,34 @@ func (cm *ConfidentialKeyModel) acceptPublicKey(key azkeys.KeyBundle) {
 			N: big.NewInt(0).SetBytes(key.Key.N),
 			E: int(big.NewInt(0).SetBytes(key.Key.E).Uint64()),
 		}
-		cm.assignPublicKeysAttrs(publicKey)
+		cm.assignPublicKeysAttrs(publicKey, diagnostics)
 	} else if kty == azkeys.KeyTypeEC || kty == azkeys.KeyTypeECHSM {
 		publicKey := &ecdsa.PublicKey{
 			X: big.NewInt(0).SetBytes(key.Key.X),
 			Y: big.NewInt(0).SetBytes(key.Key.Y),
 		}
-		cm.assignPublicKeysAttrs(publicKey)
+
+		if key.Key.Crv != nil {
+			if *key.Key.Crv == azkeys.CurveNameP256 {
+				publicKey.Curve = elliptic.P256()
+			} else if *key.Key.Crv == azkeys.CurveNameP384 {
+				publicKey.Curve = elliptic.P384()
+			} else if *key.Key.Crv == azkeys.CurveNameP521 {
+				publicKey.Curve = elliptic.P521()
+			} else {
+				// This is not a supported curve.
+				diagnostics.AddWarning(
+					"Unsupported curve",
+					fmt.Sprintf("Provider implementation cannot handle curve %s; public key cannot be automatically associated", *key.Key.Crv))
+				return
+			}
+		}
+
+		cm.assignPublicKeysAttrs(publicKey, diagnostics)
 	}
 }
 
-func (cm *ConfidentialKeyModel) assignPublicKeysAttrs(pubKey interface{}) {
+func (cm *ConfidentialKeyModel) assignPublicKeysAttrs(pubKey interface{}, dg *diag.Diagnostics) {
 	if pubKeyBytes, err := x509.MarshalPKIXPublicKey(pubKey); err == nil {
 		pubKeyPemBlock := &pem.Block{
 			Type:  "PUBLIC KEY",
@@ -126,12 +142,16 @@ func (cm *ConfidentialKeyModel) assignPublicKeysAttrs(pubKey interface{}) {
 		}
 
 		cm.PublicKeyPem = types.StringValue(string(pem.EncodeToMemory(pubKeyPemBlock)))
+	} else {
+		dg.AddWarning("PKIX Warning", fmt.Sprintf("Attempt to marshal public key returned an error: %s", err.Error()))
 	}
 
 	// Not all key types can be SSH keys
 	if sshPubKey, err := ssh.NewPublicKey(pubKey); err == nil {
 		sshPubKeyBytes := ssh.MarshalAuthorizedKey(sshPubKey)
 		cm.PublicKeyOpenSSH = types.StringValue(string(sshPubKeyBytes))
+	} else {
+		dg.AddWarning("SSH Warning", fmt.Sprintf("Attempt to marshal SSH public key returned an error: %s", err.Error()))
 	}
 
 }
@@ -269,7 +289,7 @@ func (d *ConfidentialAzVaultKeyResource) Read(ctx context.Context, req resource.
 		return
 	}
 
-	data.Accept(keyState.KeyBundle)
+	data.Accept(keyState.KeyBundle, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -317,19 +337,19 @@ func (d *ConfidentialAzVaultKeyResource) Create(ctx context.Context, req resourc
 		return
 	}
 
-	unwrappedPayload := d.Unwrap(ctx, data.WrappedConfidentialMaterialModel, &resp.Diagnostics)
+	confidentialData := d.UnwrapEncryptedConfidentialData(ctx, data.ConfidentialMaterialModel, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if unwrappedPayload.Type != "key" && unwrappedPayload.Type != "symmetric-key" {
-		resp.Diagnostics.AddError("Unexpected object type", fmt.Sprintf("Expected key or symmtric, got %s", unwrappedPayload.Type))
+	if confidentialData.Type != "key" && confidentialData.Type != "symmetric-key" {
+		resp.Diagnostics.AddError("Unexpected object type", fmt.Sprintf("Expected key or symmtric, got %s", confidentialData.Type))
 		return
 	}
 
 	destSecretCoordinate := d.factory.GetDestinationVaultObjectCoordinate(data.DestinationKey)
 
-	d.factory.EnsureCanPlace(ctx, unwrappedPayload, &destSecretCoordinate, &resp.Diagnostics)
+	d.factory.EnsureCanPlace(ctx, confidentialData, &destSecretCoordinate, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		tflog.Error(ctx, "checking possibility to place this object raised an error")
 		return
@@ -343,16 +363,18 @@ func (d *ConfidentialAzVaultKeyResource) Create(ctx context.Context, req resourc
 
 	params := d.convertToImportKeyParam(&data)
 
-	if unwrappedPayload.Type == "key" {
-		if azJWKErr := core.PrivateKeyTOJSONWebKey(unwrappedPayload.Payload, unwrappedPayload.StringPayload, params.Key); azJWKErr != nil {
+	if confidentialData.Type == "key" {
+		if azJWKErr := core.PrivateKeyTOJSONWebKey(confidentialData.BinaryData, confidentialData.StringData, params.Key); azJWKErr != nil {
 			resp.Diagnostics.AddError("Error converting private key to JSONWebKey", azJWKErr.Error())
 			return
 		}
-	} else if unwrappedPayload.Type == "symmetric-key" {
-		if azJWKErr := core.SymmetricKeyTOJSONWebKey(unwrappedPayload.Payload, params.Key); azJWKErr != nil {
+	} else if confidentialData.Type == "symmetric-key" {
+		if azJWKErr := core.SymmetricKeyTOJSONWebKey(confidentialData.BinaryData, params.Key); azJWKErr != nil {
 			resp.Diagnostics.AddError("Error converting symmetric key to JSONWebKey", azJWKErr.Error())
 			return
 		}
+	} else {
+		resp.Diagnostics.AddError("Unsupported key material", fmt.Sprintf("Unsupported key type %s", confidentialData.Type))
 	}
 
 	setResp, setErr := keysClient.ImportKey(ctx, destSecretCoordinate.Name, params, nil)
@@ -361,8 +383,8 @@ func (d *ConfidentialAzVaultKeyResource) Create(ctx context.Context, req resourc
 		return
 	}
 
-	data.Accept(setResp.KeyBundle)
-	d.FlushState(ctx, unwrappedPayload.Uuid, &data, resp)
+	data.Accept(setResp.KeyBundle, &resp.Diagnostics)
+	d.FlushState(ctx, confidentialData.Uuid, &data, resp)
 }
 
 func (d *ConfidentialAzVaultKeyResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -403,7 +425,7 @@ func (d *ConfidentialAzVaultKeyResource) Update(ctx context.Context, req resourc
 		return
 	}
 
-	data.Accept(updateResponse.KeyBundle)
+	data.Accept(updateResponse.KeyBundle, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 

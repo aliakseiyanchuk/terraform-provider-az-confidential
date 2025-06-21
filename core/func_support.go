@@ -12,7 +12,9 @@ func GetFirstString[T any](loc Locator[T, types.String], sources ...*T) string {
 	for _, s := range sources {
 		if s != nil {
 			tfVal := loc(s)
-			return tfVal.ValueString()
+			if !tfVal.IsNull() && !tfVal.IsUnknown() {
+				return tfVal.ValueString()
+			}
 		}
 	}
 

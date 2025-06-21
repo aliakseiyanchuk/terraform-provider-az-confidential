@@ -23,7 +23,7 @@ func generatePasswordDataSource(t *testing.T) string {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {
-		print(rv)
+		//print(rv)
 		return rv
 	}
 }

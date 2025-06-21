@@ -199,8 +199,8 @@ func (d *ConfidentialAzVaultCertificateResource) convertToImportCertParam(data *
 
 	// Question: what to do with DER-encoded certificates?
 	// May need to be set to:
-	//application/x-pem-file              .pem
-	//application/x-pkcs12                .p12 .pfx
+	//application/x-pem-file for .pem
+	//application/x-pkcs12 for .p12 .pfx
 	rv := azcertificates.ImportCertificateParameters{
 		CertificateAttributes: &certAttr,
 		CertificatePolicy: &azcertificates.CertificatePolicy{
@@ -238,24 +238,24 @@ func (d *ConfidentialAzVaultCertificateResource) Create(ctx context.Context, req
 		return
 	}
 
-	unwrappedPayload := d.Unwrap(ctx, data.WrappedConfidentialMaterialModel, &resp.Diagnostics)
+	confidentialData := d.UnwrapEncryptedConfidentialData(ctx, data.ConfidentialMaterialModel, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if unwrappedPayload.Type != "certificate" {
-		resp.Diagnostics.AddError("Unexpected object type", fmt.Sprintf("Expected 'certificate', got '%s'", unwrappedPayload.Type))
+	if confidentialData.Type != "certificate" {
+		resp.Diagnostics.AddError("Unexpected object type", fmt.Sprintf("Expected 'certificate', got '%s'", confidentialData.Type))
 		return
 	}
 
-	if len(unwrappedPayload.Payload) == 0 {
+	if len(confidentialData.BinaryData) == 0 {
 		resp.Diagnostics.AddError("Missing payload", "Unwrapped payload does not contain expected content")
 		return
 	}
 
 	destSecretCoordinate := d.factory.GetDestinationVaultObjectCoordinate(data.DestinationCert)
 
-	d.factory.EnsureCanPlace(ctx, unwrappedPayload, nil, &resp.Diagnostics)
+	d.factory.EnsureCanPlace(ctx, confidentialData, nil, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		tflog.Error(ctx, "checking possibility to place this object raised an error")
 		return
@@ -270,7 +270,7 @@ func (d *ConfidentialAzVaultCertificateResource) Create(ctx context.Context, req
 	}
 
 	params := d.convertToImportCertParam(&data)
-	params.Base64EncodedCertificate = unwrappedPayload.PayloadAsB64Ptr()
+	params.Base64EncodedCertificate = confidentialData.PayloadAsB64Ptr()
 
 	tflog.Trace(ctx, *params.Base64EncodedCertificate)
 
@@ -281,7 +281,7 @@ func (d *ConfidentialAzVaultCertificateResource) Create(ctx context.Context, req
 	}
 
 	data.Accept(setResp.Certificate)
-	d.FlushState(ctx, unwrappedPayload.Uuid, &data, resp)
+	d.FlushState(ctx, confidentialData.Uuid, &data, resp)
 }
 
 func (d *ConfidentialAzVaultCertificateResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {

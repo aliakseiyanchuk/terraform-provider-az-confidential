@@ -14,7 +14,7 @@ import (
 
 // ConfidentialPasswordModel Model for the encrypted password in the configuration that can be unwrapped into the state file.
 type ConfidentialPasswordModel struct {
-	WrappedConfidentialMaterialModel
+	ConfidentialMaterialModel
 	PlaintextPassword       types.String `tfsdk:"plaintext_password"`
 	PlaintextPasswordBase64 types.String `tfsdk:"plaintext_password_b64"`
 	PlaintextPasswordHex    types.String `tfsdk:"plaintext_password_hex"`
@@ -24,8 +24,8 @@ func (cpm *ConfidentialPasswordModel) Accept(unwrappedPayload core.VersionedConf
 	// For this example code, hardcoding a response value to
 	// save into the Terraform state.
 	cpm.Id = types.StringValue(unwrappedPayload.Uuid)
-	if len(unwrappedPayload.StringPayload) > 0 {
-		strVal := unwrappedPayload.StringPayload
+	if len(unwrappedPayload.StringData) > 0 {
+		strVal := unwrappedPayload.StringData
 
 		cpm.PlaintextPassword = types.StringValue(strVal)
 		cpm.PlaintextPasswordBase64 = types.StringValue(base64.StdEncoding.EncodeToString([]byte(strVal)))
@@ -36,9 +36,9 @@ func (cpm *ConfidentialPasswordModel) Accept(unwrappedPayload core.VersionedConf
 		cpm.PlaintextPasswordHex = types.StringNull()
 	}
 
-	if unwrappedPayload.Payload != nil {
-		cpm.PlaintextPasswordBase64 = types.StringValue(base64.StdEncoding.EncodeToString(unwrappedPayload.Payload))
-		cpm.PlaintextPasswordHex = types.StringValue(hex.EncodeToString(unwrappedPayload.Payload))
+	if unwrappedPayload.BinaryData != nil {
+		cpm.PlaintextPasswordBase64 = types.StringValue(base64.StdEncoding.EncodeToString(unwrappedPayload.BinaryData))
+		cpm.PlaintextPasswordHex = types.StringValue(hex.EncodeToString(unwrappedPayload.BinaryData))
 	}
 }
 
@@ -91,24 +91,24 @@ func (d *ConfidentialPasswordDataSource) Read(ctx context.Context, req datasourc
 		return
 	}
 
-	unwrappedPayload := d.Unwrap(ctx, data.WrappedConfidentialMaterialModel, &resp.Diagnostics)
+	confidentialData := d.UnwrapEncryptedConfidentialData(ctx, data.ConfidentialMaterialModel, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		tflog.Error(ctx, "diagnostics contain error after unwrapping the ciphertext; cannot continue")
 		return
 	}
 
-	if unwrappedPayload.Type != "password" {
-		resp.Diagnostics.AddError("Mismatching confidential object type", fmt.Sprintf("Expected `password`, received `%s`", unwrappedPayload.Type))
+	if confidentialData.Type != "password" {
+		resp.Diagnostics.AddError("Mismatching confidential object type", fmt.Sprintf("Expected `password`, received `%s`", confidentialData.Type))
 	}
 
-	d.factory.EnsureCanPlace(ctx, unwrappedPayload, nil, &resp.Diagnostics)
+	d.factory.EnsureCanPlace(ctx, confidentialData, nil, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		tflog.Error(ctx, "checking possibility to place this object raised an error")
 		return
 	}
 
-	data.Accept(unwrappedPayload)
-	d.FlushState(ctx, unwrappedPayload.Uuid, &data, resp)
+	data.Accept(confidentialData)
+	d.FlushState(ctx, confidentialData.Uuid, &data, resp)
 }
 
 // Ensure provider defined types fully satisfy framework interfaces.

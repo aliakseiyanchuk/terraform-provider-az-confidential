@@ -14,107 +14,23 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"net/url"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 type VersionedConfidentialData struct {
-	Uuid          string
-	Type          string
-	Payload       []byte
-	StringPayload string
-	Labels        []string
+	Uuid       string
+	Type       string
+	BinaryData []byte
+	StringData string
+	Labels     []string
 }
 
 func (vcd *VersionedConfidentialData) PayloadAsB64Ptr() *string {
-	if len(vcd.Payload) == 0 {
+	if len(vcd.BinaryData) == 0 {
 		return nil
 	} else {
-		out := base64.StdEncoding.EncodeToString(vcd.Payload)
+		out := base64.StdEncoding.EncodeToString(vcd.BinaryData)
 		return &out
 	}
-}
-
-type VersionedConfidentialDataJSONModel struct {
-	Uuid          string   `json:"u"`
-	Type          string   `json:"t"`
-	BinaryPayload *string  `json:"b,omitempty"`
-	StringPayload *string  `json:"s,omitempty"`
-	Labels        []string `json:"l,omitempty"`
-}
-
-func UnwrapPayload(input []byte) (VersionedConfidentialData, error) {
-	rv := VersionedConfidentialData{}
-
-	jsonStr, gzipErr := GZipDecompress(input)
-	if gzipErr != nil {
-		return rv, gzipErr
-	}
-
-	mdl := VersionedConfidentialDataJSONModel{}
-
-	if err := json.Unmarshal(jsonStr, &mdl); err != nil {
-		return rv, err
-	}
-
-	rv.Uuid = mdl.Uuid
-	rv.Type = mdl.Type
-	rv.Labels = mdl.Labels
-
-	if mdl.BinaryPayload != nil {
-		if b, b64Err := base64.StdEncoding.DecodeString(*mdl.BinaryPayload); b64Err != nil {
-			return rv, b64Err
-		} else {
-			rv.Payload = b
-		}
-	}
-
-	if mdl.StringPayload != nil {
-		rv.StringPayload = *mdl.StringPayload
-	}
-
-	return rv, nil
-}
-
-func WrapStringPayload(value, objType string, labels []string) []byte {
-	rv := VersionedConfidentialDataJSONModel{
-		Uuid:          uuid.New().String(),
-		Type:          objType,
-		StringPayload: &value,
-		Labels:        labels,
-	}
-
-	jsonStr, _ := json.Marshal(&rv)
-	return GZipCompress(jsonStr)
-}
-
-func WrapBinaryPayload(value []byte, objType string, labels []string) []byte {
-	encStr := base64.StdEncoding.EncodeToString(value)
-
-	rv := VersionedConfidentialDataJSONModel{
-		Uuid:          uuid.New().String(),
-		Type:          objType,
-		BinaryPayload: &encStr,
-		Labels:        labels,
-	}
-
-	jsonStr, _ := json.Marshal(rv)
-	return GZipCompress(jsonStr)
-}
-
-func WrapDualPayload(value []byte, strValue *string, objType string, labels []string) []byte {
-	encStr := base64.StdEncoding.EncodeToString(value)
-
-	rv := VersionedConfidentialDataJSONModel{
-		Uuid:          uuid.New().String(),
-		Type:          objType,
-		BinaryPayload: &encStr,
-		StringPayload: strValue,
-		Labels:        labels,
-	}
-
-	jsonStr, _ := json.Marshal(rv)
-	return GZipCompress(jsonStr)
 }
 
 // AZClientsFactory interface supplying Azure clients to various services.
@@ -139,6 +55,8 @@ type AZClientsFactory interface {
 
 	IsObjectIdTracked(ctx context.Context, id string) (bool, error)
 	TrackObjectId(ctx context.Context, id string) error
+
+	GetDecrypterFor(ctx context.Context, coord WrappingKeyCoordinate) RSADecrypter
 }
 
 type AzResourceCoordinateModel struct {
@@ -252,68 +170,6 @@ func (w *WrappingKeyCoordinate) DefiesKeyAlgorithm() bool {
 	return len(w.Algorithm) > 0
 }
 
-type WrappedPlainText struct {
-	EncryptedText         []byte
-	EncryptedContentKey   []byte
-	WrappingKeyCoordinate WrappingKeyCoordinate
-}
-
-func (w *WrappedPlainText) Unwrap(ctx context.Context, factory AZClientsFactory) ([]byte, error) {
-	client, err := factory.GetKeysClient(w.WrappingKeyCoordinate.VaultName)
-	if err != nil {
-		return nil, err
-	}
-
-	tflog.Trace(ctx, fmt.Sprintf("CEK length: %d", len(w.EncryptedContentKey)))
-
-	if len(w.EncryptedContentKey) == 0 {
-		tflog.Trace(ctx, "No CEK specified; performing direct decryption using vault")
-		options := azkeys.KeyOperationParameters{
-			Algorithm: &w.WrappingKeyCoordinate.AzEncryptionAlg,
-			Value:     w.EncryptedText,
-		}
-
-		apiJson, apiJsonErr := options.MarshalJSON()
-		tflog.Trace(ctx, fmt.Sprintf("Decryption params %s (conversion error: %s)", apiJson, apiJsonErr))
-		decrResp, decrErr := client.Decrypt(ctx, w.WrappingKeyCoordinate.KeyName, w.WrappingKeyCoordinate.KeyVersion, options, nil)
-		if decrErr != nil {
-			tflog.Trace(ctx, fmt.Sprintf("Decryption error: %s", decrErr.Error()))
-
-			return nil, decrErr
-		}
-		return decrResp.Result, nil
-	} else {
-		tflog.Trace(ctx, "CEK IS specified; performing two-step decryption using vault")
-		options := azkeys.KeyOperationParameters{
-			Algorithm: &w.WrappingKeyCoordinate.AzEncryptionAlg,
-			Value:     w.EncryptedContentKey,
-		}
-
-		decrResp, decrErr := client.Decrypt(ctx, w.WrappingKeyCoordinate.KeyName, w.WrappingKeyCoordinate.KeyVersion, options, nil)
-		if decrErr != nil {
-			tflog.Error(ctx, fmt.Sprintf("Key unwrapping error: %s", decrErr.Error()))
-			return nil, decrErr
-		}
-
-		// Decr response contains an AES decryption key that is additionally GZipped
-		jsonBytes, gzipErr := GZipDecompress(decrResp.Result)
-		if gzipErr != nil {
-			tflog.Error(ctx, fmt.Sprintf("GZip decompression error: %s", gzipErr.Error()))
-			return nil, gzipErr
-		}
-
-		var aesData AESData
-		jsonErr := json.Unmarshal(jsonBytes, &aesData)
-		if jsonErr != nil {
-			tflog.Error(ctx, fmt.Sprintf("JSON unmarshal error: %s", jsonErr.Error()))
-			return nil, jsonErr
-		}
-
-		plaintext, decrErr := AESDecrypt(w.EncryptedText, aesData)
-		return plaintext, decrErr
-	}
-}
-
 func (w *WrappingKeyCoordinate) FillDefaults(ctx context.Context, client *azkeys.Client, diag *diag.Diagnostics) {
 	if len(w.KeyVersion) == 0 {
 		tflog.Trace(ctx, fmt.Sprintf("Attempting establish the latest version of the key %s in vault %s", w.KeyName, w.VaultName))
@@ -323,6 +179,11 @@ func (w *WrappingKeyCoordinate) FillDefaults(ctx context.Context, client *azkeys
 			return
 		} else {
 			w.KeyVersion = keyResp.Key.KID.Version()
+		}
+	} else {
+		if _, readKeyErr := client.GetKey(ctx, w.KeyName, w.KeyVersion, nil); readKeyErr != nil {
+			diag.AddError("Was unable to retrieve the specified version of key", fmt.Sprintf("%s", readKeyErr.Error()))
+			return
 		}
 	}
 

@@ -11,8 +11,8 @@ func TestConfidentialPasswordModelAcceptTest(t *testing.T) {
 	mdl := ConfidentialPasswordModel{}
 
 	v := core.VersionedConfidentialData{
-		Uuid:          "a-b-c-d",
-		StringPayload: "abc",
+		Uuid:       "a-b-c-d",
+		StringData: "abc",
 	}
 
 	mdl.Accept(v)
@@ -28,8 +28,8 @@ func TestConfidentialPasswordModelAcceptBinary(t *testing.T) {
 	assert.Nil(t, err)
 
 	v := core.VersionedConfidentialData{
-		Uuid:    "a-b-c-d",
-		Payload: b,
+		Uuid:       "a-b-c-d",
+		BinaryData: b,
 	}
 
 	mdl.Accept(v)

@@ -112,24 +112,34 @@ func (d *ConfidentialAzVaultSecretResource) Read(ctx context.Context, req resour
 		return
 	}
 
+	secretState, doStateFlush := d.DoRead(ctx, &data, resp)
+
+	if doStateFlush {
+		data.Accept(secretState.Secret)
+		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	}
+}
+
+func (d *ConfidentialAzVaultSecretResource) DoRead(ctx context.Context, data *ConfidentialSecretModel, resp *resource.ReadResponse) (azsecrets.GetSecretResponse, StateFlushFlag) {
 	// The secret version was never created; nothing needs to be read here.
 	if data.SecretVersion.IsUnknown() {
-		return
+		tflog.Info(ctx, "Secret version is not yet known during read; the secret was never created.")
+		return azsecrets.GetSecretResponse{}, DoNotFlushState
 	}
 
 	destSecretCoordinate, err := data.GetDestinationCoordinateFromId()
 	if err != nil {
 		resp.Diagnostics.AddError("cannot establish reference to the created secret version", err.Error())
-		return
+		return azsecrets.GetSecretResponse{}, DoNotFlushState
 	}
 
 	secretClient, err := d.factory.GetSecretsClient(destSecretCoordinate.VaultName)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot acquire secret client", fmt.Sprintf("Cannot acquire secret client to vault %s: %s", destSecretCoordinate.VaultName, err.Error()))
-		return
+		return azsecrets.GetSecretResponse{}, DoNotFlushState
 	} else if secretClient == nil {
 		resp.Diagnostics.AddError("Cannot acquire secret client", "Secrets client returned is nil")
-		return
+		return azsecrets.GetSecretResponse{}, DoNotFlushState
 	}
 
 	secretState, err := secretClient.GetSecret(ctx, destSecretCoordinate.Name, destSecretCoordinate.Version, nil)
@@ -139,7 +149,7 @@ func (d *ConfidentialAzVaultSecretResource) Read(ctx context.Context, req resour
 			destSecretCoordinate.Version,
 			destSecretCoordinate.VaultName,
 			err.Error()))
-		return
+		return azsecrets.GetSecretResponse{}, DoNotFlushState
 	}
 	if secretState.ID == nil {
 		resp.Diagnostics.AddWarning(
@@ -149,11 +159,10 @@ func (d *ConfidentialAzVaultSecretResource) Read(ctx context.Context, req resour
 				destSecretCoordinate.Version,
 				destSecretCoordinate.Version),
 		)
-		return
+		return azsecrets.GetSecretResponse{}, DoNotFlushState
 	}
 
-	data.Accept(secretState.Secret)
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	return secretState, FlushState
 }
 
 func (d *ConfidentialAzVaultSecretResource) convertToSetSecretParam(data *ConfidentialSecretModel) azsecrets.SetSecretParameters {
@@ -197,7 +206,7 @@ func (d *ConfidentialAzVaultSecretResource) Create(ctx context.Context, req reso
 		return
 	}
 
-	unwrappedPayload := d.Unwrap(ctx, data.WrappedConfidentialMaterialModel, &resp.Diagnostics)
+	unwrappedPayload := d.UnwrapEncryptedConfidentialData(ctx, data.ConfidentialMaterialModel, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -222,7 +231,7 @@ func (d *ConfidentialAzVaultSecretResource) Create(ctx context.Context, req reso
 	}
 
 	params := d.convertToSetSecretParam(&data)
-	params.Value = &unwrappedPayload.StringPayload
+	params.Value = &unwrappedPayload.StringData
 
 	setResp, setErr := secretClient.SetSecret(ctx, destSecretCoordinate.Name, params, nil)
 	if setErr != nil {

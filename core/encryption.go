@@ -33,6 +33,26 @@ type AESData struct {
 	AAD []byte `json:"aad"`
 }
 
+func (a *AESData) ToBytes() []byte {
+	jsonText, _ := json.Marshal(a)
+	jsonGzip := GZipCompress(jsonText)
+
+	return jsonGzip
+}
+
+func (a *AESData) FromBytes(input []byte) error {
+	gunzip, gunzipErr := GZipDecompress(input)
+	if gunzipErr != nil {
+		return gunzipErr
+	}
+
+	if jsonErr := json.Unmarshal(gunzip, a); jsonErr != nil {
+		return jsonErr
+	}
+
+	return nil
+}
+
 func Sha256Of(value string) string {
 	h := sha256.New()
 	h.Write([]byte(value))
@@ -60,6 +80,78 @@ func (em *EncryptedMessage) GetSecretExpr() string {
 	}
 }
 
+func (em *EncryptedMessage) HasContentEncryptionKey() bool {
+	return len(em.contentEncryptionKey) > 0
+}
+
+func (em *EncryptedMessage) ToPEM() []byte {
+	if len(em.secretText) == 0 {
+		return nil
+	}
+
+	textBlock := pem.Block{
+		Type:    "CONTENT",
+		Headers: map[string]string{},
+		Bytes:   em.secretText,
+	}
+
+	output := bytes.Buffer{}
+	writer := bufio.NewWriter(&output)
+
+	pemErr := pem.Encode(writer, &textBlock)
+	if pemErr != nil {
+		fmt.Println(pemErr.Error())
+	}
+	if len(em.contentEncryptionKey) > 0 {
+		cekBlock := pem.Block{
+			Type:    "CEK",
+			Bytes:   em.contentEncryptionKey,
+			Headers: map[string]string{},
+		}
+		_ = pem.Encode(writer, &cekBlock)
+	}
+
+	_ = writer.Flush()
+	return output.Bytes()
+}
+
+func (em *EncryptedMessage) ToBase64PEM() string {
+	return base64.StdEncoding.EncodeToString(GZipCompress(em.ToPEM()))
+}
+
+func (em *EncryptedMessage) FromBase64PEM(v string) error {
+	gzipped, err := base64.StdEncoding.DecodeString(v)
+	if err != nil {
+		return fmt.Errorf("input must be a valid Base-64 encoded string; this error occured: %s", err.Error())
+	}
+
+	pemBytes, gzipErr := GZipDecompress(gzipped)
+	if gzipErr != nil {
+		return fmt.Errorf("input must include gzip compression; this error occured: %s", gzipErr.Error())
+	}
+
+	return em.FromPEM(pemBytes)
+}
+
+func (em *EncryptedMessage) FromPEM(data []byte) error {
+	pemBloks, err := ParsePEMBlocks(data)
+	if err != nil {
+		return fmt.Errorf("cannot parse provided PEM input: %v", err)
+	}
+
+	if secretBlock := FindPEMBlock(pemBloks, "CONTENT"); secretBlock != nil {
+		em.secretText = secretBlock.Bytes
+	} else {
+		return errors.New("provided input must contain at least CONTENT block")
+	}
+
+	if cekBlock := FindPEMBlock(pemBloks, "CEK"); cekBlock != nil {
+		em.contentEncryptionKey = cekBlock.Bytes
+	}
+
+	return nil
+}
+
 var sha256HashSize = sha256.New().Size()
 
 func CreateEncryptedMessage(rsaKey *rsa.PublicKey, payload []byte) (EncryptedMessage, error) {
@@ -75,7 +167,7 @@ func CreateEncryptedMessage(rsaKey *rsa.PublicKey, payload []byte) (EncryptedMes
 		}
 		rv.secretText = encryptedPayload
 
-		encryptedCEK, cekEncryptionErr := RsaEncrypt(aesData, rsaKey, nil)
+		encryptedCEK, cekEncryptionErr := RsaEncryptBytes(rsaKey, aesData.ToBytes(), nil)
 		if cekEncryptionErr != nil {
 			return rv, cekEncryptionErr
 		}
@@ -147,18 +239,16 @@ func AESEncrypt(plaintext []byte) ([]byte, AESData, error) {
 	return output, rv, nil
 }
 
-func RsaEncrypt(data AESData, key *rsa.PublicKey, label []byte) ([]byte, error) {
-	jsonText, _ := json.Marshal(data)
-	jsonGzip := GZipCompress(jsonText)
-
-	return RsaEncryptBytes(key, jsonGzip, label)
-}
-
-func RsaEncryptBytes(key *rsa.PublicKey, jsonGzip []byte, label []byte) ([]byte, error) {
+func RsaEncryptBytes(key *rsa.PublicKey, plaintext []byte, label []byte) ([]byte, error) {
 	hash := sha256.New()
-	ciphertext, _ := rsa.EncryptOAEP(hash, rand.Reader, key, jsonGzip, label)
+	ciphertext, _ := rsa.EncryptOAEP(hash, rand.Reader, key, plaintext, label)
 
 	return ciphertext, nil
+}
+
+func RsaDecryptBytes(key *rsa.PrivateKey, ciphertext []byte, label []byte) ([]byte, error) {
+	hash := sha256.New()
+	return rsa.DecryptOAEP(hash, rand.Reader, key, ciphertext, label)
 }
 
 func GZipCompress(data []byte) []byte {
@@ -277,7 +367,7 @@ func PrivateKeyTOJSONWebKey(input []byte, password string, outKey *azkeys.JSONWe
 		port(&outKey.E, rsaKey.E)
 		port(&outKey.N, rsaKey.N)
 		port(&outKey.P, rsaKey.P)
-		port(&outKey.QI, rsaKey.QI)
+		port(&outKey.Q, rsaKey.Q)
 		port(&outKey.QI, rsaKey.QI)
 	} else if ecKey, ok := jwkKey.(jwk.ECDSAPrivateKey); ok {
 		kty := azkeys.KeyTypeEC
@@ -419,6 +509,20 @@ func FindPrivateKeyBlock(blocks []*pem.Block) *pem.Block {
 
 	for _, block := range blocks {
 		if strings.HasSuffix(block.Type, "PRIVATE KEY") {
+			return block
+		}
+	}
+
+	return nil
+}
+
+func FindPEMBlock(blocks []*pem.Block, blockType string) *pem.Block {
+	if len(blocks) == 0 {
+		return nil
+	}
+
+	for _, block := range blocks {
+		if block.Type == blockType {
 			return block
 		}
 	}

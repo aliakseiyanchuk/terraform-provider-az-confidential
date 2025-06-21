@@ -2,6 +2,7 @@ package acceptance
 
 import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core/testkeymaterial"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen"
 	_ "github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -9,7 +10,7 @@ import (
 	"testing"
 )
 
-func generateSecretResource(t *testing.T) string {
+func generatePEMEncodedCertificateResource(t *testing.T) string {
 	kwp := tfgen.ContentWrappingParams{
 		RSAPublicKeyFile: wrappingKey,
 		Labels:           "acceptance-testing",
@@ -17,11 +18,11 @@ func generateSecretResource(t *testing.T) string {
 
 		DestinationCoordinate: tfgen.AzKeyVaultObjectCoordinateTFCode{
 			AzKeyVaultObjectCoordinate: core.AzKeyVaultObjectCoordinate{
-				Name: "acceptance-test-secret",
+				Name: "acceptance-test-pem-cert",
 			},
 		},
 
-		TFBlockName: "secret",
+		TFBlockName: "cert",
 	}
 
 	if vErr := kwp.Validate(); vErr != nil {
@@ -33,7 +34,9 @@ func generateSecretResource(t *testing.T) string {
 		"environment": "tf_acceptance_test",
 	}
 
-	if rv, tfErr := tfgen.OutputSecretTerraformCode(kwp, "this is a very secret string", tags); tfErr != nil {
+	if rv, tfErr := tfgen.OutputConfidentialCertificateTerraformCode(kwp,
+		testkeymaterial.EphemeralCertificatePEM,
+		"", tags); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {
@@ -42,17 +45,22 @@ func generateSecretResource(t *testing.T) string {
 	}
 }
 
-func TestAccConfidentialSecret(t *testing.T) {
+func TestAccConfidentialPEMEncodedCertificate(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Read testing
 			{
-				Config: providerConfig + generateSecretResource(t),
+				Config: providerConfig + generatePEMEncodedCertificateResource(t),
 				Check: resource.ComposeTestCheckFunc(
 					// Validate that the secret version is set after creation
-					resource.TestCheckResourceAttrSet("az-confidential_secret.secret", "secret_version"),
-					resource.TestCheckResourceAttr("az-confidential_secret.secret", "enabled", "true"),
+					resource.TestCheckResourceAttrSet("az-confidential_certificate.cert", "secret_id"),
+					resource.TestCheckResourceAttrSet("az-confidential_certificate.cert", "versionless_secret_id"),
+					resource.TestCheckResourceAttrSet("az-confidential_certificate.cert", "version"),
+					resource.TestCheckResourceAttrSet("az-confidential_certificate.cert", "thumbprint"),
+					resource.TestCheckResourceAttrSet("az-confidential_certificate.cert", "certificate_data"),
+					resource.TestCheckResourceAttrSet("az-confidential_certificate.cert", "certificate_data_base64"),
+					resource.TestCheckResourceAttr("az-confidential_certificate.cert", "enabled", "true"),
 				),
 			},
 		},

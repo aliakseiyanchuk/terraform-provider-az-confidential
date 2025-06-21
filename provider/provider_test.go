@@ -4,11 +4,45 @@ import (
 	"context"
 	"errors"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	tfprovider "github.com/hashicorp/terraform-plugin-framework/provider"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"testing"
 )
+
+func Test_AZPI_ProviderSchemaWillLoad(t *testing.T) {
+	p := New("unittest")()
+	req := tfprovider.SchemaRequest{}
+	resp := tfprovider.SchemaResponse{}
+	p.Schema(nil, req, &resp)
+
+	assert.NotNil(t, resp.Schema)
+	assert.False(t, resp.Diagnostics.HasError())
+}
+
+func Test_AZPI_WillReturnDataSources(t *testing.T) {
+	p := New("unittest")()
+	assert.NotNil(t, p.DataSources(context.Background()))
+}
+
+func Test_AZPI_WillReturnResources(t *testing.T) {
+	p := New("unittest")()
+	assert.NotNil(t, p.Resources(context.Background()))
+}
+
+func Test_AZPI_WillReturnMetadata(t *testing.T) {
+	p := New("unittest")()
+
+	req := tfprovider.MetadataRequest{}
+	resp := tfprovider.MetadataResponse{}
+	p.Metadata(nil, req, &resp)
+
+	assert.Equal(t, "az-confidential", resp.TypeName)
+	assert.Equal(t, "unittest", resp.Version)
+}
 
 type HashTrackerMock struct {
 	mock.Mock
@@ -202,6 +236,55 @@ func Test_EnsureCanPlace_Errs_OnLabelMismatchForDataSource(t *testing.T) {
 	assert.True(t, hashTracker.AssertExpectations(t))
 }
 
-func Test_AZCFI_GetMergedWrappingKeyCoordinate(t *testing.T) {
+func Test_LabelMatchingRequirement_AsString(t *testing.T) {
+	assert.Equal(t, "target-coordinate", TargetCoordinate.AsString())
+	assert.Equal(t, "provider-labels", ProviderLabels.AsString())
+	assert.Equal(t, "none", NoMatching.AsString())
+}
 
+func Test_AZCPIM_GetProviderLabels(t *testing.T) {
+	mdl := AZConnectorProviderImplModel{}
+
+	values := []attr.Value{
+		types.StringValue("label_a"),
+		types.StringValue("label_b"),
+		types.StringValue("label_c"),
+	}
+
+	tfset, err := types.SetValue(types.StringType, values)
+	assert.Nil(t, err)
+	mdl.Labels = tfset
+
+	converted := mdl.GetProviderLabels(context.Background())
+	assert.True(t, len(converted) == 3)
+
+	assert.Equal(t, "label_a", converted[0])
+	assert.Equal(t, "label_b", converted[1])
+	assert.Equal(t, "label_c", converted[2])
+}
+
+func Test_AZCPIM_GetLabelMatchingRequirement(t *testing.T) {
+	mdl := AZConnectorProviderImplModel{
+		LabelMatch: types.StringValue(TargetCoordinate.AsString()),
+	}
+	assert.Equal(t, TargetCoordinate, mdl.GetLabelMatchRequirement())
+
+	mdl.LabelMatch = types.StringValue(ProviderLabels.AsString())
+	assert.Equal(t, ProviderLabels, mdl.GetLabelMatchRequirement())
+
+	mdl.LabelMatch = types.StringValue(NoMatching.AsString())
+	assert.Equal(t, NoMatching, mdl.GetLabelMatchRequirement())
+}
+
+func Test_AZCPIM_SpecifiesCredentialParameters(t *testing.T) {
+	mdl := AZConnectorProviderImplModel{}
+	assert.False(t, mdl.SpecifiesCredentialParameters())
+
+	mdl = AZConnectorProviderImplModel{
+		TenantID:       types.StringValue("tenant-id"),
+		ClientSecret:   types.StringValue("client-secret"),
+		ClientID:       types.StringValue("client-id"),
+		SubscriptionID: types.StringValue("subscription-id"),
+	}
+	assert.True(t, mdl.SpecifiesCredentialParameters())
 }

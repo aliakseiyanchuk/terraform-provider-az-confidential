@@ -7,7 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 )
 
@@ -49,7 +48,7 @@ func init() {
 		"Create symmetric key")
 }
 
-func GenerateConfidentialKeyTerraformTemplate(kwp ContentWrappingParams, args []string) (string, error) {
+func GenerateConfidentialKeyTerraformTemplate(kwp ContentWrappingParams, outputTerraformCode bool, args []string) (string, error) {
 	if vErr := kwp.ValidateHasDestination(); vErr != nil {
 		return "", vErr
 	}
@@ -131,33 +130,35 @@ func GenerateConfidentialKeyTerraformTemplate(kwp ContentWrappingParams, args []
 		}
 	}
 
-	payloadBytes := core.WrapBinaryPayload(keyData, objType, kwp.GetLabels())
+	kwp.TFBlockNameIfUndefined("key")
 
-	// Ensure that the provider code will be able to make out a SON Web Key out of the data
-	// supplied.
-
-	if payload, unwrapErr := core.UnwrapPayload(payloadBytes); unwrapErr != nil {
-		return "", fmt.Errorf("internal problem: the key would not be unwrapped correctly: %s, Please report this problem", unwrapErr.Error())
+	if outputTerraformCode {
+		return OutputKeyTerraformCode(kwp, keyData, objType, nil)
 	} else {
-		outKey := azkeys.JSONWebKey{}
-		if convErr := core.PrivateKeyTOJSONWebKey(payload.Payload, "", &outKey); convErr != nil {
-			return "", fmt.Errorf("insufficient material to build JSON Web Key: %s, Please report this problem", convErr.Error())
-		}
+		return OutputKeyEncryptedContent(kwp, keyData, objType)
 	}
+}
 
-	// Creation of the payload has succeeded.
-	em, emErr := core.CreateEncryptedMessage(kwp.LoadedRsaPublicKey, payloadBytes)
-	if emErr != nil {
-		return "", emErr
+func OutputKeyTerraformCode(kwp ContentWrappingParams, keyData []byte, objType string, tags map[string]string) (string, error) {
+	ciphertext, err := OutputKeyEncryptedContent(kwp, keyData, objType)
+	if err != nil {
+		return ciphertext, err
 	}
 
 	rv := BaseTFTemplateParms{
-		EncryptedContent:     em.GetSecretExpr(),
-		ContentEncryptionKey: em.GetContentEncryptionKeyExpr(),
+		EncryptedContent: ciphertext,
+
+		TFBlockName: kwp.TFBlockName,
 
 		WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 		DestinationCoordinate: kwp.DestinationCoordinate,
+
+		Tags: tags,
 	}
 
 	return rv.Render("key", keyTFTemplate)
+}
+
+func OutputKeyEncryptedContent(kwp ContentWrappingParams, keyData []byte, keyType string) (string, error) {
+	return OutputEncryptedConfidentialData(kwp, core.CreateConfidentialBinaryData(keyData, keyType, kwp.GetLabels()))
 }

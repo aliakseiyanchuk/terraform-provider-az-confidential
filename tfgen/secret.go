@@ -3,7 +3,6 @@ package tfgen
 import (
 	_ "embed"
 	"flag"
-	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 )
 
@@ -34,7 +33,7 @@ func init() {
 		"Input is base-64 encoded")
 }
 
-func GenerateConfidentialSecretTerraformTemplate(kwp ContentWrappingParams, args []string) (string, error) {
+func GenerateConfidentialSecretTerraformTemplate(kwp ContentWrappingParams, produceTFCode bool, args []string) (string, error) {
 	if vErr := kwp.ValidateHasDestination(); vErr != nil {
 		return "", vErr
 	}
@@ -54,24 +53,24 @@ func GenerateConfidentialSecretTerraformTemplate(kwp ContentWrappingParams, args
 
 	secretDataAsStr := string(secretData)
 
-	return OutputSecretTerraformCode(kwp, secretDataAsStr, nil)
+	kwp.TFBlockNameIfUndefined("secret")
+	if produceTFCode {
+		return OutputSecretTerraformCode(kwp, secretDataAsStr, nil)
+	} else {
+		return OutputSecretEncryptedContent(kwp, secretDataAsStr)
+	}
 }
 
 func OutputSecretTerraformCode(kwp ContentWrappingParams, secretDataAsStr string, tags map[string]string) (string, error) {
-	payloadBytes := core.WrapStringPayload(secretDataAsStr, "secret", kwp.GetLabels())
-
-	if _, unwrapErr := core.UnwrapPayload(payloadBytes); unwrapErr != nil {
-		return "", fmt.Errorf("internal problem: the secret would not be unwrapped correctly: %s, Please report this problem", unwrapErr.Error())
-	}
-
-	em, emErr := core.CreateEncryptedMessage(kwp.LoadedRsaPublicKey, payloadBytes)
-	if emErr != nil {
-		return "", emErr
+	s, err := OutputSecretEncryptedContent(kwp, secretDataAsStr)
+	if err != nil {
+		return s, err
 	}
 
 	rv := BaseTFTemplateParms{
-		EncryptedContent:     em.GetSecretExpr(),
-		ContentEncryptionKey: em.GetContentEncryptionKeyExpr(),
+		EncryptedContent: s,
+
+		TFBlockName: kwp.TFBlockName,
 
 		WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 		DestinationCoordinate: kwp.DestinationCoordinate,
@@ -80,4 +79,19 @@ func OutputSecretTerraformCode(kwp ContentWrappingParams, secretDataAsStr string
 	}
 
 	return rv.Render("secret", secretTFTemplate)
+}
+
+func OutputSecretEncryptedContent(kwp ContentWrappingParams, secretDataAsStr string) (string, error) {
+	return OutputEncryptedConfidentialData(kwp, core.CreateConfidentialStringData(secretDataAsStr, "secret", kwp.GetLabels()))
+}
+
+func OutputEncryptedConfidentialData(kwp ContentWrappingParams, confidentialData core.VersionedConfidentialData) (string, error) {
+	encContent := ""
+	em, emErr := core.ConvertConfidentialDataToEncryptedMessage(confidentialData, kwp.LoadedRsaPublicKey)
+	if emErr != nil {
+		return encContent, emErr
+	} else {
+		encContent = em.ToBase64PEM()
+	}
+	return encContent, nil
 }

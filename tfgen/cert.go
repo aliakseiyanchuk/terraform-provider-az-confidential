@@ -47,7 +47,7 @@ func init() {
 		"Do not try parsing DER-encode files")
 }
 
-func GenerateConfidentialCertificateTerraformTemplate(kwp ContentWrappingParams, args []string) (string, error) {
+func GenerateConfidentialCertificateTerraformTemplate(kwp ContentWrappingParams, outputTFCOde bool, args []string) (string, error) {
 	if vErr := kwp.ValidateHasDestination(); vErr != nil {
 		return "", vErr
 	}
@@ -65,7 +65,6 @@ func GenerateConfidentialCertificateTerraformTemplate(kwp ContentWrappingParams,
 		return "", readErr
 	}
 
-	objType := "certificate"
 	certPass := ""
 
 	if core.IsPEMEncoded(certData) {
@@ -125,23 +124,33 @@ func GenerateConfidentialCertificateTerraformTemplate(kwp ContentWrappingParams,
 		}
 	}
 
-	payloadBytes := core.WrapDualPayload(certData, &certPass, objType, kwp.GetLabels())
-	if _, unwrapErr := core.UnwrapPayload(payloadBytes); unwrapErr != nil {
-		return "", fmt.Errorf("internal problem: the certificate would not be unwrapped correctly: %s, Please report this problem", unwrapErr.Error())
+	if outputTFCOde {
+		return OutputConfidentialCertificateTerraformCode(kwp, certData, certPass, nil)
+	} else {
+		return OutputCertificateEncryptedContent(kwp, certData, certPass)
 	}
+}
 
-	em, emErr := core.CreateEncryptedMessage(kwp.LoadedRsaPublicKey, payloadBytes)
-	if emErr != nil {
-		return "", emErr
+func OutputConfidentialCertificateTerraformCode(kwp ContentWrappingParams, data []byte, passwordString string, tags map[string]string) (string, error) {
+	ciphertext, err := OutputCertificateEncryptedContent(kwp, data, passwordString)
+	if err != nil {
+		return ciphertext, err
 	}
 
 	rv := BaseTFTemplateParms{
-		EncryptedContent:     em.GetSecretExpr(),
-		ContentEncryptionKey: em.GetContentEncryptionKeyExpr(),
+		EncryptedContent: ciphertext,
 
 		WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 		DestinationCoordinate: kwp.DestinationCoordinate,
+
+		TFBlockName: kwp.TFBlockName,
+
+		Tags: tags,
 	}
 
 	return rv.Render("cert", certTFTemplate)
+}
+
+func OutputCertificateEncryptedContent(kwp ContentWrappingParams, data []byte, passwordString string) (string, error) {
+	return OutputEncryptedConfidentialData(kwp, core.CreateDualConfidentialData(data, passwordString, "certificate", kwp.GetLabels()))
 }

@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/schemasupport"
@@ -24,20 +23,26 @@ import (
 	"time"
 )
 
+type StateFlushFlag bool
+
+const (
+	FlushState      = true
+	DoNotFlushState = false
+)
+
 var validDateTime = regexp.MustCompile(`^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z`)
 
 // Basis for the confidential object processing and creation.
 
-type WrappedConfidentialMaterialModel struct {
+type ConfidentialMaterialModel struct {
 	Id types.String `tfsdk:"id"`
 
 	WrappingKeyCoordinate *core.WrappingKeyCoordinateModel `tfsdk:"wrapping_key"`
 
-	EncryptedSecret     types.String `tfsdk:"content"`
-	SecretEncryptionKey types.String `tfsdk:"content_encryption_key"`
+	EncryptedSecret types.String `tfsdk:"content"`
 }
 
-func (wcmm *WrappedConfidentialMaterialModel) GetDestinationCoordinateFromId() (core.AzKeyVaultObjectVersionedCoordinate, error) {
+func (wcmm *ConfidentialMaterialModel) GetDestinationCoordinateFromId() (core.AzKeyVaultObjectVersionedCoordinate, error) {
 	rv := core.AzKeyVaultObjectVersionedCoordinate{}
 	err := rv.FromId(wcmm.Id.ValueString())
 	return rv, err
@@ -47,7 +52,7 @@ func (wcmm *WrappedConfidentialMaterialModel) GetDestinationCoordinateFromId() (
 // object. It includes wrapped confidential data and repeated elements (not-before, not-after,
 // tags, and enabled)
 type WrappedAzKeyVaultObjectConfidentialMaterialModel struct {
-	WrappedConfidentialMaterialModel
+	ConfidentialMaterialModel
 
 	Tags      types.Map    `tfsdk:"tags"`
 	NotBefore types.String `tfsdk:"not_before_date"`
@@ -239,21 +244,6 @@ func WrappedConfidentialMaterialModelSchema(moreAttrs map[string]resourceSchema.
 				schemasupport.Base64StringValidator{},
 			},
 		},
-
-		"content_encryption_key": resourceSchema.StringAttribute{
-			MarkdownDescription: "Encrypted value for the SYMMETRIC key used to encrypt secret where the secret " +
-				"value exceeds the capacity of RSA encryption",
-			Required: false,
-			Optional: true,
-
-			PlanModifiers: []planmodifier.String{
-				stringplanmodifier.RequiresReplace(),
-			},
-
-			Validators: []validator.String{
-				schemasupport.Base64StringValidator{},
-			},
-		},
 	}
 
 	for k, v := range moreAttrs {
@@ -301,17 +291,6 @@ func WrappedConfidentialMaterialModelDatasourceSchema(moreAttrs map[string]datas
 				schemasupport.Base64StringValidator{},
 			},
 		},
-
-		"content_encryption_key": datasourceSchema.StringAttribute{
-			MarkdownDescription: "Encrypted value for the SYMMETRIC key used to encrypt secret where the secret " +
-				"value exceeds the capacity of RSA encryption",
-			Required: false,
-			Optional: true,
-
-			Validators: []validator.String{
-				schemasupport.Base64StringValidator{},
-			},
-		},
 	}
 
 	for k, v := range moreAttrs {
@@ -321,32 +300,12 @@ func WrappedConfidentialMaterialModelDatasourceSchema(moreAttrs map[string]datas
 	return baseSchema
 }
 
-func (wcmm *WrappedConfidentialMaterialModel) GetEncryptedTextValue() []byte {
-	v := wcmm.EncryptedSecret.ValueString()
-	if len(v) == 0 {
-		return nil
-	} else {
-		rv, _ := base64.StdEncoding.DecodeString(v)
-		return rv
-	}
-}
-
-func (wcmm *WrappedConfidentialMaterialModel) GetEncryptedWrappingKeyValue() []byte {
-	v := wcmm.SecretEncryptionKey.ValueString()
-	if len(v) == 0 {
-		return nil
-	} else {
-		rv, _ := base64.StdEncoding.DecodeString(v)
-		return rv
-	}
-}
-
 // CommonConfidentialResource common methods for all confidential resources
 type CommonConfidentialResource struct {
 	factory core.AZClientsFactory
 }
 
-func (d *CommonConfidentialResource) Unwrap(ctx context.Context, mdl WrappedConfidentialMaterialModel, diagnostics *diag.Diagnostics) core.VersionedConfidentialData {
+func (d *CommonConfidentialResource) UnwrapEncryptedConfidentialData(ctx context.Context, mdl ConfidentialMaterialModel, diagnostics *diag.Diagnostics) core.VersionedConfidentialData {
 	if d.factory == nil {
 		diagnostics.AddError("incomplete provider configuration", "provider does no have an initialized Azure objects factory")
 		return core.VersionedConfidentialData{}
@@ -359,30 +318,20 @@ func (d *CommonConfidentialResource) Unwrap(ctx context.Context, mdl WrappedConf
 		return core.VersionedConfidentialData{}
 	}
 
-	wrappedText := core.WrappedPlainText{
-		EncryptedText:         mdl.GetEncryptedTextValue(),
-		EncryptedContentKey:   mdl.GetEncryptedWrappingKeyValue(),
-		WrappingKeyCoordinate: wrappingKeyCoordinate,
-	}
-
-	plainTextBytes, decrErr := wrappedText.Unwrap(ctx, d.factory)
-	if decrErr != nil {
-		diagnostics.AddError("Error unwrapping encrypted secret data", decrErr.Error())
+	em := core.EncryptedMessage{}
+	if emErr := em.FromBase64PEM(mdl.EncryptedSecret.ValueString()); emErr != nil {
+		diagnostics.AddError("Invalid encrypted message", fmt.Sprintf("Encrypted message cannot be read from input: %s", emErr.Error()))
 		return core.VersionedConfidentialData{}
 	}
 
-	tflog.Trace(ctx, "Confidential payload has been decrypted")
-
-	unwrappedPayload, unwrapError := core.UnwrapPayload(plainTextBytes)
-	if unwrapError != nil {
-		tflog.Error(ctx, fmt.Sprintf("Wasn't able to unwrap the payload: %s", unwrapError.Error()))
-		diagnostics.AddError("error unwrapping secret value", unwrapError.Error())
-		return unwrappedPayload
+	rv, err := core.ConvertEncryptedMessageToConfidentialData(em, d.factory.GetDecrypterFor(ctx, wrappingKeyCoordinate))
+	if err != nil {
+		diagnostics.AddError(
+			"Error restoring plaintext from ciphertext",
+			fmt.Sprintf("Error restoring decrypted secret value: %s", err.Error()),
+		)
 	}
-
-	tflog.Trace(ctx, "Confidential payload has been unwrapped")
-
-	return unwrappedPayload
+	return rv
 }
 
 type ConfidentialDatasourceBase struct {

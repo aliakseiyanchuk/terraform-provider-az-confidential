@@ -13,6 +13,8 @@ var baseParams = tfgen.ContentWrappingParams{
 	TargetCoordinateLabel: false,
 }
 
+var outputCiphertextOnly = false
+
 var baseFlags = flag.NewFlagSet("base", flag.ExitOnError)
 
 var subcommands []string
@@ -58,21 +60,27 @@ func init() {
 	)
 
 	baseFlags.BoolVar(&baseParams.NoLabels,
-		"no-oaep-label",
+		"no-labels",
 		true,
 		"No not use any labels",
 	)
 
 	baseFlags.StringVar(&baseParams.Labels,
-		"fixed-oaep-label",
+		"fixed-labels",
 		"",
-		"Fixed OAEP label to use",
+		"Fixed labels to associate with the ciphertext. Use comma to separate individual labels",
 	)
 
 	baseFlags.BoolVar(&baseParams.TargetCoordinateLabel,
-		"strict-oaep-label",
+		"target-only-label",
 		true,
-		"Use strict OAEP label",
+		"Label the ciphertext to be expandable only into specified vault and object",
+	)
+
+	baseFlags.BoolVar(&outputCiphertextOnly,
+		"ciphertext-only",
+		true,
+		"Output only ciphertext (i.e. do not output associated Terraform code template)`",
 	)
 }
 
@@ -90,7 +98,7 @@ func main() {
 	}
 
 	subCmd := baseFlags.Args()[0]
-	var generator func(tfgen.ContentWrappingParams, []string) (string, error)
+	var generator func(tfgen.ContentWrappingParams, bool, []string) (string, error)
 
 	switch subCmd {
 	case "secret":
@@ -113,7 +121,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	tfCode, err := generator(baseParams, baseFlags.Args()[1:])
+	tfCode, err := generator(baseParams, !outputCiphertextOnly, baseFlags.Args()[1:])
 	if err != nil {
 		// Error message must be printed by the sub-command
 		fmt.Println("Cannot produce template:")
