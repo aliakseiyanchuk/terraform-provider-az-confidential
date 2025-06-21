@@ -1,9 +1,8 @@
-// Copyright (c) HashiCorp, Inc.
-
 package resources
 
 import (
 	"context"
+	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -52,6 +51,9 @@ func (d *ConfidentialPasswordDataSource) Metadata(ctx context.Context, req datas
 	resp.TypeName = req.ProviderTypeName + "_password"
 }
 
+//go:embed confidential_password.md
+var passwordDataSourceMarkdownDescription string
+
 func (d *ConfidentialPasswordDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	specificAttr := map[string]schema.Attribute{
 		"plaintext_password": schema.StringAttribute{
@@ -77,8 +79,8 @@ func (d *ConfidentialPasswordDataSource) Schema(ctx context.Context, req datasou
 	}
 
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Datasource unwrapping a password into state",
-		Description:         "Datasource unwrapping password into state",
+		Description:         "Datasource unwrapping a password into state",
+		MarkdownDescription: passwordDataSourceMarkdownDescription,
 
 		Attributes: WrappedConfidentialMaterialModelDatasourceSchema(specificAttr),
 	}

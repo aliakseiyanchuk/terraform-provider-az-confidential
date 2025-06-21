@@ -4,5 +4,92 @@ Furthermore, the provider never logs or stores the plain text in state.
 
 ## Authenticating Provider
 
-The best 
+The preferred way of authenticating the provider is to set up the environment compatible with the
+`azidentity.NewDefaultAzureCredential` requirements. (You can read about this e.g. [here](https://learn.microsoft.com/en-us/azure/developer/go/sdk/authentication/authentication-overview).)
 
+For local development, the provider supports client credentials authentication that needs to be
+provided to the provider e.g. via variables. 
+To get started with testing this provider, the following configuration could be added to your project:
+```terraform
+provider "az-confidential" {
+  tenant_id       = var.az_tenant_id
+  subscription_id = var.az_subscription_id
+  client_id       = var.az_client_id
+  client_secret   = var.az_client_secret
+
+  labels              = ["demo", "test", "examples"]
+  require_label_match = "provider-labels"
+
+  default_destination_vault_name = var.az_default_vault_name
+
+  default_wrapping_key = {
+    vault_name = var.az_default_vault_name
+    name       = var.az_default_wrapping_key
+    version    = var.az_default_wrapping_key_version
+  }
+}
+```
+
+The required variables can be declared as follows:
+```terraform
+variable "az_tenant_id" {
+  type = string
+}
+
+variable "az_subscription_id" {
+  type = string
+}
+
+variable "az_client_id" {
+  type = string
+}
+
+variable "az_client_secret" {
+  type = string
+}
+
+variable "az_default_vault_name" {
+  type = string
+}
+
+variable "az_default_wrapping_key" {
+  type = string
+}
+
+variable "az_default_wrapping_key_version" {
+  type = string
+}
+```
+
+## Labels and Tracking
+The provider has two mechanism that prevent accidental cross-environment copying or intentional duplication. These 
+are labels and object tracking.
+
+### Labelling
+A label is a string associated with the encrypted data at the moment the owner of the confidential data creates
+the encrypted message. There are two types of labels that can be associated with the ciphertext:
+- A label derived from vault name and object name. It commands the provider to unpack the ciphertext **only** into
+  the specified vault and object name, even if the enclosing Terraform code will later be changed.
+- A label associated with the provider, which might be a good practice to detect and prevent confidential data used 
+  outside intended environments.
+
+The labelling behaviour is controlled by two provider properties:
+- `require_label_match` controlling the degree of matching this particular provider requires; and
+- `labels` that are associated with this provider instance.
+
+Where `require_label_match` would be set to `target-coordinate`, a ciphertext of the object must be explicitly tagged
+with the output vault name and object name. Where `require_label_match` would be set to `provider-labels`, then the
+provider would process ciphertext tagged with either of the tags the `labels` parameter specifies.
+
+> It is a good practice to ask the owner of the confidential data to re-encrypt the corresponding data
+> if a mismatch is detected.
+
+### Object Tracking
+Object tracking is a feature which, as its name implies, tracks the use of the ciphertexts and allows each 
+ciphertext to be unpacked *exactly once*. I.e. if a resource is deleted and then added again, the second deployment
+will be rejected as it would be a duplicate. This feature is based on UUID identifier that is cryptographically 
+added to the ciphertext when it is created.
+
+The first version implements a basic, file-based tracked. To enable this feature, set `file_hash_tracker` configuration
+and specify the file where the data will need to be kept. Future versions might add the support e.g. for tracking
+this data in databases.

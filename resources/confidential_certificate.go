@@ -1,9 +1,8 @@
-// Copyright (c) HashiCorp, Inc.
-
 package resources
 
 import (
 	"context"
+	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -91,6 +90,9 @@ func (d *ConfidentialAzVaultCertificateResource) Metadata(_ context.Context, req
 	resp.TypeName = req.ProviderTypeName + "_certificate"
 }
 
+//go:embed confidential_certificate.md
+var certificateResourceMarkdownDescription string
+
 func (d *ConfidentialAzVaultCertificateResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	specificAttrs := map[string]schema.Attribute{
 		"versionless_id": schema.StringAttribute{
@@ -133,7 +135,7 @@ func (d *ConfidentialAzVaultCertificateResource) Schema(_ context.Context, _ res
 
 	resp.Schema = schema.Schema{
 		Description:         "Create a certificate in Azure KeyVault without revealing its value in state",
-		MarkdownDescription: "Create a certificate in Azure KeyVault without revealing its value in state",
+		MarkdownDescription: certificateResourceMarkdownDescription,
 
 		Attributes: WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(specificAttrs),
 	}

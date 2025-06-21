@@ -1,5 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-
 package resources
 
 import (
@@ -8,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/x509"
+	_ "embed"
 	"encoding/pem"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
@@ -166,6 +165,9 @@ func (d *ConfidentialAzVaultKeyResource) Metadata(_ context.Context, req resourc
 	resp.TypeName = req.ProviderTypeName + "_key"
 }
 
+//go:embed confidential_key.md
+var confidentialKeyResourceMarkdownDescription string
+
 func (d *ConfidentialAzVaultKeyResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	specificAttrs := map[string]schema.Attribute{
 		"key_opts": schema.SetAttribute{
@@ -233,7 +235,7 @@ func (d *ConfidentialAzVaultKeyResource) Schema(_ context.Context, _ resource.Sc
 
 	resp.Schema = schema.Schema{
 		Description:         "Creates a key in Azure KeyVault without revealing its value in state",
-		MarkdownDescription: "Creates a key in Azure KeyVault without revealing its value in state",
+		MarkdownDescription: confidentialKeyResourceMarkdownDescription,
 
 		Attributes: WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(specificAttrs),
 	}

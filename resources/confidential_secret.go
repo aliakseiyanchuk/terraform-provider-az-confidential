@@ -1,9 +1,8 @@
-// Copyright (c) HashiCorp, Inc.
-
 package resources
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
@@ -63,6 +62,9 @@ func (d *ConfidentialAzVaultSecretResource) Metadata(_ context.Context, req reso
 	resp.TypeName = req.ProviderTypeName + "_secret"
 }
 
+//go:embed confidential_secret.md
+var secretResourceMarkdownDescription string
+
 func (d *ConfidentialAzVaultSecretResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	specificAttrs := map[string]schema.Attribute{
 		"content_type": schema.StringAttribute{
@@ -96,7 +98,7 @@ func (d *ConfidentialAzVaultSecretResource) Schema(_ context.Context, _ resource
 
 	resp.Schema = schema.Schema{
 		Description:         "Creates a secret in Azure KeyVault without revealing its value in state",
-		MarkdownDescription: "Create a secret in Azure KeyVault without revealing its value in state",
+		MarkdownDescription: secretResourceMarkdownDescription,
 
 		Attributes: WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(specificAttrs),
 	}

@@ -1,6 +1,7 @@
-/core/*.pem
-/core/*.der
-/core/*.p12
+/core/testkeymaterial/km/*.pem
+/core/testkeymaterial/km/*.der
+/core/testkeymaterial/km/*.p12
+/core/testkeymaterial/km/*.pkcs12
 /az_auth.sh
 /**/terraform.tfstate
 /**/terraform.tfstate.backup
