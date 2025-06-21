@@ -117,7 +117,7 @@ resource "az-confidential_secret" "secret" {
 ## Encrypt a key
 
 The command synopsis is:
-`tfgen [common options] key [key options]`
+`tfgen [common options] key [secret options]`
 
 Command options are:
 - `-key-file`: read the secret for a specified file
@@ -183,7 +183,7 @@ resource "az-confidential_key" "key" {
 ## Encrypt a certificate
 
 The command synopsis is:
-`tfgen [common options] certificate [certificate options]`
+`tfgen [common options] certificate [secret options]`
 
 Command options are:
 - `-cert-file`: read the secret for a specified file
@@ -200,7 +200,7 @@ Example to label the certificate to be used with a provider configured to accept
 tfgen -pubkey PATH_TO_PUB_KEY \
   -output-vault demo-vault -output-vault-object demo \
   -fixed-labels demo,testing \
-  certificate
+  key
 ```
 A successful execution of this command should produce a template that looks as follows:
 ```terraform
@@ -208,30 +208,40 @@ A successful execution of this command should produce a template that looks as f
 # Minimal terraform code for your example:
 # ----------------------------------------------------------------------------
 
-resource "az-confidential_certificate" "cer" {
+resource "az-confidential_key" "key" {
   content = "...a very long, base-64 encoded ciphertext ciphertext..."
 
-  # This certificate is enabled for operation. Optionally, there is an option
+  # This secret is enabled for operation. Optionally, there is an option
   # to temporarily disable it.
   enabled = true
 
-  # The certificate version cannot be used before this date
-  # Needs to be formatted yyyy-mm-ddTHH:MM:SS'Z'
-  # not_before_date = "2025-06-21T18:13:40Z"
+  key_opts = toset([
+    "decrypt",
+    "encrypt",
+    "import",
+    "sign",
+    "unwrapKey",
+    "verify",
+    "wrapKey"
+  ])
 
-  # The certificate version cannot be used after this date
+  # The secret version cannot be used before this date
+  # Needs to be formatted yyyy-mm-ddTHH:MM:SS'Z'
+  # not_before_date = "2025-06-21T18:10:21Z"
+
+  # The secret version cannot be used after this date
   # Needs to be formatted yyyy-mm-dd'T'HH:MM:SS'Z'
-  # not_after_date = "2026-06-21T18:13:40Z"
+  # not_after_date = "2026-06-21T18:10:21Z"
 
   tags = {
-    # Fill the tags as desired
-    # tagName =  "TagValue"
-  }
+        # Fill the tags as desired
+        # tagName =  "TagValue"
+      }
 
-  destination_certificate = {
-    vault_name = "demo-vault"
-    name = "demo"
+  destination_key = {
+        vault_name = "demo-vault"
+        name = "demo"
   }
 }
 ```
-> You may need to tweak the parameters of the certificate as required for your use case.
+> You may need to tweak the parameters of the allowed key operations as required to your use case.
