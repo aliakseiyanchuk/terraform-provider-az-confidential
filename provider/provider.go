@@ -263,6 +263,12 @@ type FileHashTrackerConfigModel struct {
 	FileName types.String `tfsdk:"file_name"`
 }
 
+type AzStorageAccountTableTrackerConfigModel struct {
+	AccountName   types.String `tfsdk:"account_name"`
+	TableName     types.String `tfsdk:"table_name"`
+	PartitionName types.String `tfsdk:"partition_name"`
+}
+
 type AZConnectorProviderImplModel struct {
 	TenantID                     types.String                     `tfsdk:"tenant_id"`
 	SubscriptionID               types.String                     `tfsdk:"subscription_id"`
@@ -270,11 +276,12 @@ type AZConnectorProviderImplModel struct {
 	ClientSecret                 types.String                     `tfsdk:"client_secret"`
 	DefaultWrappingKeyCoordinate *core.WrappingKeyCoordinateModel `tfsdk:"default_wrapping_key"`
 
-	DisallowResourceSpecifiedWrappingKey types.Bool                  `tfsdk:"disallow_resource_specified_wrapping_key"`
-	DefaultDestinationVaultName          types.String                `tfsdk:"default_destination_vault_name"`
-	Labels                               types.Set                   `tfsdk:"labels"`
-	LabelMatch                           types.String                `tfsdk:"require_label_match"`
-	FileHashTrackerConfig                *FileHashTrackerConfigModel `tfsdk:"file_hash_tracker"`
+	DisallowResourceSpecifiedWrappingKey types.Bool                               `tfsdk:"disallow_resource_specified_wrapping_key"`
+	DefaultDestinationVaultName          types.String                             `tfsdk:"default_destination_vault_name"`
+	Labels                               types.Set                                `tfsdk:"labels"`
+	LabelMatch                           types.String                             `tfsdk:"require_label_match"`
+	FileHashTrackerConfig                *FileHashTrackerConfigModel              `tfsdk:"file_hash_tracker"`
+	StorageAccountTracker                *AzStorageAccountTableTrackerConfigModel `tfsdk:"storage_account_tracker"`
 }
 
 func (pm *AZConnectorProviderImplModel) GetProviderLabels(ctx context.Context) []string {
@@ -379,13 +386,35 @@ func (p *AZConnectorProviderImpl) Schema(_ context.Context, _ tfprovider.SchemaR
 				},
 			},
 			"file_hash_tracker": schema.SingleNestedAttribute{
-				MarkdownDescription: "OAEP Label to use during the encrypted data unwrapping",
-				Description:         "OAEP Label to use use during the encrypted data unwrapping",
+				MarkdownDescription: "Configures local file being used to track created objects",
+				Description:         "Configures local file being used to track created objects",
 				Optional:            true,
 				Attributes: map[string]schema.Attribute{
 					"file_name": schema.StringAttribute{
-						MarkdownDescription: "File on a local machine where to track created secrets",
-						Description:         "File on a local machine where to track created secrets",
+						MarkdownDescription: "File on a local machine where to track created objects",
+						Description:         "File on a local machine where to track created objects",
+						Required:            true,
+					},
+				},
+			},
+			"storage_account_tracker": schema.SingleNestedAttribute{
+				MarkdownDescription: "Configures Azure Storage Account table to be used to track objects created",
+				Description:         "Configures Azure Storage Account table to be used to track objects created",
+				Optional:            true,
+				Attributes: map[string]schema.Attribute{
+					"account_name": schema.StringAttribute{
+						MarkdownDescription: "Storage account name to use",
+						Description:         "Storage account name to use",
+						Required:            true,
+					},
+					"table_name": schema.StringAttribute{
+						MarkdownDescription: "Table name to use",
+						Description:         "Table name to use",
+						Required:            true,
+					},
+					"partition_name": schema.StringAttribute{
+						MarkdownDescription: "Partition name to use",
+						Description:         "Partition name to use",
 						Required:            true,
 					},
 				},
@@ -437,7 +466,15 @@ func (p *AZConnectorProviderImpl) Resources(ctx context.Context) []func() resour
 	}
 }
 
-func (p *AZConnectorProviderImpl) ConfigureHashTracker(ctx context.Context, data AZConnectorProviderImplModel) (ObjectHashTracker, error) {
+func (p *AZConnectorProviderImpl) ConfigureHashTracker(ctx context.Context, data AZConnectorProviderImplModel, cred azcore.TokenCredential) (ObjectHashTracker, error) {
+	if data.StorageAccountTracker != nil {
+		return NewAzStorageAccountTracker(
+			cred,
+			data.StorageAccountTracker.AccountName.ValueString(),
+			data.StorageAccountTracker.TableName.ValueString(),
+			data.StorageAccountTracker.PartitionName.ValueString(),
+		)
+	}
 	if data.FileHashTrackerConfig != nil {
 		return NewLocalFileTracker(ctx, data.FileHashTrackerConfig.FileName.ValueString())
 	} else {
@@ -471,7 +508,7 @@ func (p *AZConnectorProviderImpl) Configure(ctx context.Context, req tfprovider.
 		return
 	}
 
-	hashTracker, hashTrackerInitErr := p.ConfigureHashTracker(ctx, data)
+	hashTracker, hashTrackerInitErr := p.ConfigureHashTracker(ctx, data, cred)
 	if hashTrackerInitErr != nil {
 		resp.Diagnostics.AddError("Failed to initialize hash tracker", hashTrackerInitErr.Error())
 		return

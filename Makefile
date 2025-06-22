@@ -4,7 +4,7 @@ NAMESPACE=aliakseiyanchuk
 NAME=az-confidential
 BINARY=terraform-provider-${NAME}
 TF_GEN_BINARY=tfgen-${NAME}
-VERSION=0.1
+VERSION=0.9
 BUILD_PRERELEASE=alpha.0
 OS_ARCH=darwin_arm64
 

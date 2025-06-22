@@ -90,6 +90,25 @@ ciphertext to be unpacked *exactly once*. I.e. if a resource is deleted and then
 will be rejected as it would be a duplicate. This feature is based on UUID identifier that is cryptographically 
 added to the ciphertext when it is created.
 
-The first version implements a basic, file-based tracked. To enable this feature, set `file_hash_tracker` configuration
+The first version implements a basic, file-based tracking suitable for local testing. To enable this feature, set `file_hash_tracker` configuration
 and specify the file where the data will need to be kept. Future versions might add the support e.g. for tracking
 this data in databases.
+
+For production use, the provider supports Azure Storage Account-base tracking. This requires the 
+user of the provider:
+- to create a storage account (or designate any existing storage account);
+- to create a table within that storage account;
+- grant `Storage Table Data Contributor` role to the IAM account used by the provider.
+
+The configuration required for this could look e.g. as follows:
+```hcl
+provider "az-confidential" {
+  # ... other configuration properties
+
+  storage_account_tracker = {
+    account_name = ".. an account name"
+    table_name = ".. a table name"
+    partition_name = ".. a partition name"
+  }
+}
+```
