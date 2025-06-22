@@ -19,7 +19,7 @@ install:
 	go install -v ./...
 
 # Generate ephemeral (=safe to throw away and re-generate) keys for unit testing
-generate_ephemeral_keys:
+ephemeral_keys:
 	cd core && \
 		mkdir testkeymaterial && \
 		cd test-key-material && \
@@ -49,7 +49,7 @@ generate:
 test:
 	go test ${TEST}
 
-acceptance_test:
+acceptance_test: install
 	TF_ACC=1 go test ./acceptance
 
 build_tf_generator:

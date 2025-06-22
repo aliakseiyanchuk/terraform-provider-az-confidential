@@ -14,17 +14,17 @@ The command line syntax is as follows:
 `tfgen [common options] [subcommand] [subcommand options]`
 
 Common options:
-- `output-vault` specifies the Azure Key Vault name where unpacked object needs to be stored
-- `output-vault-object` the object name (key, secret, or certificate) to be unpacked into
-- `wrapping-key-vault` the vault containing the KEK
-- `wrapping-key-name` the name of KEK
-- `wrapping-key-version` the version of KEK used (in case it's not latest)
-- `pubkey` public key of the KEK
-- `no-labels`: do not add any labels to the encrypted ciphertext
-- `fixed-labels`: add the specified list of labels to the ciphertext
-- `target-only-label`: associate a single label with the ciphertext that is based on
+- `-output-vault` specifies the Azure Key Vault name where unpacked object needs to be stored
+- `-output-vault-object` the object name (key, secret, or certificate) to be unpacked into
+- `-wrapping-key-vault` the vault containing the KEK
+- `-wrapping-key-name` the name of KEK
+- `-wrapping-key-version` the version of KEK used (in case it's not latest)
+- `-pubkey` public key of the KEK
+- `-no-labels`: do not add any labels to the encrypted ciphertext
+- `-fixed-labels`: add the specified list of labels to the ciphertext
+- `-target-only-label`: associate a single label with the ciphertext that is based on
    the values supplied in `output-vault` and `output-vault-object` options.
-- `ciphertext-only` output only ciphertext; don't generate Terraform template
+- `-ciphertext-only` output only ciphertext; don't generate Terraform template
 
 ## Sub-commands:
 - `password`: generates a password that **will be** in the state file. This datasource

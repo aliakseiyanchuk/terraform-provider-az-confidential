@@ -1,4 +1,4 @@
-# Confidential Azure KeyVault Secrets Terraform Provider
+# Confidential Azure KeyVault Objects Terraform Provider
 
 ## The problem this provider solves
 This provider solves the problem of securely packaging confidential material (such OAuth key secrets, API keys,
@@ -55,8 +55,54 @@ A safe operation of this provider relies on two main factors:
 starting evaluation and testing process.
 > Note that further hardening on top op the propose initial setup may be required for the production setup. 
 
-## Tooling
+## How to create Terraform code
 
 The encryption process required for making this to work is complex. The Terraform code (and ciphertext) is
 created with the supplied CLI tool `tfgen`. Consult the [tool instructions](./docs-templates/guides/tfgen.md)
 how to use it.
+
+## Ephemeral Key Material
+The provider requires ephemeral (that is, throwaway) key material for testing cryptographic operations.
+These need to be created after code is checked out from the repository using the following command:
+```shell
+make ephemeral_keys
+```
+
+## Testing the provider
+
+The provider can be tested with Golang unit test and Terraform acceptance test. Unit tests can be run
+using the following command:
+```shell
+make test
+```
+Running acceptance tests on your workstation required two pre-conditions:
+1. The environment needs to be configured to use dev overrides for Terraform providers. To achieve this,
+   the file `~/.terraformrc` needs to be created containing:
+ ```hcl
+provider_installation {
+
+  # Configure this provider to be loaded from the Go bin directory (~/go/bin)
+  dev_overrides {
+    "hashicorp.com/lspwd2/az-confidential" = "...path to your golang bin directory...."
+  }
+  
+  # For all other providers, install them directly from their origin provider
+  # registries as normal. If you omit this, Terraform will _only_ use
+  # the dev_overrides block, and so no other providers will be available.
+  direct {}
+}
+
+```
+
+2. You need to create environment variables that point to the *reaal* Azure key vault containing
+   the KEK and a key vault where the secrets, keys, and certificates would be imported
+```shell
+export TF_VAR_az_tenant_id="...your az key vault tenant id ...."
+export TF_VAR_az_subscription_id="...your subscription ...."
+export TF_VAR_az_client_id="... application granted access to use ..."
+export TF_VAR_az_client_secret="... application secret ..."
+
+export TF_VAR_az_default_vault_name="... name of the key vault containing KEK ..."
+export TF_VAR_az_default_wrapping_key="... KEK name ...."
+export TF_VAR_az_default_wrapping_key_version="... KEK version..."    
+```
