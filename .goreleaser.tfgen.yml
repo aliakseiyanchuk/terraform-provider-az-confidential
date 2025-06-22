@@ -28,6 +28,7 @@ builds:
     ignore:
       - goos: darwin
         goarch: '386'
+    main: ./bin/tfgen
     binary: '{{ .ProjectName }}'
 archives:
   - format: zip
