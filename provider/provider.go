@@ -234,22 +234,25 @@ func (f *AZClientsFactoryImpl) TrackObjectId(ctx context.Context, id string) err
 
 var _ core.AZClientsFactory = &AZClientsFactoryImpl{}
 
-func (f *AZClientsFactoryImpl) EnsureCanPlace(ctx context.Context, unwrappedPayload core.VersionedConfidentialData, targetCoord *core.AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics) {
-	if objIsTracked, trackerCheckErr := f.IsObjectIdTracked(ctx, unwrappedPayload.Uuid); trackerCheckErr != nil {
+func (f *AZClientsFactoryImpl) EnsureCanPlace(ctx context.Context, unwrappedData core.VersionedConfidentialData, targetCoord *core.AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics) {
+	if objIsTracked, trackerCheckErr := f.IsObjectIdTracked(ctx, unwrappedData.Uuid); trackerCheckErr != nil {
 		diagnostics.AddError("cannot check tracking status of this secret", trackerCheckErr.Error())
 	} else if objIsTracked {
-		diagnostics.AddError("secret is already tracked", "Potential malfeasance detected: someone is trying to create a secret from records that were previously used")
+		diagnostics.AddError(
+			fmt.Sprintf("%s is already tracked", unwrappedData.Type),
+			fmt.Sprintf("Potential attempt to copy confidential data detected: someone is trying to create a %s from ciphertext that was previously used", unwrappedData.Type),
+		)
 	}
 
 	if f.LabelMatchRequirement == TargetCoordinate && targetCoord != nil {
-		if !core.Contains(targetCoord.GetLabel(), unwrappedPayload.Labels) {
-			diagnostics.AddError("mismatched placement", fmt.Sprintf("This %s cannot be unwrapped into %s in vault %s/%s", unwrappedPayload.Type, targetCoord.Type, targetCoord.VaultName, targetCoord.Name))
+		if !core.Contains(targetCoord.GetLabel(), unwrappedData.Labels) {
+			diagnostics.AddError("mismatched placement", fmt.Sprintf("The constraints embedded in the ciphertext of this %s disallow unwrapped into vault %s/%s", unwrappedData.Type, targetCoord.VaultName, targetCoord.Name))
 		}
 	} else if f.LabelMatchRequirement == ProviderLabels || (f.LabelMatchRequirement == TargetCoordinate && targetCoord == nil) {
 		// This situation with nil target coordinate will only when unwrapping the password,
 		//which doesn't have a target Vault object to be associated with.
-		if !core.AnyIsIn(f.ProviderLabels, unwrappedPayload.Labels) {
-			diagnostics.AddError("mismatched placement", fmt.Sprintf("This %s cannot be unwrapped by this provider", unwrappedPayload.Type))
+		if !core.AnyIsIn(f.ProviderLabels, unwrappedData.Labels) {
+			diagnostics.AddError("mismatched placement", fmt.Sprintf("The constraints embedded in the ciphertext of this %s disallow unwrapping the ciphertext by this provider", unwrappedData.Type))
 		}
 	}
 	// If no label matching is required, no actions would be performed.

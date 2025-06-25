@@ -55,3 +55,5 @@ acceptance_test: install
 tfgen:
 	go build -o ${TF_GEN_BINARY} ./bin/tfgen
 	chmod u+x ${TF_GEN_BINARY}
+
+.PHONY: tfgen

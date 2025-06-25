@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"os"
 	"strings"
 	"text/template"
 	"time"
@@ -109,23 +108,24 @@ func (kwp *ContentWrappingParams) ValidateHasDestination() error {
 
 func (kwp *ContentWrappingParams) Validate() error {
 
-	if len(kwp.RSAPublicKeyFile) == 0 {
-		return fmt.Errorf("public key to use required; use -pubkey option")
+	pubKeyData, pubKeyReadErr := ReadInput("Please provide public key of the key wrapping key", kwp.RSAPublicKeyFile, false, true)
+	if pubKeyReadErr != nil {
+		return fmt.Errorf("cannot read public key: %s", pubKeyReadErr.Error())
 	}
 
-	if _, err := os.Stat(kwp.RSAPublicKeyFile); err != nil {
-		return fmt.Errorf("public key file '%s' does not exist; correct -pubkey option", kwp.RSAPublicKeyFile)
-	}
-
-	loadedRSAKey, rsaLoadErr := core.LoadPublicKey(kwp.RSAPublicKeyFile)
+	loadedRSAKey, rsaLoadErr := core.LoadPublicKeyFromData(pubKeyData)
 	if rsaLoadErr != nil {
-		return fmt.Errorf("failed to load public key file '%s': %s", kwp.RSAPublicKeyFile, rsaLoadErr)
+		return fmt.Errorf("failed to load public key (-pubkey argument was '%s'): %s", kwp.RSAPublicKeyFile, rsaLoadErr)
 	} else {
 		kwp.LoadedRsaPublicKey = loadedRSAKey
 	}
 
 	if !kwp.TargetCoordinateLabel && (len(kwp.Labels) == 0 && !kwp.NoLabels) {
-		return errors.New("missing instruction for provider label matching; ensure to use -no-label if you intend to disable label matchig")
+		return errors.New("missing instruction for provider label matching; ensure to use -no-label if you intend to disable label matching")
+	}
+
+	if kwp.TargetCoordinateLabel && len(kwp.Labels) > 0 {
+		return errors.New("conflicting matching requirements: target coordinate labelling cannot be used with fixed labelling")
 	}
 
 	return nil
@@ -141,10 +141,15 @@ type BaseTFTemplateParms struct {
 
 	IncludeTags bool
 	Tags        map[string]string
+	Labels      []string
 }
 
 func (p *BaseTFTemplateParms) HasTags() bool {
 	return len(p.Tags) > 0
+}
+
+func (p *BaseTFTemplateParms) HasLabels() bool {
+	return len(p.Labels) > 0
 }
 
 func (p *BaseTFTemplateParms) TerraformValueTags() map[string]string {

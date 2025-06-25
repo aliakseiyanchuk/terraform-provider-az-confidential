@@ -141,6 +141,7 @@ func OutputConfidentialCertificateTerraformCode(kwp ContentWrappingParams, data 
 
 	rv := BaseTFTemplateParms{
 		EncryptedContent: ciphertext,
+		Labels:           kwp.GetLabels(),
 
 		WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 		DestinationCoordinate: kwp.DestinationCoordinate,

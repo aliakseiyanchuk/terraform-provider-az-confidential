@@ -37,7 +37,7 @@ func Test_Secret_OutputSecretTerraformCode_Renders(t *testing.T) {
 		},
 	}
 
-	v, err := OutputSecretTerraformCode(kwp, "this is a secret", basicTags)
+	v, err := OutputSecretTerraformCode(kwp, "this is a secret", true, basicTags)
 	assert.Nil(t, err)
 
 	fmt.Print(v)

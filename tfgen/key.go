@@ -147,6 +147,7 @@ func OutputKeyTerraformCode(kwp ContentWrappingParams, keyData []byte, objType s
 
 	rv := BaseTFTemplateParms{
 		EncryptedContent: ciphertext,
+		Labels:           kwp.GetLabels(),
 
 		TFBlockName: kwp.TFBlockName,
 

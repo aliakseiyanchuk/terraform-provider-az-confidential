@@ -69,6 +69,7 @@ func OutputSecretTerraformCode(kwp ContentWrappingParams, secretDataAsStr string
 
 	rv := BaseTFTemplateParms{
 		EncryptedContent: s,
+		Labels:           kwp.GetLabels(),
 
 		TFBlockName: kwp.TFBlockName,
 

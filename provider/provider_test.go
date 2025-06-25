@@ -88,12 +88,14 @@ func Test_EnsureCanPlace_Errs_IfTrackerReturnsObjectIsAlreadyTracked(t *testing.
 	}
 
 	ctx := context.Background()
-	v := core.VersionedConfidentialData{}
+	v := core.VersionedConfidentialData{
+		Type: "secret",
+	}
 	dg := diag.Diagnostics{}
 
 	factory.EnsureCanPlace(ctx, v, nil, &dg)
 	assert.True(t, dg.HasError())
-	assert.Equal(t, "Potential malfeasance detected: someone is trying to create a secret from records that were previously used", dg[0].Detail())
+	assert.Equal(t, "Potential attempt to copy confidential data detected: someone is trying to create a secret from ciphertext that was previously used", dg[0].Detail())
 	assert.True(t, hashTracker.AssertExpectations(t))
 }
 
@@ -131,7 +133,7 @@ func Test_EnsureCanPlace_Errs_OnMismatchedTargetCoorLabel(t *testing.T) {
 
 	factory.EnsureCanPlace(ctx, v, &reqCoordinate, &dg)
 	assert.True(t, dg.HasError())
-	assert.Equal(t, "This secret cannot be unwrapped into secret in vault vault-a/obj-b", dg[0].Detail())
+	assert.Equal(t, "The constraints embedded in the ciphertext of this secret disallow unwrapped into vault vault-a/obj-b", dg[0].Detail())
 	assert.True(t, hashTracker.AssertExpectations(t))
 }
 
@@ -230,7 +232,7 @@ func Test_EnsureCanPlace_Errs_OnLabelMismatchForDataSource(t *testing.T) {
 
 		factory.EnsureCanPlace(ctx, v, nil, &dg)
 		assert.True(t, dg.HasError())
-		assert.Equal(t, "This password cannot be unwrapped by this provider", dg[0].Detail())
+		assert.Equal(t, "The constraints embedded in the ciphertext of this password disallow unwrapping the ciphertext by this provider", dg[0].Detail())
 	}
 
 	assert.True(t, hashTracker.AssertExpectations(t))
