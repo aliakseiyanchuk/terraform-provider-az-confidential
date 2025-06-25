@@ -5,7 +5,7 @@ resource attributes.
 The resource can import RSA, Elliptic curve, and symmetric keys.
 
 The ciphertext should be obtained using the `tfgen` command-line tool
-(see [source code](https://github.com/aliakseiyanchuk/terraform-provider-az-confidential).)
+(see [source code](https://github.com/aliakseiyanchuk/terraform-provider-az-confidential-tfgen).)
 
 A typical command for RSA and EC keys  would be:
 ```shell

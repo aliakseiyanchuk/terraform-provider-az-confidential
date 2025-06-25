@@ -3,7 +3,7 @@ provided ciphertext and additional parameters supplied as
 resource attributes.
 
 The ciphertext should be obtained using the `tfgen` command-line tool
-(see [source code](https://github.com/aliakseiyanchuk/terraform-provider-az-confidential).)
+(see [source code](https://github.com/aliakseiyanchuk/terraform-provider-az-confidential-tfgen).)
 A typical command usage would be:
 ```shell
 tfgen -pubkey [path to the public key] \
