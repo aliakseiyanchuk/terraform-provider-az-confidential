@@ -11,10 +11,13 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
+	"github.com/hashicorp/terraform-plugin-framework-validators/providervalidator"
+	tfsetvalidators "github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	tfstringvalidators "github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/function"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	tfprovider "github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -338,6 +341,15 @@ func (lm LabelMatchRequirement) AsString() string {
 //go:embed provider_description.md
 var providerDescription string
 
+func (p *AZConnectorProviderImpl) ConfigValidators(ctx context.Context) []tfprovider.ConfigValidator {
+	return []tfprovider.ConfigValidator{
+		providervalidator.Conflicting(
+			path.MatchRoot("file_hash_tracker"),
+			path.MatchRoot("storage_account_tracker"),
+		),
+	}
+}
+
 func (p *AZConnectorProviderImpl) Schema(_ context.Context, _ tfprovider.SchemaRequest, resp *tfprovider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description:         "Provider importing sensitive secrets, keys, and certificates from Terraform code into Azure KeyVault without exposing plain-text secrets in the state",
@@ -373,6 +385,10 @@ func (p *AZConnectorProviderImpl) Schema(_ context.Context, _ tfprovider.SchemaR
 				Description:         "Provider labels",
 				Optional:            true,
 				ElementType:         types.StringType,
+				Validators: []validator.Set{
+					tfsetvalidators.SizeAtLeast(1),
+					// Require at least one element in the labels.
+				},
 			},
 			"require_label_match": schema.StringAttribute{
 				MarkdownDescription: "Match required between unwrapped ciphertext and labels of this provider",

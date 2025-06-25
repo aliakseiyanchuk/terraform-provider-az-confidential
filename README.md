@@ -83,7 +83,7 @@ provider_installation {
 
   # Configure this provider to be loaded from the Go bin directory (~/go/bin)
   dev_overrides {
-    "hashicorp.com/lspwd2/az-confidential" = "...path to your golang bin directory...."
+    "hashicorp.com/aliakseiyanchuk/az-confidential" = "...path to your golang bin directory...."
   }
   
   # For all other providers, install them directly from their origin provider

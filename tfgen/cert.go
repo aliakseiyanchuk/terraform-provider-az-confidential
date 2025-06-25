@@ -16,14 +16,14 @@ var certTFTemplate string
 
 var certCmd = flag.NewFlagSet(certCliArg, flag.ContinueOnError)
 
-type CertTFGetParams struct {
+type CertTFGenParams struct {
 	SecretTFGenParams
 
 	certPasswordFile string
 	noDERVerify      bool
 }
 
-var certParams = CertTFGetParams{}
+var certParams = CertTFGenParams{}
 
 func init() {
 	certCmd.StringVar(&certParams.secretFromFile,

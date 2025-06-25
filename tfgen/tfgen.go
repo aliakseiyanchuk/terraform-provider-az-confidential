@@ -139,7 +139,8 @@ type BaseTFTemplateParms struct {
 	WrappingKeyCoordinate WrappingKeyCoordinateTFCode
 	DestinationCoordinate AzKeyVaultObjectCoordinateTFCode
 
-	Tags map[string]string
+	IncludeTags bool
+	Tags        map[string]string
 }
 
 func (p *BaseTFTemplateParms) HasTags() bool {

@@ -17,14 +17,14 @@ var keyTFTemplate string
 
 var keyCmd = flag.NewFlagSet(keyCliArg, flag.ContinueOnError)
 
-type KeyTFGetParams struct {
+type KeyTFGenParams struct {
 	SecretTFGenParams
 
 	passwordFromFile string
 	symmetric        bool
 }
 
-var keyParams = KeyTFGetParams{}
+var keyParams = KeyTFGenParams{}
 
 func init() {
 	keyCmd.StringVar(&keyParams.secretFromFile,

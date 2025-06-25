@@ -27,3 +27,15 @@ variable "az_default_wrapping_key" {
 variable "az_default_wrapping_key_version" {
   type = string
 }
+
+variable "az_storage_account_name" {
+  type = string
+}
+
+variable "az_storage_account_table_name" {
+  type = string
+}
+
+variable "az_storage_account_table_partition" {
+  type = string
+}

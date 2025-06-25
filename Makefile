@@ -52,6 +52,6 @@ test:
 acceptance_test: install
 	TF_ACC=1 go test ./acceptance
 
-build_tf_generator:
+tfgen:
 	go build -o ${TF_GEN_BINARY} ./bin/tfgen
 	chmod u+x ${TF_GEN_BINARY}

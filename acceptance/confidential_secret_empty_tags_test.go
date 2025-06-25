@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func generateSecretResource(t *testing.T) string {
+func generateSecretResourceEmptyTags(t *testing.T) string {
 	kwp := tfgen.ContentWrappingParams{
 		RSAPublicKeyFile: wrappingKey,
 		Labels:           "acceptance-testing",
@@ -17,7 +17,7 @@ func generateSecretResource(t *testing.T) string {
 
 		DestinationCoordinate: tfgen.AzKeyVaultObjectCoordinateTFCode{
 			AzKeyVaultObjectCoordinate: core.AzKeyVaultObjectCoordinate{
-				Name: "acceptance-test-secret",
+				Name: "acceptance-test-secret-empty-tags",
 			},
 		},
 
@@ -28,27 +28,22 @@ func generateSecretResource(t *testing.T) string {
 		assert.Fail(t, vErr.Error())
 	}
 
-	tags := map[string]string{
-		"a":           "tag_a",
-		"environment": "tf_acceptance_test",
-	}
-
-	if rv, tfErr := tfgen.OutputSecretTerraformCode(kwp, "this is a very secret string", true, tags); tfErr != nil {
+	if rv, tfErr := tfgen.OutputSecretTerraformCode(kwp, "this is a very secret string", true, nil); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {
-		//print(rv)
+		print(rv)
 		return rv
 	}
 }
 
-func TestAccConfidentialSecret(t *testing.T) {
+func TestAccConfidentialSecretWithEmptyTags(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Read testing
 			{
-				Config: providerConfig + generateSecretResource(t),
+				Config: providerConfig + generateSecretResourceEmptyTags(t),
 				Check: resource.ComposeTestCheckFunc(
 					// Validate that the secret version is set after creation
 					resource.TestCheckResourceAttrSet("az-confidential_secret.secret", "secret_version"),

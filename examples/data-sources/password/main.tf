@@ -3,7 +3,7 @@
 terraform {
   required_providers {
     az-confidential = {
-      source = "hashicorp.com/lspwd2/az-confidential"
+      source = "yanchuk.nl/aliakseiyanchuk/az-confidential"
     }
   }
 }

@@ -80,7 +80,7 @@ func init() {
 	baseFlags.BoolVar(&outputCiphertextOnly,
 		"ciphertext-only",
 		false,
-		"Output only ciphertext (i.e. do not output associated Terraform code template)`",
+		"Output only ciphertext (i.e. do not output associated Terraform code template)",
 	)
 }
 

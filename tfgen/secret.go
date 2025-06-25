@@ -55,13 +55,13 @@ func GenerateConfidentialSecretTerraformTemplate(kwp ContentWrappingParams, prod
 
 	kwp.TFBlockNameIfUndefined("secret")
 	if produceTFCode {
-		return OutputSecretTerraformCode(kwp, secretDataAsStr, nil)
+		return OutputSecretTerraformCode(kwp, secretDataAsStr, true, nil)
 	} else {
 		return OutputSecretEncryptedContent(kwp, secretDataAsStr)
 	}
 }
 
-func OutputSecretTerraformCode(kwp ContentWrappingParams, secretDataAsStr string, tags map[string]string) (string, error) {
+func OutputSecretTerraformCode(kwp ContentWrappingParams, secretDataAsStr string, includeTags bool, tags map[string]string) (string, error) {
 	s, err := OutputSecretEncryptedContent(kwp, secretDataAsStr)
 	if err != nil {
 		return s, err
@@ -75,7 +75,8 @@ func OutputSecretTerraformCode(kwp ContentWrappingParams, secretDataAsStr string
 		WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 		DestinationCoordinate: kwp.DestinationCoordinate,
 
-		Tags: tags,
+		IncludeTags: includeTags,
+		Tags:        tags,
 	}
 
 	return rv.Render("secret", secretTFTemplate)

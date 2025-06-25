@@ -1,9 +1,7 @@
-# Copyright (c) HashiCorp, Inc.
-
 terraform {
   required_providers {
     az-confidential = {
-      source = "hashicorp.com/lspwd2/az-confidential"
+      source = "yanchuk.nl/aliakseiyanchuk/az-confidential"
     }
   }
 }
@@ -14,7 +12,9 @@ provider "az-confidential" {
   client_id       = var.az_client_id
   client_secret   = var.az_client_secret
 
-  labels              = ["examples"]
+  # Ensure that the provider will only unwrap the confidential objects
+  # that are intended for this provider.
+  labels = ["test", "demo", "experimentation"]
   require_label_match = "provider-labels"
 
   default_destination_vault_name = var.az_default_vault_name
@@ -23,5 +23,14 @@ provider "az-confidential" {
     vault_name = var.az_default_vault_name
     name       = var.az_default_wrapping_key
     version    = var.az_default_wrapping_key_version
+  }
+
+  # Track the objects created in storage account to make sure that
+  # all confidential objects are unwrapped exactly once across all of your
+  # intended installation.
+  storage_account_tracker = {
+    account_name = var.az_storage_account_name
+    table_name = var.az_storage_account_table_name
+    partition_name = var.az_storage_account_table_partition
   }
 }

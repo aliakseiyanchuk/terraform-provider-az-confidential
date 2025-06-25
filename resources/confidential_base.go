@@ -116,20 +116,33 @@ func (cm *WrappedAzKeyVaultObjectConfidentialMaterialModel) TagsAsStr() map[stri
 }
 
 func (cm *WrappedAzKeyVaultObjectConfidentialMaterialModel) ConvertAzMap(p map[string]*string, into *basetypes.MapValue) {
-	if p != nil {
-		tfTags := map[string]attr.Value{}
+	inputMapIsEmpty := p == nil || len(p) == 0
+	sourceMapIsEmpty := (*into).IsUnknown() || (*into).IsNull()
 
-		for k, v := range p {
-			if v != nil {
-				tfTags[k] = types.StringValue(*v)
-			}
+	// Do nothing if both input and source maps are empty,
+	// These can be used interchangeably. Except if the source map
+	// is unknown, it needs to be set into null value.
+	if inputMapIsEmpty && sourceMapIsEmpty {
+		if (*into).IsUnknown() {
+			*into = types.MapNull(types.StringType)
 		}
-
-		mapVal, _ := types.MapValue(types.StringType, tfTags)
-		*into = mapVal
-	} else {
-		*into = types.MapNull(types.StringType)
+		return
 	}
+
+	*into = ConvertStringPtrMapToTerraform(p)
+}
+
+func ConvertStringPtrMapToTerraform(p map[string]*string) basetypes.MapValue {
+	tfTags := map[string]attr.Value{}
+
+	for k, v := range p {
+		if v != nil {
+			tfTags[k] = types.StringValue(*v)
+		}
+	}
+
+	mapVal, _ := types.MapValue(types.StringType, tfTags)
+	return mapVal
 }
 
 func (cm *WrappedAzKeyVaultObjectConfidentialMaterialModel) ConvertAzString(p *string, into *basetypes.StringValue) {

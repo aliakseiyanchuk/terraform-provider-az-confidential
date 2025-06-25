@@ -9,3 +9,5 @@
 tfgen-az-confidential
 /dist/
 /dist.tfgen/
+/examples/**/.terraform.lock.hcl
+/examples/**/.terraform
