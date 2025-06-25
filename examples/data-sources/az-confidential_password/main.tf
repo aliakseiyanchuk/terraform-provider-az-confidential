@@ -14,7 +14,8 @@ provider "az-confidential" {
   client_id       = var.az_client_id
   client_secret   = var.az_client_secret
 
-  oaep_label = "ZGVtbw=="
+  labels              = ["test", "demo", "experimentation"]
+  require_label_match = "provider-labels"
 
   default_wrapping_key = {
     vault_name = var.az_default_vault_name

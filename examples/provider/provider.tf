@@ -1,10 +1,3 @@
-terraform {
-  required_providers {
-    az-confidential = {
-      source = "aliakseiyanchuk/az-confidential"
-    }
-  }
-}
 
 provider "az-confidential" {
   # Configure explicit client credentials
@@ -15,7 +8,7 @@ provider "az-confidential" {
 
   # Ensure that the provider will only unwrap the confidential objects
   # that are intended for this provider.
-  labels = ["test", "demo", "experimentation"]
+  labels              = ["test", "demo", "experimentation"]
   require_label_match = "provider-labels"
 
   default_wrapping_key = {
@@ -28,8 +21,8 @@ provider "az-confidential" {
   # all confidential objects are unwrapped exactly once across all of your
   # intended installation.
   storage_account_tracker = {
-    account_name = var.az_storage_account_name
-    table_name = var.az_storage_account_table_name
+    account_name   = var.az_storage_account_name
+    table_name     = var.az_storage_account_table_name
     partition_name = var.az_storage_account_table_partition
   }
 
