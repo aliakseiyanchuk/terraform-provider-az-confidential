@@ -203,7 +203,7 @@ func (f *AZClientsFactoryImpl) GetMergedWrappingKeyCoordinate(ctx context.Contex
 	return base
 }
 
-func (cm *AZClientsFactoryImpl) GetDestinationVaultObjectCoordinate(coord core.AzKeyVaultObjectCoordinateModel) core.AzKeyVaultObjectCoordinate {
+func (cm *AZClientsFactoryImpl) GetDestinationVaultObjectCoordinate(coord core.AzKeyVaultObjectCoordinateModel, objType string) core.AzKeyVaultObjectCoordinate {
 	vaultName := cm.DefaultDestinationVault
 	if len(coord.VaultName.ValueString()) > 0 {
 		vaultName = coord.VaultName.ValueString()
@@ -213,6 +213,7 @@ func (cm *AZClientsFactoryImpl) GetDestinationVaultObjectCoordinate(coord core.A
 	return core.AzKeyVaultObjectCoordinate{
 		VaultName: vaultName,
 		Name:      secretName,
+		Type:      objType,
 	}
 }
 

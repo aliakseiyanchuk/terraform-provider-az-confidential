@@ -26,8 +26,8 @@ import (
 type StateFlushFlag bool
 
 const (
-	FlushState      = true
-	DoNotFlushState = false
+	FlushState      StateFlushFlag = true
+	DoNotFlushState StateFlushFlag = false
 )
 
 var validDateTime = regexp.MustCompile(`^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z`)

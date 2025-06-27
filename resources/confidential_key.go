@@ -17,6 +17,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -207,11 +209,17 @@ func (d *ConfidentialAzVaultKeyResource) Schema(_ context.Context, _ resource.Sc
 				"vault_name": schema.StringAttribute{
 					Optional:    true,
 					Description: "Vault where the secret needs to be stored. If omitted, defaults to the vault containing the wrapping key",
+					PlanModifiers: []planmodifier.String{
+						stringplanmodifier.RequiresReplace(),
+					},
 				},
 				"name": schema.StringAttribute{
 					Optional:    false,
 					Required:    true,
 					Description: "Name of the secret to store",
+					PlanModifiers: []planmodifier.String{
+						stringplanmodifier.RequiresReplace(),
+					},
 				},
 			},
 		},
@@ -351,7 +359,7 @@ func (d *ConfidentialAzVaultKeyResource) Create(ctx context.Context, req resourc
 		return
 	}
 
-	destSecretCoordinate := d.factory.GetDestinationVaultObjectCoordinate(data.DestinationKey)
+	destSecretCoordinate := d.factory.GetDestinationVaultObjectCoordinate(data.DestinationKey, "keys")
 
 	d.factory.EnsureCanPlace(ctx, confidentialData, &destSecretCoordinate, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -402,35 +410,52 @@ func (d *ConfidentialAzVaultKeyResource) Update(ctx context.Context, req resourc
 		return
 	}
 
+	if d.DoUpdate(ctx, &stateData, &data, resp) {
+		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	}
+}
+
+func (d *ConfidentialAzVaultKeyResource) DoUpdate(ctx context.Context, stateData *ConfidentialKeyModel, data *ConfidentialKeyModel, resp *resource.UpdateResponse) StateFlushFlag {
 	tflog.Info(ctx, fmt.Sprintf("Available object Id: %s", stateData.Id.ValueString()))
 
-	destSecretCoordinate, err := stateData.GetDestinationCoordinateFromId()
+	destKeyCoordinate, err := stateData.GetDestinationCoordinateFromId()
 	if err != nil {
 		resp.Diagnostics.AddError("Error getting destination secret coordinate", err.Error())
-		return
+		return DoNotFlushState
 	}
 
-	keyClient, err := d.factory.GetKeysClient(destSecretCoordinate.VaultName)
+	destKeyCoordinateFromCfg := d.factory.GetDestinationVaultObjectCoordinate(data.DestinationKey, "keys")
+	if !destKeyCoordinateFromCfg.SameAs(destKeyCoordinate.AzKeyVaultObjectCoordinate) {
+		resp.Diagnostics.AddError(
+			"Implicit object move",
+			"The destination for this confidential key changed after the key was created. "+
+				"This can happen e.g. when target vault was not explicitly specified. "+
+				"Delete this key instead",
+		)
+		return DoNotFlushState
+	}
+
+	keyClient, err := d.factory.GetKeysClient(destKeyCoordinate.VaultName)
 	if err != nil {
-		resp.Diagnostics.AddError("Cannot acquire secret client", fmt.Sprintf("Cannot acquire secret client to vault %s: %s", destSecretCoordinate.VaultName, err.Error()))
-		return
+		resp.Diagnostics.AddError("Cannot acquire secret client", fmt.Sprintf("Cannot acquire secret client to vault %s: %s", destKeyCoordinate.VaultName, err.Error()))
+		return DoNotFlushState
 	} else if keyClient == nil {
 		resp.Diagnostics.AddError("Cannot acquire secret client", "Secrets client returned is nil")
-		return
+		return DoNotFlushState
 	}
 
-	param := d.convertToUpdateKeyParam(&data)
+	param := d.convertToUpdateKeyParam(data)
 	tflog.Info(ctx, fmt.Sprintf("Updating with %d tags", len(param.Tags)))
 
-	updateResponse, updateErr := keyClient.UpdateKey(ctx, destSecretCoordinate.Name, destSecretCoordinate.Version, param, nil)
+	updateResponse, updateErr := keyClient.UpdateKey(ctx, destKeyCoordinate.Name, destKeyCoordinate.Version, param, nil)
 
 	if updateErr != nil {
 		resp.Diagnostics.AddError("Error updating secret properties", updateErr.Error())
-		return
+		return DoNotFlushState
 	}
 
 	data.Accept(updateResponse.KeyBundle, &resp.Diagnostics)
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	return FlushState
 }
 
 // Delete Performs DELETE operation on the created secret. The implementation disables the secret version

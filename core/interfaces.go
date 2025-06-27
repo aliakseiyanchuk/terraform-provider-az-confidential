@@ -47,7 +47,7 @@ type AZClientsFactory interface {
 	//object needs to be created. This
 	// method will append the default destination vault to the coordinate if a given model does not explicitly
 	// specify this.
-	GetDestinationVaultObjectCoordinate(coordinate AzKeyVaultObjectCoordinateModel) AzKeyVaultObjectCoordinate
+	GetDestinationVaultObjectCoordinate(coordinate AzKeyVaultObjectCoordinateModel, objType string) AzKeyVaultObjectCoordinate
 
 	// EnsureCanPlace ensure that this object can be placed in the destination vault.
 	// EnsureCanPlace ensure that this object can be placed in the destination vault.
@@ -66,6 +66,18 @@ type AzResourceCoordinateModel struct {
 type AzKeyVaultObjectVersionedCoordinate struct {
 	AzKeyVaultObjectCoordinate
 	Version string
+}
+
+func (c *AzKeyVaultObjectVersionedCoordinate) Clone() AzKeyVaultObjectVersionedCoordinate {
+	return AzKeyVaultObjectVersionedCoordinate{
+		AzKeyVaultObjectCoordinate: c.AzKeyVaultObjectCoordinate.Clone(),
+		Version:                    c.Version,
+	}
+}
+
+func (c *AzKeyVaultObjectVersionedCoordinate) SameAs(other AzKeyVaultObjectVersionedCoordinate) bool {
+	return c.Version == other.Version &&
+		c.AzKeyVaultObjectCoordinate.SameAs(other.AzKeyVaultObjectCoordinate)
 }
 
 func (c *AzKeyVaultObjectVersionedCoordinate) FromId(id string) error {
@@ -109,6 +121,25 @@ type AzKeyVaultObjectCoordinate struct {
 	idHostName string // Name of the host as fully specified
 	Name       string
 	Type       string
+}
+
+func (c *AzKeyVaultObjectCoordinate) AsString() string {
+	return fmt.Sprintf("v:=%s/t=%s/n=%s", c.VaultName, c.Type, c.Name)
+}
+
+func (c *AzKeyVaultObjectCoordinate) Clone() AzKeyVaultObjectCoordinate {
+	return AzKeyVaultObjectCoordinate{
+		VaultName:  c.VaultName,
+		idHostName: c.idHostName,
+		Name:       c.Name,
+		Type:       c.Type,
+	}
+}
+
+func (c *AzKeyVaultObjectCoordinate) SameAs(other AzKeyVaultObjectCoordinate) bool {
+	return c.VaultName == other.VaultName &&
+		c.Name == other.Name &&
+		c.Type == other.Type
 }
 
 func (c *AzKeyVaultObjectCoordinate) DefinesVaultName() bool {

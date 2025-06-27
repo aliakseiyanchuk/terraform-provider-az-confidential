@@ -11,6 +11,8 @@ import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -123,11 +125,17 @@ func (d *ConfidentialAzVaultCertificateResource) Schema(_ context.Context, _ res
 				"vault_name": schema.StringAttribute{
 					Optional:    true,
 					Description: "Vault where the certificate needs to be stored. If omitted, defaults to the vault containing the wrapping key",
+					PlanModifiers: []planmodifier.String{
+						stringplanmodifier.RequiresReplace(),
+					},
 				},
 				"name": schema.StringAttribute{
 					Optional:    false,
 					Required:    true,
 					Description: "Name of the certificate to store",
+					PlanModifiers: []planmodifier.String{
+						stringplanmodifier.RequiresReplace(),
+					},
 				},
 			},
 		},
@@ -257,7 +265,7 @@ func (d *ConfidentialAzVaultCertificateResource) Create(ctx context.Context, req
 		return
 	}
 
-	destSecretCoordinate := d.factory.GetDestinationVaultObjectCoordinate(data.DestinationCert)
+	destSecretCoordinate := d.factory.GetDestinationVaultObjectCoordinate(data.DestinationCert, "certificates")
 
 	d.factory.EnsureCanPlace(ctx, confidentialData, nil, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -299,35 +307,53 @@ func (d *ConfidentialAzVaultCertificateResource) Update(ctx context.Context, req
 		return
 	}
 
+	if d.DoUpdate(ctx, &stateData, &data, resp) {
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (d *ConfidentialAzVaultCertificateResource) DoUpdate(ctx context.Context, stateData *ConfidentialCertificateModel, planData *ConfidentialCertificateModel, resp *resource.UpdateResponse) StateFlushFlag {
 	tflog.Info(ctx, fmt.Sprintf("Available object Id: %s", stateData.Id.ValueString()))
 
-	destSecretCoordinate, err := stateData.GetDestinationCoordinateFromId()
+	destCertCoordinate, err := stateData.GetDestinationCoordinateFromId()
 	if err != nil {
 		resp.Diagnostics.AddError("Error getting destination secret coordinate", err.Error())
-		return
+		return DoNotFlushState
 	}
 
-	certClient, err := d.factory.GetCertificateClient(destSecretCoordinate.VaultName)
+	destCertCoordinateFromCfg := d.factory.GetDestinationVaultObjectCoordinate(planData.DestinationCert, "certificates")
+	if !destCertCoordinateFromCfg.SameAs(destCertCoordinate.AzKeyVaultObjectCoordinate) {
+		resp.Diagnostics.AddError(
+			"Implicit object move",
+			"The destination for this confidential certificate changed after the certificate was created. "+
+				"This can happen e.g. when target vault was not explicitly specified. "+
+				"Delete this certificate instead",
+		)
+		return DoNotFlushState
+	}
+
+	certClient, err := d.factory.GetCertificateClient(destCertCoordinate.VaultName)
 	if err != nil {
-		resp.Diagnostics.AddError("Cannot acquire cert client", fmt.Sprintf("Cannot acquire secret client to vault %s: %s", destSecretCoordinate.VaultName, err.Error()))
-		return
+		resp.Diagnostics.AddError("Cannot acquire cert client", fmt.Sprintf("Cannot acquire secret client to vault %s: %s", destCertCoordinate.VaultName, err.Error()))
+		return DoNotFlushState
 	} else if certClient == nil {
 		resp.Diagnostics.AddError("Cannot acquire cert client", "Cert client returned is nil")
-		return
+		return DoNotFlushState
 	}
 
-	param := d.convertToUpdateCertParam(&data)
+	param := d.convertToUpdateCertParam(planData)
 	tflog.Info(ctx, fmt.Sprintf("Updating with %d tags", len(param.Tags)))
 
-	updateResponse, updateErr := certClient.UpdateCertificate(ctx, destSecretCoordinate.Name, destSecretCoordinate.Version, param, nil)
+	updateResponse, updateErr := certClient.UpdateCertificate(ctx, destCertCoordinate.Name, destCertCoordinate.Version, param, nil)
 
 	if updateErr != nil {
 		resp.Diagnostics.AddError("Error updating secret properties", updateErr.Error())
-		return
+		return DoNotFlushState
 	}
 
-	data.Accept(updateResponse.Certificate)
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	planData.Accept(updateResponse.Certificate)
+	return FlushState
 }
 
 // Delete Performs DELETE operation on the created secret. The implementation disables the secret version

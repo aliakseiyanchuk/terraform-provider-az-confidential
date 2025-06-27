@@ -1,7 +1,7 @@
 # Copyright (c) HashiCorp, Inc.
 
 resource "az-confidential_secret" "conf_secret" {
-  content = "H4sIAAAAAAAA/1TSu9ZzSgCA4d5V7D5rL0SCKXYxDmGcxjFCFyQEI3zOrn6v/+v+t3zr598/SaqGnH9k7ISqE/4e6vtjJxytnkrFnV/k+mW/ZcY8hc3IM6YINNwxowSYR+oSbZ+v+blqEyni2rptwZuHOKLGRxBfs+Ded/ogQtptYgJBgvL7ZK+Of/F5fIT6APs3/4nK3DbW2NcM5jL1kdQGWAuo+zqbzvuO2iIZt4oWOIetvsJX0m9p7nMzSrdccOGgkkW0UK9yah7Nu4d8e31wjSK6VOpWtvWyDc9FWmZgtj5SSLchZ266Fetszj+Tag3NvAUMCJeT0tN7oMhkgrR0iZhmpeAz14x7UhivoSand7pPkVQ1ZehnKxPRMVDoUiggW6dnHE+7aa0W2rkjP/RdtSOseFTuHEnaHeCiHue5n4eZmLtCIulO+Gp+mGOXIGtKPqf+MhiXXcNissxMwt7Eop+04hipA5SlvXcF6YG3VE/+SrYbP86PqKEnw4VFWxvC2EwEZVkTBvK2d33mnc1hv0o/b2bnKHqoOXR11yUzP6+QJ50kHg9dqSfvYo+dqVmVzIzdIpzxMJYrZk5Fq1eyjELfkkElPqnGjR/qaL3kOBegIsWHZpsfz/bGp9Yo9AkKT3p8qwfmdUgaHPsWS6CmhaLakPmtdy5lEfxjqlrxABDKQ1YtEgB0V6VRJyq7MdMw8UOjiXGC2NurNGg88OyMIlsQRNcehxs17psVd4MasPXhO975+t4Glf88TQSCAoTRsrRHBFjSOug/6hev6ih/Y/4/AAD//wjliNPlAgAA"
+  content = "H4sIAAAAAAAA/1TStxaySABA4Z6n2J6zx4CoFFvAEIUBJAxIN0MUYUgi4en37N/tLW/9/f1fkqIZ9l/AsQPFDv4cph7NIBvNoDgtpm8DVaGIQw88f3/7HYvr2SD87gutPMpCL9i4Jewtvo3aR1MO4aycCmady6p7W4RfngLIXKuPLyabPofIvd3bZsBC9RQ0lvrjELFogSt2qXKKgvV8DYitRBMje1IBEnFDcJRpnYiAU/fuXZJVm90FQQXYHnaqpe9eDz80JyOwaP4NwOsKiVc9bj4TzdVLarQxQ8Ph6mbk/YF9GYuA6vshbqu38Wp2LEnqxslm+WN741zwW20F0kdQ90+5MMW23yCFc2R1g1FAL5O5NLE73M7yhNqEqG27isI5IduL1GuT6tnaaVw3/azjBT41wnRwItHxikp+W+bhoFYAN79qYxFLcEXEGHacLt1RyQ/9kmm8quvXZ1PmSXl4XiawTkzIybJgGwcnGetUi4DZNx/heR+XWKJGbFup7Xfg3F5m/spx0t0x2Fyqad5f9La29aPEBI7khjH6NF3PpxkIC4+NH3rZu54HNL8N8m/yHlKPGIF+V/OLc/L6qQjN7RZ3p1UiI5P+FAzlVbBpa+cv5XBdvQg5Lx6ufSviGpZZc9yrrjX1vL1k2nJcw6+CEaWyNAjQnpj85s+utMEwTqYtxcHqBUcro9CTL2nt33pz2HbQ941Ihg6omq9HNGmSH9qP7vucOZixzmb18TwYPs4bnstapYhQtXrvMzFQp7nDz3mp3zESgfgP8wevYsv/x/xvAAAA///TFelf5QIAAA=="
 
   # This secret is enabled for operation. Optionally, there is an option
   # to temporarily disable it.
@@ -18,9 +18,10 @@ resource "az-confidential_secret" "conf_secret" {
   tags = {
     # Fill the tags as desired
     # tagName =  "TagValue"
+    addedTag = "AddedValue"
   }
 
   destination_secret = {
-    name = "example-secret-3"
+    name = "example-secret-3a"
   }
 }

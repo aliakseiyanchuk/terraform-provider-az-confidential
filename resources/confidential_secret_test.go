@@ -1,12 +1,14 @@
 package resources
 
 import (
+	"context"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"testing"
 	"time"
 )
@@ -91,4 +93,32 @@ func Test_CAzVSR_Schema(t *testing.T) {
 	r.Schema(nil, req, &resp)
 	assert.NotNil(t, resp.Schema)
 	assert.False(t, resp.Diagnostics.HasError())
+}
+
+func Test_CAzVSR_DoUpdate_ImplicitMove(t *testing.T) {
+	factory := AZClientsFactoryMock{}
+	factory.On("GetDestinationVaultObjectCoordinate", mock.Anything, "secrets").Return(core.AzKeyVaultObjectCoordinate{
+		VaultName: "movedVault",
+		Name:      "secretName",
+		Type:      "secrets",
+	})
+
+	r := ConfidentialAzVaultSecretResource{}
+	r.factory = &factory
+
+	stateData := ConfidentialSecretModel{}
+	stateData.Id = types.StringValue("https://cfg-vault.vaults.unittests/secrets/secretName/secretVesion")
+
+	planData := ConfidentialSecretModel{
+		DestinationSecret: core.AzKeyVaultObjectCoordinateModel{
+			Name: types.StringValue("secretName"),
+		},
+	}
+
+	resp := resource.UpdateResponse{}
+
+	rv := r.DoUpdate(context.Background(), &stateData, &planData, &resp)
+	assert.True(t, resp.Diagnostics.HasError())
+	assert.Equal(t, "Implicit object move", resp.Diagnostics[0].Summary())
+	assert.Equal(t, DoNotFlushState, rv)
 }

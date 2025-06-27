@@ -1,11 +1,16 @@
 package resources
 
 import (
+	"context"
 	"encoding/base64"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"testing"
 )
 
@@ -66,4 +71,32 @@ func Test_CKMdl_AcceptRsaKey(t *testing.T) {
 
 	assert.False(t, dg.HasError())
 	assert.False(t, ccm.PublicKeyPem.IsNull())
+}
+
+func Test_CAzVKR_DoUpdate_ImplicitMove(t *testing.T) {
+	factory := AZClientsFactoryMock{}
+	factory.On("GetDestinationVaultObjectCoordinate", mock.Anything, "keys").Return(core.AzKeyVaultObjectCoordinate{
+		VaultName: "movedVault",
+		Name:      "keyName",
+		Type:      "keys",
+	})
+
+	r := ConfidentialAzVaultKeyResource{}
+	r.factory = &factory
+
+	stateData := ConfidentialKeyModel{}
+	stateData.Id = types.StringValue("https://cfg-vault.vaults.unittests/keys/keyName/keyVesion")
+
+	planData := ConfidentialKeyModel{
+		DestinationKey: core.AzKeyVaultObjectCoordinateModel{
+			Name: types.StringValue("keyName"),
+		},
+	}
+
+	resp := resource.UpdateResponse{}
+
+	rv := r.DoUpdate(context.Background(), &stateData, &planData, &resp)
+	assert.True(t, resp.Diagnostics.HasError())
+	assert.Equal(t, "Implicit object move", resp.Diagnostics[0].Summary())
+	assert.Equal(t, DoNotFlushState, rv)
 }
