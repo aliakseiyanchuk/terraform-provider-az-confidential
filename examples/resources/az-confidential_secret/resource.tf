@@ -19,9 +19,10 @@ resource "az-confidential_secret" "conf_secret" {
     # Fill the tags as desired
     # tagName =  "TagValue"
     addedTag = "AddedValue"
+    addedTag1 = "AddedValue2"
   }
 
   destination_secret = {
-    name = "example-secret-3a"
+    name = "example-secret-3b"
   }
 }

@@ -72,7 +72,7 @@ func Test_EnsureCanPlace_Errs_IfTrackerReturnsError(t *testing.T) {
 	v := core.VersionedConfidentialData{}
 	dg := diag.Diagnostics{}
 
-	factory.EnsureCanPlace(ctx, v, nil, &dg)
+	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, v, nil, &dg)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "unit test track check error", dg[0].Detail())
 	assert.True(t, hashTracker.AssertExpectations(t))
@@ -93,7 +93,7 @@ func Test_EnsureCanPlace_Errs_IfTrackerReturnsObjectIsAlreadyTracked(t *testing.
 	}
 	dg := diag.Diagnostics{}
 
-	factory.EnsureCanPlace(ctx, v, nil, &dg)
+	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, v, nil, &dg)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "Potential attempt to copy confidential data detected: someone is trying to create a secret from ciphertext that was previously used", dg[0].Detail())
 	assert.True(t, hashTracker.AssertExpectations(t))
@@ -131,7 +131,7 @@ func Test_EnsureCanPlace_Errs_OnMismatchedTargetCoorLabel(t *testing.T) {
 	}
 	dg := diag.Diagnostics{}
 
-	factory.EnsureCanPlace(ctx, v, &reqCoordinate, &dg)
+	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, v, &reqCoordinate, &dg)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "The constraints embedded in the ciphertext of this secret disallow unwrapped into vault vault-a/obj-b", dg[0].Detail())
 	assert.True(t, hashTracker.AssertExpectations(t))
@@ -169,7 +169,7 @@ func Test_EnsureCanPlace_Ok_OnCoordinateLabelMatch(t *testing.T) {
 	}
 	dg := diag.Diagnostics{}
 
-	factory.EnsureCanPlace(ctx, v, &reqCoordinate, &dg)
+	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, v, &reqCoordinate, &dg)
 	assert.False(t, dg.HasError())
 
 	assert.True(t, hashTracker.AssertExpectations(t))
@@ -201,7 +201,7 @@ func Test_EnsureCanPlace_Ok_OnProviderLabelsMatch(t *testing.T) {
 	}
 	dg := diag.Diagnostics{}
 
-	factory.EnsureCanPlace(ctx, v, &reqCoordinate, &dg)
+	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, v, &reqCoordinate, &dg)
 	assert.False(t, dg.HasError())
 
 	assert.True(t, hashTracker.AssertExpectations(t))
@@ -230,7 +230,7 @@ func Test_EnsureCanPlace_Errs_OnLabelMismatchForDataSource(t *testing.T) {
 		}
 		dg := diag.Diagnostics{}
 
-		factory.EnsureCanPlace(ctx, v, nil, &dg)
+		factory.EnsureCanPlaceKeyVaultObjectAt(ctx, v, nil, &dg)
 		assert.True(t, dg.HasError())
 		assert.Equal(t, "The constraints embedded in the ciphertext of this password disallow unwrapping the ciphertext by this provider", dg[0].Detail())
 	}

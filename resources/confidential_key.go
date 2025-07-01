@@ -361,7 +361,7 @@ func (d *ConfidentialAzVaultKeyResource) Create(ctx context.Context, req resourc
 
 	destSecretCoordinate := d.factory.GetDestinationVaultObjectCoordinate(data.DestinationKey, "keys")
 
-	d.factory.EnsureCanPlace(ctx, confidentialData, &destSecretCoordinate, &resp.Diagnostics)
+	d.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, confidentialData, &destSecretCoordinate, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		tflog.Error(ctx, "checking possibility to place this object raised an error")
 		return

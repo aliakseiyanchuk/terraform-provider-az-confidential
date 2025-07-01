@@ -216,6 +216,9 @@ func WrappedConfidentialMaterialModelSchema(moreAttrs map[string]resourceSchema.
 		"id": resourceSchema.StringAttribute{
 			MarkdownDescription: "Identifier of the decryption operation",
 			Computed:            true,
+			PlanModifiers: []planmodifier.String{
+				stringplanmodifier.UseStateForUnknown(),
+			},
 		},
 
 		"wrapping_key": resourceSchema.SingleNestedAttribute{
@@ -411,8 +414,8 @@ func (d *ConfidentialResourceBase) FlushState(ctx context.Context, uuid string, 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 	if trackErr := d.factory.TrackObjectId(ctx, uuid); trackErr != nil {
-		errMsg := fmt.Sprintf("could not track the password entered into the state: %s", trackErr.Error())
+		errMsg := fmt.Sprintf("could not track the object entered into the state: %s", trackErr.Error())
 		tflog.Error(ctx, errMsg)
-		resp.Diagnostics.AddError("incoming object tracking", errMsg)
+		resp.Diagnostics.AddError("incomplete object tracking", errMsg)
 	}
 }

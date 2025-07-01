@@ -267,7 +267,7 @@ func (d *ConfidentialAzVaultCertificateResource) Create(ctx context.Context, req
 
 	destSecretCoordinate := d.factory.GetDestinationVaultObjectCoordinate(data.DestinationCert, "certificates")
 
-	d.factory.EnsureCanPlace(ctx, confidentialData, nil, &resp.Diagnostics)
+	d.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, confidentialData, nil, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		tflog.Error(ctx, "checking possibility to place this object raised an error")
 		return

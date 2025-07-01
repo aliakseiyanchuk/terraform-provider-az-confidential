@@ -24,6 +24,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"slices"
 )
 
 type ObjectHashTracker interface {
@@ -45,8 +46,8 @@ type CachedAzClientsSupplier struct {
 }
 
 // GetSecretsClient return (potentially cached) secrets client to connect to the specified
-// vault name. The `vaultName` is the (url) name of the vault to have the client connect to
-func (ccs *CachedAzClientsSupplier) GetSecretsClient(vaultName string) (*azsecrets.Client, error) {
+// vault name. The `vaultName` is the (url) name of the vault to have the client connected to
+func (ccs *CachedAzClientsSupplier) GetSecretsClient(vaultName string) (core.AzSecretsClientAbstraction, error) {
 	if ccs.secretClients == nil {
 		ccs.secretClients = map[string]*azsecrets.Client{}
 	}
@@ -217,6 +218,10 @@ func (cm *AZClientsFactoryImpl) GetDestinationVaultObjectCoordinate(coord core.A
 	}
 }
 
+func (f *AZClientsFactoryImpl) IsObjectTrackingEnabled() bool {
+	return f.hashTacker != nil
+}
+
 func (f *AZClientsFactoryImpl) IsObjectIdTracked(ctx context.Context, id string) (bool, error) {
 	if f.hashTacker != nil {
 		return f.hashTacker.IsObjectIdTracked(ctx, id)
@@ -235,7 +240,7 @@ func (f *AZClientsFactoryImpl) TrackObjectId(ctx context.Context, id string) err
 
 var _ core.AZClientsFactory = &AZClientsFactoryImpl{}
 
-func (f *AZClientsFactoryImpl) EnsureCanPlace(ctx context.Context, unwrappedData core.VersionedConfidentialData, targetCoord *core.AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics) {
+func (f *AZClientsFactoryImpl) EnsureCanPlaceKeyVaultObjectAt(ctx context.Context, unwrappedData core.VersionedConfidentialData, targetCoord *core.AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics) {
 	if objIsTracked, trackerCheckErr := f.IsObjectIdTracked(ctx, unwrappedData.Uuid); trackerCheckErr != nil {
 		diagnostics.AddError("cannot check tracking status of this secret", trackerCheckErr.Error())
 	} else if objIsTracked {
@@ -246,7 +251,7 @@ func (f *AZClientsFactoryImpl) EnsureCanPlace(ctx context.Context, unwrappedData
 	}
 
 	if f.LabelMatchRequirement == TargetCoordinate && targetCoord != nil {
-		if !core.Contains(targetCoord.GetLabel(), unwrappedData.Labels) {
+		if !slices.Contains(unwrappedData.Labels, targetCoord.GetLabel()) {
 			diagnostics.AddError("mismatched placement", fmt.Sprintf("The constraints embedded in the ciphertext of this %s disallow unwrapped into vault %s/%s", unwrappedData.Type, targetCoord.VaultName, targetCoord.Name))
 		}
 	} else if f.LabelMatchRequirement == ProviderLabels || (f.LabelMatchRequirement == TargetCoordinate && targetCoord == nil) {

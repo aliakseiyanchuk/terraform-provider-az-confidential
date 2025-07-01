@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/segmentio/asm/base64"
+	"strings"
 )
 
 func CreateConfidentialStringData(value, objType string, labels []string) VersionedConfidentialData {
@@ -139,4 +140,8 @@ func ConvertEncryptedMessageToConfidentialData(em EncryptedMessage, decrypter RS
 	}
 
 	return mdl.Export()
+}
+
+func IsResourceNotFoundError(err error) bool {
+	return strings.Index(err.Error(), "RESPONSE 404: 404 Not Found") > 0
 }

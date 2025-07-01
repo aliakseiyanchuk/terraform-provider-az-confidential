@@ -26,11 +26,11 @@ provider "az-confidential" {
   # Track the objects created in storage account to make sure that
   # all confidential objects are unwrapped exactly once across all of your
   # intended installation.
-  storage_account_tracker = {
-    account_name   = var.az_storage_account_name
-    table_name     = var.az_storage_account_table_name
-    partition_name = var.az_storage_account_table_partition
-  }
+  # storage_account_tracker = {
+  #   account_name   = var.az_storage_account_name
+  #   table_name     = var.az_storage_account_table_name
+  #   partition_name = var.az_storage_account_table_partition
+  # }
 
   default_destination_vault_name = var.az_default_vault_name
 }

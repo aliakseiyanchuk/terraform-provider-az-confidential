@@ -105,7 +105,7 @@ func (d *ConfidentialPasswordDataSource) Read(ctx context.Context, req datasourc
 		resp.Diagnostics.AddError("Mismatching confidential object type", fmt.Sprintf("Expected `password`, received `%s`", confidentialData.Type))
 	}
 
-	d.factory.EnsureCanPlace(ctx, confidentialData, nil, &resp.Diagnostics)
+	d.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, confidentialData, nil, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		tflog.Error(ctx, "checking possibility to place this object raised an error")
 		return

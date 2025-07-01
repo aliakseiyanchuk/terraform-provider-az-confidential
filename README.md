@@ -31,7 +31,7 @@ The provider works by implementing a combination of AES and RSA encryption techn
 secret, key, and certificate data so that it can be safely stored in the Terraform source code. The following
 picture explains a high-level design:
 
-![images](./docs-templates/guides/wrapping-scheme.png)
+![images](docs-templates/guides/wrapping-scheme.png)
 
 As a first step, the confidential material would be encrypted using a randomly-generated AES key. This allows
 encrypting a very large sensitive material (such as TLS certificates). The AES key is then wrapped (that is, 
@@ -51,14 +51,14 @@ A safe operation of this provider relies on two main factors:
   server.
 
 ## Setting up
-[This guide](./docs-templates/guides/setup.md) explains the minimal setup process that would be required for
+[This guide](docs-templates/guides/setup.md) explains the minimal setup process that would be required for
 starting evaluation and testing process.
 > Note that further hardening on top op the propose initial setup may be required for the production setup. 
 
 ## How to create Terraform code
 
 The encryption process required for making this to work is complex. The Terraform code (and ciphertext) is
-created with the supplied CLI tool `tfgen`. Consult the [tool instructions](./docs-templates/guides/tfgen.md)
+created with the supplied CLI tool `tfgen`. Consult the [tool instructions](docs-templates/guides/tfgen.md)
 how to use it.
 
 ## Ephemeral Key Material

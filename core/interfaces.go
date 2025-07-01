@@ -33,14 +33,20 @@ func (vcd *VersionedConfidentialData) PayloadAsB64Ptr() *string {
 	}
 }
 
+type AzSecretsClientAbstraction interface {
+	GetSecret(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error)
+	SetSecret(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error)
+	UpdateSecretProperties(ctx context.Context, name string, version string, parameters azsecrets.UpdateSecretPropertiesParameters, options *azsecrets.UpdateSecretPropertiesOptions) (azsecrets.UpdateSecretPropertiesResponse, error)
+}
+
 // AZClientsFactory interface supplying Azure clients to various services.
 type AZClientsFactory interface {
-	GetSecretsClient(vaultName string) (*azsecrets.Client, error)
+	GetSecretsClient(vaultName string) (AzSecretsClientAbstraction, error)
 	GetKeysClient(vaultName string) (*azkeys.Client, error)
 	GetCertificateClient(vaultName string) (*azcertificates.Client, error)
 
-	// GetMergedWrappedKeyCoordinate get merged wrapping key coordinate providing
-	// the values the parameter doesn't specify from teh provider's default settings
+	// GetMergedWrappingKeyCoordinate get merged wrapping key coordinate providing
+	// the values the parameter doesn't specify from the provider's default settings
 	GetMergedWrappingKeyCoordinate(ctx context.Context, param *WrappingKeyCoordinateModel, diag *diag.Diagnostics) WrappingKeyCoordinate
 
 	// GetDestinationVaultObjectCoordinate GetDestinationSecretCoordinate retrieve the target coordinate where the
@@ -49,10 +55,10 @@ type AZClientsFactory interface {
 	// specify this.
 	GetDestinationVaultObjectCoordinate(coordinate AzKeyVaultObjectCoordinateModel, objType string) AzKeyVaultObjectCoordinate
 
-	// EnsureCanPlace ensure that this object can be placed in the destination vault.
-	// EnsureCanPlace ensure that this object can be placed in the destination vault.
-	EnsureCanPlace(ctx context.Context, unwrappedPayload VersionedConfidentialData, targetCoord *AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics)
+	// EnsureCanPlace ensures that this object can be placed in the destination vault.
+	EnsureCanPlaceKeyVaultObjectAt(ctx context.Context, unwrappedPayload VersionedConfidentialData, targetCoord *AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics)
 
+	IsObjectTrackingEnabled() bool
 	IsObjectIdTracked(ctx context.Context, id string) (bool, error)
 	TrackObjectId(ctx context.Context, id string) error
 
