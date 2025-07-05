@@ -6,6 +6,7 @@ import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen"
 	_ "github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/lestrrat-go/jwx/v3/jwk"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -34,13 +35,22 @@ func generatePEMEncodedECKeyResource(t *testing.T) string {
 		"environment": "tf_acceptance_test",
 	}
 
+	ecKey, ecErr := core.PrivateKeyFromData(testkeymaterial.Secp256r1EcPrivateKey)
+	assert.Nil(t, ecErr)
+
+	jwwKey, jwkKeyErr := jwk.Import(ecKey)
+	assert.Nil(t, jwkKeyErr)
+	if _, ok := jwwKey.(jwk.ECDSAPrivateKey); !ok {
+		assert.Fail(t, "Imported key is not EC; the subsequent test should fail")
+	}
+
 	if rv, tfErr := tfgen.OutputKeyTerraformCode(kwp,
-		testkeymaterial.Secp256r1EcPrivateKey,
-		"key", tags); tfErr != nil {
+		jwwKey,
+		tags); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {
-		//print(rv)
+		print(rv)
 		return rv
 	}
 }

@@ -31,6 +31,18 @@ func CreateConfidentialBinaryData(value []byte, objType string, labels []string)
 	return rv
 }
 
+func CreateConfidentialJsonData(value interface{}, objType string, labels []string) VersionedConfidentialData {
+	rv := VersionedConfidentialData{
+		Uuid:   uuid.New().String(),
+		Type:   objType,
+		Labels: labels,
+	}
+
+	rv.ImportJsonSerializable(value)
+
+	return rv
+}
+
 func CreateDualConfidentialData(value []byte, strValue string, objType string, labels []string) VersionedConfidentialData {
 	rv := VersionedConfidentialData{
 		Uuid:       uuid.New().String(),

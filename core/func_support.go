@@ -1,7 +1,10 @@
 package core
 
-import "github.com/hashicorp/terraform-plugin-framework/types"
+import (
+	"github.com/hashicorp/terraform-plugin-framework/types"
+)
 
+type Consumer[T any] func(T)
 type Supplier[T any] func() T
 type Locator[T any, V any] func(t *T) V
 
@@ -19,4 +22,56 @@ func GetFirstString[T any](loc Locator[T, types.String], sources ...*T) string {
 	}
 
 	return ""
+}
+
+type Mapper[K, V any] func(K) V
+
+func MapSlice[K, V any](mapper Mapper[K, V], inputSlice []K) []V {
+	rv := make([]V, len(inputSlice))
+	for i, k := range inputSlice {
+		rv[i] = mapper(k)
+	}
+
+	return rv
+}
+
+type Comparator[K any] = func(a, b K) bool
+type EquivalenceComparator[K, V any] = func(a K, b V) bool
+
+func SameBag[K any](comparator Comparator[K], a, b []K) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+outer:
+	for _, aObj := range a {
+		for _, bObj := range b {
+			if comparator(aObj, bObj) {
+				continue outer
+			}
+		}
+
+		return false
+	}
+
+	return true
+}
+
+func EquivalentBag[K, V any](comparator EquivalenceComparator[K, V], a []K, b []V) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+outer:
+	for _, aObj := range a {
+		for _, bObj := range b {
+			if comparator(aObj, bObj) {
+				continue outer
+			}
+		}
+
+		return false
+	}
+
+	return true
 }

@@ -98,7 +98,7 @@ func EntryPoint() {
 	}
 
 	subCmd := baseFlags.Args()[0]
-	var generator func(ContentWrappingParams, bool, []string) (string, error)
+	var generator func(ContentWrappingParams, InputReader, bool, []string) (string, error)
 
 	switch subCmd {
 	case "secret":
@@ -122,7 +122,7 @@ func EntryPoint() {
 		os.Exit(1)
 	}
 
-	tfCode, err := generator(baseParams, !outputCiphertextOnly, baseFlags.Args()[1:])
+	tfCode, err := generator(baseParams, ReadInput, !outputCiphertextOnly, baseFlags.Args()[1:])
 	if err != nil {
 		// Error message must be printed by the sub-command
 		fmt.Println("Cannot produce template:")

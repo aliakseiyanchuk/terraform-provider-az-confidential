@@ -33,7 +33,7 @@ func init() {
 		"Input is base-64 encoded")
 }
 
-func GenerateConfidentialSecretTerraformTemplate(kwp ContentWrappingParams, produceTFCode bool, args []string) (string, error) {
+func GenerateConfidentialSecretTerraformTemplate(kwp ContentWrappingParams, inputReader InputReader, produceTFCode bool, args []string) (string, error) {
 	if vErr := kwp.ValidateHasDestination(); vErr != nil {
 		return "", vErr
 	}
@@ -42,7 +42,7 @@ func GenerateConfidentialSecretTerraformTemplate(kwp ContentWrappingParams, prod
 		return "", parseErr
 	}
 
-	secretData, readErr := ReadInput("Enter secret data",
+	secretData, readErr := inputReader("Enter secret data",
 		secretParams.secretFromFile,
 		secretParams.secretInputIsBase64,
 		false)

@@ -26,12 +26,12 @@ func init() {
 		"Input is base-64 encoded")
 }
 
-func GenerateConfidentialPasswordTemplate(kwp ContentWrappingParams, outputTFCode bool, args []string) (string, error) {
+func GenerateConfidentialPasswordTemplate(kwp ContentWrappingParams, inputReader InputReader, outputTFCode bool, args []string) (string, error) {
 	if parseErr := secretCmd.Parse(args); parseErr != nil {
 		return "", parseErr
 	}
 
-	passwordData, readErr := ReadInput("Enter password data",
+	passwordData, readErr := inputReader("Enter password data",
 		secretParams.secretFromFile,
 		secretParams.secretInputIsBase64,
 		false)

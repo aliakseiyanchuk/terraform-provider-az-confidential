@@ -38,7 +38,7 @@ func (m *AZClientsFactoryMock) GivenGetSecretClientWillReturnNilClient(vaultAddr
 		Return(nil, nil)
 }
 
-func (m *AZClientsFactoryMock) GivenGetdestinationvaultobjectcoordinate(vaultAddr, objectType, objectName string) {
+func (m *AZClientsFactoryMock) GivenGetdestinationVaultObjectCoordinate(vaultAddr, objectType, objectName string) {
 	m.Mock.
 		On("GetDestinationVaultObjectCoordinate", mock.Anything, objectType).
 		Return(core.AzKeyVaultObjectCoordinate{
@@ -46,6 +46,24 @@ func (m *AZClientsFactoryMock) GivenGetdestinationvaultobjectcoordinate(vaultAdd
 			Name:      objectName,
 			Type:      objectType,
 		})
+}
+
+func (m *AZClientsFactoryMock) GivenGetKeysClientWillReturnError(vaultAddr, msg string) {
+	m.Mock.
+		On("GetKeysClient", vaultAddr).
+		Return(nil, errors.New(msg))
+}
+
+func (m *AZClientsFactoryMock) GivenGetKeysClientWillReturnNilClient(vaultAddr string) {
+	m.Mock.
+		On("GetKeysClient", vaultAddr).
+		Return(nil, nil)
+}
+
+func (m *AZClientsFactoryMock) GivenGetKeysClientWillReturn(vaultAddr string, cl core.AzKeyClientAbstraction) {
+	m.Mock.
+		On("GetKeysClient", vaultAddr).
+		Return(cl, nil)
 }
 
 // ------------------
@@ -62,9 +80,14 @@ func (m *AZClientsFactoryMock) GetSecretsClient(vaultName string) (core.AzSecret
 	return rvCL, rv.Error(1)
 }
 
-func (m *AZClientsFactoryMock) GetKeysClient(vaultName string) (*azkeys.Client, error) {
+func (m *AZClientsFactoryMock) GetKeysClient(vaultName string) (core.AzKeyClientAbstraction, error) {
 	rv := m.Mock.Called(vaultName)
-	return rv.Get(0).(*azkeys.Client), rv.Error(1)
+
+	var rvCl core.AzKeyClientAbstraction = nil
+	if rv.Get(0) != nil {
+		rvCl = rv.Get(0).(core.AzKeyClientAbstraction)
+	}
+	return rvCl, rv.Error(1)
 }
 
 func (m *AZClientsFactoryMock) GetCertificateClient(vaultName string) (*azcertificates.Client, error) {
@@ -106,7 +129,7 @@ func (m *AZClientsFactoryMock) IsObjectTrackingEnabled() bool {
 	return rv.Get(0).(bool)
 }
 
-func NewAzObjectNotFoundError() error {
+func MockedAzObjectNotFoundError() error {
 	return errors.New("---------------\nRESPONSE 404: 404 Not Found")
 }
 
@@ -141,7 +164,7 @@ func (m *SecretClientMock) GivenUpdateSecretPropertiesWillSucceed(secretName, se
 func (m *SecretClientMock) GivenGetSecretWillReturnObjectNotFound(secretName, secretVersion string) {
 	var opt *azsecrets.GetSecretOptions = nil
 	m.On("GetSecret", mock.Anything, secretName, secretVersion, opt).
-		Return(azsecrets.GetSecretResponse{}, NewAzObjectNotFoundError())
+		Return(azsecrets.GetSecretResponse{}, MockedAzObjectNotFoundError())
 }
 
 func (m *SecretClientMock) GivenGetSecretWillReturnError(secretName, secretVersion, errorMsg string) {
@@ -195,4 +218,78 @@ func (m *SecretClientMock) SetSecret(ctx context.Context, name string, param azs
 func (m *SecretClientMock) UpdateSecretProperties(ctx context.Context, name string, version string, parameters azsecrets.UpdateSecretPropertiesParameters, options *azsecrets.UpdateSecretPropertiesOptions) (azsecrets.UpdateSecretPropertiesResponse, error) {
 	args := m.Mock.Called(ctx, name, version, parameters, options)
 	return args.Get(0).(azsecrets.UpdateSecretPropertiesResponse), args.Error(1)
+}
+
+type KeysClientMock struct {
+	mock.Mock
+}
+
+func (k *KeysClientMock) GivenUpdateKeyReturnsError(keyName, keyVersion, errorMessage string) {
+	var opts *azkeys.UpdateKeyOptions = nil
+
+	k.On("UpdateKey", mock.Anything, keyName, keyVersion, mock.Anything, opts).
+		Return(azkeys.UpdateKeyResponse{}, errors.New(errorMessage))
+}
+
+func (k *KeysClientMock) GivenUpdateKey(keyName, keyVersion string) {
+	var opts *azkeys.UpdateKeyOptions = nil
+
+	k.On("UpdateKey", mock.Anything, keyName, keyVersion, mock.Anything, opts).
+		Return(azkeys.UpdateKeyResponse{}, nil)
+}
+
+func (k *KeysClientMock) GivenImportKeyReturnsError(keyName, errorMessage string) {
+	var opts *azkeys.ImportKeyOptions = nil
+
+	k.On("ImportKey", mock.Anything, keyName, mock.Anything, opts).
+		Return(azkeys.ImportKeyResponse{}, errors.New(errorMessage))
+}
+
+func (k *KeysClientMock) GivenImportKey(keyName string) {
+	var opts *azkeys.ImportKeyOptions = nil
+
+	k.On("ImportKey", mock.Anything, keyName, mock.Anything, opts).
+		Return(azkeys.ImportKeyResponse{}, nil)
+}
+
+func (k *KeysClientMock) GivenGetKeyReturnsError(name, version, errorMsg string) {
+	var options *azkeys.GetKeyOptions = nil
+	k.On("GetKey", mock.Anything, name, version, options).
+		Return(azkeys.GetKeyResponse{}, errors.New(errorMsg))
+}
+
+func (k *KeysClientMock) GivenGetKey(name, version string) {
+	var options *azkeys.GetKeyOptions = nil
+	k.On("GetKey", mock.Anything, name, version, options).
+		Return(azkeys.GetKeyResponse{
+			KeyBundle: azkeys.KeyBundle{
+				Managed: to.Ptr(false),
+			},
+		}, nil)
+}
+
+func (k *KeysClientMock) GivenGetKeyReturnsObjectNotFound(name, version string) {
+	var options *azkeys.GetKeyOptions = nil
+	k.On("GetKey", mock.Anything, name, version, options).
+		Return(azkeys.GetKeyResponse{}, MockedAzObjectNotFoundError())
+}
+
+func (k *KeysClientMock) ImportKey(ctx context.Context, name string, parameters azkeys.ImportKeyParameters, options *azkeys.ImportKeyOptions) (azkeys.ImportKeyResponse, error) {
+	args := k.Called(ctx, name, parameters, options)
+	return args.Get(0).(azkeys.ImportKeyResponse), args.Error(1)
+}
+
+func (k *KeysClientMock) Decrypt(ctx context.Context, name string, version string, parameters azkeys.KeyOperationParameters, options *azkeys.DecryptOptions) (azkeys.DecryptResponse, error) {
+	args := k.Called(ctx, name, version, parameters, options)
+	return args.Get(0).(azkeys.DecryptResponse), args.Error(1)
+}
+
+func (k *KeysClientMock) UpdateKey(ctx context.Context, name string, version string, parameters azkeys.UpdateKeyParameters, options *azkeys.UpdateKeyOptions) (azkeys.UpdateKeyResponse, error) {
+	args := k.Called(ctx, name, version, parameters, options)
+	return args.Get(0).(azkeys.UpdateKeyResponse), args.Error(1)
+}
+
+func (k *KeysClientMock) GetKey(ctx context.Context, name string, version string, options *azkeys.GetKeyOptions) (azkeys.GetKeyResponse, error) {
+	args := k.Called(ctx, name, version, options)
+	return args.Get(0).(azkeys.GetKeyResponse), args.Error(1)
 }

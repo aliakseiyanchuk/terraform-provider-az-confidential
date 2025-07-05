@@ -67,9 +67,9 @@ func (ccs *CachedAzClientsSupplier) GetSecretsClient(vaultName string) (core.AzS
 	return client, nil
 }
 
-// GetKeysClient return (potentially cached) secrets client to connect to the specified
+// GetKeysClient return (potentially cached) keys client to connect to the specified
 // vault name. The `vaultName` is the (url) name of the vault to have the client connect to
-func (ccs *CachedAzClientsSupplier) GetKeysClient(vaultName string) (*azkeys.Client, error) {
+func (ccs *CachedAzClientsSupplier) GetKeysClient(vaultName string) (core.AzKeyClientAbstraction, error) {
 	if ccs.keysClients == nil {
 		ccs.keysClients = map[string]*azkeys.Client{}
 	}

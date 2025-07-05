@@ -177,13 +177,17 @@ func (p *BaseTFTemplateParms) NotAfterExample() string {
 }
 
 func (p *BaseTFTemplateParms) Render(templateName, templateStr string) (string, error) {
+	return p.RenderObject(templateName, templateStr, p)
+}
+
+func (p *BaseTFTemplateParms) RenderObject(templateName, templateStr string, obj interface{}) (string, error) {
 	tmpl, templErr := template.New(templateName).Parse(templateStr)
 	if templErr != nil {
 		panic(templErr)
 	}
 
 	var rv bytes.Buffer
-	err := tmpl.Execute(&rv, p)
+	err := tmpl.Execute(&rv, obj)
 
 	return rv.String(), err
 }

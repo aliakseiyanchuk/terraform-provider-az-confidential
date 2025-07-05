@@ -47,7 +47,7 @@ func init() {
 		"Do not try parsing DER-encode files")
 }
 
-func GenerateConfidentialCertificateTerraformTemplate(kwp ContentWrappingParams, outputTFCOde bool, args []string) (string, error) {
+func GenerateConfidentialCertificateTerraformTemplate(kwp ContentWrappingParams, inputReader InputReader, outputTFCOde bool, args []string) (string, error) {
 	if vErr := kwp.ValidateHasDestination(); vErr != nil {
 		return "", vErr
 	}
@@ -56,7 +56,7 @@ func GenerateConfidentialCertificateTerraformTemplate(kwp ContentWrappingParams,
 		return "", parseErr
 	}
 
-	certData, readErr := ReadInput("Enter certificate data (hit Enter twice to end input)",
+	certData, readErr := inputReader("Enter certificate data (hit Enter twice to end input)",
 		certParams.secretFromFile,
 		certParams.secretInputIsBase64,
 		true)

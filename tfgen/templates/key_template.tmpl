@@ -9,15 +9,23 @@ resource "az-confidential_key" "{{ .TFBlockName }}" {
   # to temporarily disable it.
   enabled = true
 
+  {{- if .HasKeyOperations }}
   key_opts = toset([
-    "decrypt",
-    "encrypt",
-    "import",
-    "sign",
-    "unwrapKey",
-    "verify",
-    "wrapKey"
+  {{- range $value := .KeyOperations }}
+    "{{ $value }}",
+  {{- end }}
   ])
+  {{- else }}
+  # The key operations supported by this confidential key can be controlled
+  # using th key_opts property. Set this to the list of operations the Key
+  # Vault service supports for this type.
+  #
+  # Note that it is not possible to
+  # verify the correctness of these settings before the ciphertext is
+  # decrypted.
+  #
+  # key_opts = toset([ ... desired key operations ...])
+  {{- end }}
 
   # The key version cannot be used before this date
   # Needs to be formatted yyyy-mm-ddTHH:MM:SS'Z'

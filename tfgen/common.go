@@ -11,6 +11,8 @@ import (
 	"strings"
 )
 
+type InputReader func(prompt, fn string, base64Decode bool, multiline bool) ([]byte, error)
+
 func ReadInput(prompt, fn string, base64Decode bool, multiline bool) ([]byte, error) {
 	var outputBytes []byte
 	if len(fn) > 0 {

@@ -6,6 +6,7 @@ import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen"
 	_ "github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/lestrrat-go/jwx/v3/jwk"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -34,9 +35,18 @@ func generatePEMEncodedRsaKeyResource(t *testing.T) string {
 		"environment": "tf_acceptance_test",
 	}
 
+	rsaKey, rsaErr := core.PrivateKeyFromData(testkeymaterial.EphemeralRsaKeyText)
+	assert.Nil(t, rsaErr)
+
+	jwwKey, jwkKeyErr := jwk.Import(rsaKey)
+	assert.Nil(t, jwkKeyErr)
+	if _, ok := jwwKey.(jwk.RSAPrivateKey); !ok {
+		assert.Fail(t, "Imported key is not RSA; the subsequent test should fail")
+	}
+
 	if rv, tfErr := tfgen.OutputKeyTerraformCode(kwp,
-		testkeymaterial.EphemeralRsaKeyText,
-		"key", tags); tfErr != nil {
+		jwwKey,
+		tags); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {

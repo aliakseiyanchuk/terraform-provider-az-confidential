@@ -17,11 +17,13 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/lestrrat-go/jwx/v3/jwk"
 	"golang.org/x/crypto/ssh"
 	"math/big"
 )
@@ -39,23 +41,60 @@ type ConfidentialKeyModel struct {
 	PublicKeyOpenSSH types.String `tfsdk:"public_key_openssh"`
 }
 
-func (cm *ConfidentialKeyModel) GetKeyOperations() []*azkeys.KeyOperation {
+func (cm *ConfidentialKeyModel) GetKeyOperations(ctx context.Context) []*azkeys.KeyOperation {
 	var rv []*azkeys.KeyOperation
 
-	elements := make([]types.String, 0, len(cm.KeyOperations.Elements()))
+	if !cm.KeyOperations.IsNull() && !cm.KeyOperations.IsUnknown() {
+		strElements := make([]string, len(cm.KeyOperations.Elements()))
+		cm.KeyOperations.ElementsAs(ctx, &strElements, false)
 
-	for _, val := range elements {
-		strVal := val.ValueString()
-
-		var selectedKeyOp azkeys.KeyOperation
-		for _, keyOp := range azkeys.PossibleKeyOperationValues() {
-			if strVal == string(keyOp) {
-				rv = append(rv, &selectedKeyOp)
+	outer:
+		for _, val := range strElements {
+			for _, keyOp := range azkeys.PossibleKeyOperationValues() {
+				if val == string(keyOp) {
+					rv = append(rv, &keyOp)
+					continue outer
+				}
 			}
 		}
 	}
 
 	return rv
+}
+
+func (cm *ConfidentialKeyModel) ConvertToImportKeyParam(ctx context.Context) azkeys.ImportKeyParameters {
+	keyAttributes := azkeys.KeyAttributes{
+		Enabled:   cm.Enabled.ValueBoolPointer(),
+		Expires:   cm.NotAfterDateAtPtr(),
+		NotBefore: cm.NotBeforeDateAtPtr(),
+	}
+
+	params := azkeys.ImportKeyParameters{
+		KeyAttributes: &keyAttributes,
+		Tags:          cm.TagsAsPtr(),
+		HSM:           cm.HSM.ValueBoolPointer(),
+		Key: &azkeys.JSONWebKey{
+			KeyOps: cm.GetKeyOperations(ctx),
+		},
+	}
+
+	return params
+}
+
+func (cm *ConfidentialKeyModel) ConvertToUpdateKeyParam(ctx context.Context) azkeys.UpdateKeyParameters {
+	keyAttributes := azkeys.KeyAttributes{
+		Enabled:   cm.Enabled.ValueBoolPointer(),
+		Expires:   cm.NotAfterDateAtPtr(),
+		NotBefore: cm.NotBeforeDateAtPtr(),
+	}
+
+	params := azkeys.UpdateKeyParameters{
+		KeyAttributes: &keyAttributes,
+		Tags:          cm.TagsAsPtr(),
+		KeyOps:        cm.GetKeyOperations(ctx),
+	}
+
+	return params
 }
 
 func (cm *ConfidentialKeyModel) GetDestinationKeyCoordinate(defaultVaultName string) core.AzKeyVaultObjectCoordinate {
@@ -64,26 +103,37 @@ func (cm *ConfidentialKeyModel) GetDestinationKeyCoordinate(defaultVaultName str
 		vaultName = cm.DestinationKey.VaultName.ValueString()
 	}
 
-	secretName := cm.DestinationKey.Name.ValueString()
+	keyName := cm.DestinationKey.Name.ValueString()
 	return core.AzKeyVaultObjectCoordinate{
 		VaultName: vaultName,
-		Name:      secretName,
+		Name:      keyName,
+		Type:      "keys",
 	}
 }
 
 func (cm *ConfidentialKeyModel) Accept(key azkeys.KeyBundle, diagnostics *diag.Diagnostics) {
-	cm.Id = types.StringValue(string(*key.Key.KID))
-
-	if key.Tags != nil {
-		tfTags := map[string]attr.Value{}
-
-		for k, v := range key.Tags {
-			if v != nil {
-				tfTags[k] = types.StringValue(*v)
-			}
-		}
-		cm.Tags, _ = types.MapValue(types.StringType, tfTags)
+	if key.Key == nil {
+		diagnostics.AddWarning("Superfluous key conversion", "Received null key to convert into existing state")
+		return
 	}
+
+	if key.Key.KID != nil {
+		if cm.Id.IsUnknown() {
+			cm.Id = types.StringValue(string(*key.Key.KID))
+		} else if cm.Id.ValueString() != string(*key.Key.KID) {
+			diagnostics.AddError("Conflicting key", "Key identifier cannot be changed after the key was created; yet a different value was received")
+		}
+
+		if cm.KeyVersion.IsUnknown() {
+			cm.KeyVersion = types.StringValue(key.Key.KID.Version())
+		} else if cm.KeyVersion.ValueString() != key.Key.KID.Version() {
+			diagnostics.AddError("Conflicting key version", "Key identifier cannot be changed after the key was created; yet a different version was received")
+		}
+	} else {
+		diagnostics.AddError("Conversion request for key having nil key identifier", "Every key must have a valid Key ID when converting")
+	}
+
+	cm.ConvertAzMap(key.Tags, &cm.Tags)
 
 	if key.Attributes != nil {
 		cm.NotBefore = core.FormatTime(key.Attributes.NotBefore)
@@ -91,7 +141,25 @@ func (cm *ConfidentialKeyModel) Accept(key azkeys.KeyBundle, diagnostics *diag.D
 		cm.ConvertAzBool(key.Attributes.Enabled, &cm.Enabled)
 	}
 
-	cm.KeyVersion = types.StringValue(key.Key.KID.Version())
+	// Convert key options if these are specified
+	if key.Key.KeyOps != nil && len(key.Key.KeyOps) > 0 {
+		keyOps, keyOpsErr := core.ConvertToTerraformSet(
+			func(k *azkeys.KeyOperation) attr.Value { return types.StringValue(string(*k)) },
+			types.StringType,
+			key.Key.KeyOps...)
+
+		if keyOpsErr != nil {
+			diagnostics.AddError("Error converting key operations", keyOpsErr.Error())
+		} else {
+			cm.KeyOperations = keyOps
+		}
+	} else {
+		// The data in the model will change only if the model
+		if cm.SetContainsValues(&cm.KeyOperations) || cm.KeyOperations.IsUnknown() {
+			cm.KeyOperations = types.SetNull(types.StringType)
+		}
+	}
+
 	cm.PublicKeyPem = types.StringNull()
 	cm.PublicKeyOpenSSH = types.StringNull()
 
@@ -159,18 +227,238 @@ func (cm *ConfidentialKeyModel) assignPublicKeysAttrs(pubKey interface{}, dg *di
 
 }
 
-type ConfidentialAzVaultKeyResource struct {
-	ConfidentialResourceBase
-}
-
-func (d *ConfidentialAzVaultKeyResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_key"
-}
-
 //go:embed confidential_key.md
 var confidentialKeyResourceMarkdownDescription string
 
-func (d *ConfidentialAzVaultKeyResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+type AzKeyVaultKeyResourceSpecializer struct {
+	factory core.AZClientsFactory
+}
+
+func (a *AzKeyVaultKeyResourceSpecializer) SetFactory(factory core.AZClientsFactory) {
+	a.factory = factory
+}
+
+func (a *AzKeyVaultKeyResourceSpecializer) NewTerraformModel() ConfidentialKeyModel {
+	return ConfidentialKeyModel{}
+}
+
+func (a *AzKeyVaultKeyResourceSpecializer) AssignIdTo(azObj azkeys.KeyBundle, tfModel *ConfidentialKeyModel) {
+	kid := azObj.Key.KID
+	if kid != nil {
+		tfModel.Id = types.StringValue(string(*kid))
+	}
+}
+
+func (a *AzKeyVaultKeyResourceSpecializer) ConvertToTerraform(azObj azkeys.KeyBundle, tfModel *ConfidentialKeyModel) diag.Diagnostics {
+	dg := diag.Diagnostics{}
+	tfModel.Accept(azObj, &dg)
+	return dg
+}
+
+func (a *AzKeyVaultKeyResourceSpecializer) GetConfidentialMaterialFrom(mdl ConfidentialKeyModel) ConfidentialMaterialModel {
+	return mdl.ConfidentialMaterialModel
+}
+
+func (a *AzKeyVaultKeyResourceSpecializer) GetSupportedConfidentialMaterialTypes() []string {
+	return []string{"key", "symmetric-key"}
+}
+
+func (a *AzKeyVaultKeyResourceSpecializer) CheckPlacement(ctx context.Context, tfModel *ConfidentialKeyModel, cf core.VersionedConfidentialData) diag.Diagnostics {
+	rv := diag.Diagnostics{}
+
+	destKeyCoordinate := a.factory.GetDestinationVaultObjectCoordinate(tfModel.DestinationKey, "keys")
+
+	a.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, cf, &destKeyCoordinate, &rv)
+	return rv
+}
+
+func (a *AzKeyVaultKeyResourceSpecializer) DoRead(ctx context.Context, data *ConfidentialKeyModel) (azkeys.KeyBundle, ResourceExistenceCheck, diag.Diagnostics) {
+	rv := diag.Diagnostics{}
+
+	// The key version was never created; nothing needs to be read here.
+	if data.Id.IsUnknown() {
+		return azkeys.KeyBundle{}, ResourceNotYetCreated, rv
+
+	}
+
+	destSecretCoordinate, err := data.GetDestinationCoordinateFromId()
+	tflog.Info(ctx, fmt.Sprintf("Received read ident: %s", data.Id.ValueString()))
+
+	if err != nil {
+		rv.AddError("cannot establish reference to the created key version", err.Error())
+		return azkeys.KeyBundle{}, ResourceCheckError, rv
+	}
+
+	keyClient, err := a.factory.GetKeysClient(destSecretCoordinate.VaultName)
+	if err != nil {
+		rv.AddError("Cannot acquire keys client", fmt.Sprintf("Cannot acquire keys client to vault %s: %s", destSecretCoordinate.VaultName, err.Error()))
+		return azkeys.KeyBundle{}, ResourceCheckError, rv
+	} else if keyClient == nil {
+		rv.AddError("Cannot acquire keys client", "Keys client returned is nil")
+		return azkeys.KeyBundle{}, ResourceCheckError, rv
+	}
+
+	keyState, err := keyClient.GetKey(ctx, destSecretCoordinate.Name, destSecretCoordinate.Version, nil)
+	if err != nil {
+		if core.IsResourceNotFoundError(err) {
+			if a.factory.IsObjectTrackingEnabled() {
+				rv.AddWarning(
+					"Key removed from key vault",
+					fmt.Sprintf("Key %s version %s is no longer in vault %s. The provider tracks confidential objects; creating this key again will be rejected as duplicate. If creathing this key again is intentional, re-encrypt ciphertext.",
+						destSecretCoordinate.Name,
+						destSecretCoordinate.Version,
+						destSecretCoordinate.VaultName,
+					),
+				)
+			}
+
+			return azkeys.KeyBundle{}, ResourceNotFound, rv
+		} else {
+			rv.AddError("Cannot read key", fmt.Sprintf("Cannot acquire key %s version %s from vault %s: %s",
+				destSecretCoordinate.Name,
+				destSecretCoordinate.Version,
+				destSecretCoordinate.VaultName,
+				err.Error()))
+			return keyState.KeyBundle, ResourceCheckError, rv
+		}
+	}
+
+	return keyState.KeyBundle, ResourceExists, rv
+}
+
+func (a *AzKeyVaultKeyResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialKeyModel, confidentialData core.VersionedConfidentialData) (azkeys.KeyBundle, diag.Diagnostics) {
+	rvDiag := diag.Diagnostics{}
+
+	gunzip, gunzipErr := core.GZipDecompress(confidentialData.BinaryData)
+	if gunzipErr != nil {
+		rvDiag.AddError("Binary data is not GZip-compressed", gunzipErr.Error())
+		return azkeys.KeyBundle{}, rvDiag
+	}
+
+	params := data.ConvertToImportKeyParam(ctx)
+
+	jwkSet, jwkErr := jwk.Parse(gunzip)
+	if jwkErr != nil {
+		rvDiag.AddError("Cannot read JSON Web Key data", jwkErr.Error())
+		return azkeys.KeyBundle{}, rvDiag
+	}
+	if convertErr := core.ConvertJWKSToAzJWK(jwkSet, params.Key); convertErr != nil {
+		rvDiag.AddError("Cannot convert supplied JSON Web Key to required Azure data structure; please use supplied conversion tool or provider method", convertErr.Error())
+		return azkeys.KeyBundle{}, rvDiag
+	}
+
+	destSecretCoordinate := a.factory.GetDestinationVaultObjectCoordinate(data.DestinationKey, "keys")
+	keysClient, secErr := a.factory.GetKeysClient(destSecretCoordinate.VaultName)
+	if secErr != nil {
+		rvDiag.AddError("Az key vault keys client cannot be retrieved", secErr.Error())
+		return azkeys.KeyBundle{}, rvDiag
+	} else if keysClient == nil {
+		rvDiag.AddError("Az key vault keys client cannot be retrieved", "Nil client returned while no error was raised. This is a provider bug. Please report this")
+		return azkeys.KeyBundle{}, rvDiag
+	}
+
+	setResp, setErr := keysClient.ImportKey(ctx, destSecretCoordinate.Name, params, nil)
+	if setErr != nil {
+		rvDiag.AddError("Error import key", setErr.Error())
+		return azkeys.KeyBundle{}, rvDiag
+	}
+
+	return setResp.KeyBundle, rvDiag
+}
+
+func (a *AzKeyVaultKeyResourceSpecializer) DoUpdate(ctx context.Context, data *ConfidentialKeyModel) (azkeys.KeyBundle, diag.Diagnostics) {
+	tflog.Info(ctx, fmt.Sprintf("Available object Id: %s", data.Id.ValueString()))
+
+	rv := diag.Diagnostics{}
+	destKeyCoordinate, err := data.GetDestinationCoordinateFromId()
+	if err != nil {
+		rv.AddError("Error getting destination key coordinate", err.Error())
+		return azkeys.KeyBundle{}, rv
+	}
+
+	destKeyCoordinateFromCfg := a.factory.GetDestinationVaultObjectCoordinate(data.DestinationKey, "keys")
+	if !destKeyCoordinateFromCfg.SameAs(destKeyCoordinate.AzKeyVaultObjectCoordinate) {
+		rv.AddError(
+			"Implicit object move",
+			"The destination for this confidential key changed after the key was created. "+
+				"This can happen e.g. when target vault was not explicitly specified. "+
+				"Delete this key instead",
+		)
+		return azkeys.KeyBundle{}, rv
+	}
+
+	keyClient, err := a.factory.GetKeysClient(destKeyCoordinate.VaultName)
+	if err != nil {
+		rv.AddError("Cannot acquire keys client", fmt.Sprintf("Cannot acquire secret client to vault %s: %s", destKeyCoordinate.VaultName, err.Error()))
+		return azkeys.KeyBundle{}, rv
+	} else if keyClient == nil {
+		rv.AddError("Cannot acquire keys client", "Keys client returned is nil")
+		return azkeys.KeyBundle{}, rv
+	}
+
+	param := data.ConvertToUpdateKeyParam(ctx)
+	tflog.Info(ctx, fmt.Sprintf("Updating with %d tags", len(param.Tags)))
+
+	updateResponse, updateErr := keyClient.UpdateKey(ctx, destKeyCoordinate.Name, destKeyCoordinate.Version, param, nil)
+
+	if updateErr != nil {
+		rv.AddError("Error updating key properties", updateErr.Error())
+		return azkeys.KeyBundle{}, rv
+	}
+
+	return updateResponse.KeyBundle, rv
+}
+
+func (a *AzKeyVaultKeyResourceSpecializer) DoDelete(ctx context.Context, data *ConfidentialKeyModel) diag.Diagnostics {
+	rv := diag.Diagnostics{}
+
+	if data.Id.IsUnknown() {
+		tflog.Warn(ctx, "Deleting resource that doesn't have recorded versioned coordinate.")
+		rv.AddWarning("Superfluous delete call", "Delete key was called where key Id is not yet known")
+		return rv
+	}
+
+	destCoordinate, err := data.GetDestinationCoordinateFromId()
+	if err != nil {
+		rv.AddError("Error getting destination key coordinate", err.Error())
+		return rv
+	}
+
+	keysClient, err := a.factory.GetKeysClient(destCoordinate.VaultName)
+	if err != nil {
+		rv.AddError("Cannot acquire keys client", fmt.Sprintf("Cannot acquire secret client to vault %s: %s", destCoordinate.VaultName, err.Error()))
+		return rv
+	} else if keysClient == nil {
+		rv.AddError("Cannot acquire keys client", "Keys client returned is nil. This is a provider error. Please report this issue")
+		return rv
+	}
+
+	enabledVal := false
+
+	_, azErr := keysClient.UpdateKey(ctx,
+		destCoordinate.Name,
+		destCoordinate.Version,
+		azkeys.UpdateKeyParameters{
+			KeyAttributes: &azkeys.KeyAttributes{
+				Enabled: &enabledVal,
+			},
+		},
+		nil,
+	)
+
+	if azErr != nil {
+		rv.AddError("Cannot disable key version", fmt.Sprintf("Request to disable key's %s version %s in vault %s failed: %s",
+			destCoordinate.Name,
+			destCoordinate.Version,
+			destCoordinate.VaultName,
+			azErr.Error(),
+		))
+	}
+
+	return rv
+}
+
+func NewConfidentialAzVaultKeyResource() resource.Resource {
 	specificAttrs := map[string]schema.Attribute{
 		"key_opts": schema.SetAttribute{
 			Description:         "Key operations this key is allowed",
@@ -200,6 +488,9 @@ func (d *ConfidentialAzVaultKeyResource) Schema(_ context.Context, _ resource.Sc
 			Description:         "Import this key into HSM",
 			MarkdownDescription: "Import this key into HSM",
 			Optional:            true,
+			PlanModifiers: []planmodifier.Bool{
+				boolplanmodifier.RequiresReplace(),
+			},
 		},
 
 		"destination_key": schema.SingleNestedAttribute{
@@ -241,279 +532,16 @@ func (d *ConfidentialAzVaultKeyResource) Schema(_ context.Context, _ resource.Sc
 		},
 	}
 
-	resp.Schema = schema.Schema{
+	resourceSchema := schema.Schema{
 		Description:         "Creates a key in Azure KeyVault without revealing its value in state",
 		MarkdownDescription: confidentialKeyResourceMarkdownDescription,
 
 		Attributes: WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(specificAttrs),
 	}
-}
 
-// Read perform READ operation. The reading operation checks whether the settings of the secret key are still aligned
-// with the implementation.
-func (d *ConfidentialAzVaultKeyResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data ConfidentialKeyModel
-
-	// Read Terraform prior state data into the model
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
+	return &ConfidentialGenericResource[ConfidentialKeyModel, int, azkeys.KeyBundle]{
+		specializer:    &AzKeyVaultKeyResourceSpecializer{},
+		resourceType:   "key",
+		resourceSchema: resourceSchema,
 	}
-
-	// The key version was never created; nothing needs to be read here.
-	if data.KeyVersion.IsUnknown() {
-		return
-	}
-
-	destSecretCoordinate, err := data.GetDestinationCoordinateFromId()
-	tflog.Info(ctx, fmt.Sprintf("Received read ident: %s", data.Id.ValueString()))
-	if err != nil {
-		resp.Diagnostics.AddError("cannot establish reference to the created key version", err.Error())
-		return
-	}
-
-	keyClient, err := d.factory.GetKeysClient(destSecretCoordinate.VaultName)
-	if err != nil {
-		resp.Diagnostics.AddError("Cannot acquire keys client", fmt.Sprintf("Cannot acquire keys client to vault %s: %s", destSecretCoordinate.VaultName, err.Error()))
-		return
-	} else if keyClient == nil {
-		resp.Diagnostics.AddError("Cannot acquire keys client", "Keys client returned is nil")
-		return
-	}
-
-	keyState, err := keyClient.GetKey(ctx, destSecretCoordinate.Name, destSecretCoordinate.Version, nil)
-	if err != nil {
-		resp.Diagnostics.AddError("Cannot read key", fmt.Sprintf("Cannot acquire key %s version %s from vault %s: %s",
-			destSecretCoordinate.Name,
-			destSecretCoordinate.Version,
-			destSecretCoordinate.VaultName,
-			err.Error()))
-		return
-	}
-	if keyState.Key == nil {
-		resp.Diagnostics.AddWarning(
-			"Key removed outside of Terraform control",
-			fmt.Sprintf("Aecret %s version %s from vault %s has been removed outside of Terraform control",
-				destSecretCoordinate.Name,
-				destSecretCoordinate.Version,
-				destSecretCoordinate.Version),
-		)
-		return
-	}
-
-	data.Accept(keyState.KeyBundle, &resp.Diagnostics)
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-}
-
-func (d *ConfidentialAzVaultKeyResource) convertToImportKeyParam(data *ConfidentialKeyModel) azkeys.ImportKeyParameters {
-	keyAttributes := azkeys.KeyAttributes{
-		Enabled:   data.Enabled.ValueBoolPointer(),
-		Expires:   data.NotAfterDateAtPtr(),
-		NotBefore: data.NotBeforeDateAtPtr(),
-	}
-
-	params := azkeys.ImportKeyParameters{
-		KeyAttributes: &keyAttributes,
-		Tags:          data.TagsAsPtr(),
-		HSM:           data.HSM.ValueBoolPointer(),
-		Key: &azkeys.JSONWebKey{
-			KeyOps: data.GetKeyOperations(),
-		},
-	}
-
-	return params
-}
-
-func (d *ConfidentialAzVaultKeyResource) convertToUpdateKeyParam(data *ConfidentialKeyModel) azkeys.UpdateKeyParameters {
-	keyAttributes := azkeys.KeyAttributes{
-		Enabled:   data.Enabled.ValueBoolPointer(),
-		Expires:   data.NotAfterDateAtPtr(),
-		NotBefore: data.NotBeforeDateAtPtr(),
-	}
-
-	params := azkeys.UpdateKeyParameters{
-		KeyAttributes: &keyAttributes,
-		Tags:          data.TagsAsPtr(),
-		KeyOps:        data.GetKeyOperations(),
-	}
-
-	return params
-}
-
-func (d *ConfidentialAzVaultKeyResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data ConfidentialKeyModel
-
-	// Read Terraform prior state data into the model
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	confidentialData := d.UnwrapEncryptedConfidentialData(ctx, data.ConfidentialMaterialModel, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if confidentialData.Type != "key" && confidentialData.Type != "symmetric-key" {
-		resp.Diagnostics.AddError("Unexpected object type", fmt.Sprintf("Expected key or symmtric, got %s", confidentialData.Type))
-		return
-	}
-
-	destSecretCoordinate := d.factory.GetDestinationVaultObjectCoordinate(data.DestinationKey, "keys")
-
-	d.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, confidentialData, &destSecretCoordinate, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx, "checking possibility to place this object raised an error")
-		return
-	}
-
-	keysClient, secErr := d.factory.GetKeysClient(destSecretCoordinate.VaultName)
-	if secErr != nil {
-		resp.Diagnostics.AddError("Error acquiring secret client", secErr.Error())
-		return
-	}
-
-	params := d.convertToImportKeyParam(&data)
-
-	if confidentialData.Type == "key" {
-		if azJWKErr := core.PrivateKeyTOJSONWebKey(confidentialData.BinaryData, confidentialData.StringData, params.Key); azJWKErr != nil {
-			resp.Diagnostics.AddError("Error converting private key to JSONWebKey", azJWKErr.Error())
-			return
-		}
-	} else if confidentialData.Type == "symmetric-key" {
-		if azJWKErr := core.SymmetricKeyTOJSONWebKey(confidentialData.BinaryData, params.Key); azJWKErr != nil {
-			resp.Diagnostics.AddError("Error converting symmetric key to JSONWebKey", azJWKErr.Error())
-			return
-		}
-	} else {
-		resp.Diagnostics.AddError("Unsupported key material", fmt.Sprintf("Unsupported key type %s", confidentialData.Type))
-	}
-
-	setResp, setErr := keysClient.ImportKey(ctx, destSecretCoordinate.Name, params, nil)
-	if setErr != nil {
-		resp.Diagnostics.AddError("Error setting secret", setErr.Error())
-		return
-	}
-
-	data.Accept(setResp.KeyBundle, &resp.Diagnostics)
-	d.FlushState(ctx, confidentialData.Uuid, &data, resp)
-}
-
-func (d *ConfidentialAzVaultKeyResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var stateData ConfidentialKeyModel
-	var data ConfidentialKeyModel
-
-	resp.Diagnostics.Append(req.State.Get(ctx, &stateData)...)
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if d.DoUpdate(ctx, &stateData, &data, resp) {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-	}
-}
-
-func (d *ConfidentialAzVaultKeyResource) DoUpdate(ctx context.Context, stateData *ConfidentialKeyModel, data *ConfidentialKeyModel, resp *resource.UpdateResponse) StateFlushFlag {
-	tflog.Info(ctx, fmt.Sprintf("Available object Id: %s", stateData.Id.ValueString()))
-
-	destKeyCoordinate, err := stateData.GetDestinationCoordinateFromId()
-	if err != nil {
-		resp.Diagnostics.AddError("Error getting destination secret coordinate", err.Error())
-		return DoNotFlushState
-	}
-
-	destKeyCoordinateFromCfg := d.factory.GetDestinationVaultObjectCoordinate(data.DestinationKey, "keys")
-	if !destKeyCoordinateFromCfg.SameAs(destKeyCoordinate.AzKeyVaultObjectCoordinate) {
-		resp.Diagnostics.AddError(
-			"Implicit object move",
-			"The destination for this confidential key changed after the key was created. "+
-				"This can happen e.g. when target vault was not explicitly specified. "+
-				"Delete this key instead",
-		)
-		return DoNotFlushState
-	}
-
-	keyClient, err := d.factory.GetKeysClient(destKeyCoordinate.VaultName)
-	if err != nil {
-		resp.Diagnostics.AddError("Cannot acquire secret client", fmt.Sprintf("Cannot acquire secret client to vault %s: %s", destKeyCoordinate.VaultName, err.Error()))
-		return DoNotFlushState
-	} else if keyClient == nil {
-		resp.Diagnostics.AddError("Cannot acquire secret client", "Secrets client returned is nil")
-		return DoNotFlushState
-	}
-
-	param := d.convertToUpdateKeyParam(data)
-	tflog.Info(ctx, fmt.Sprintf("Updating with %d tags", len(param.Tags)))
-
-	updateResponse, updateErr := keyClient.UpdateKey(ctx, destKeyCoordinate.Name, destKeyCoordinate.Version, param, nil)
-
-	if updateErr != nil {
-		resp.Diagnostics.AddError("Error updating secret properties", updateErr.Error())
-		return DoNotFlushState
-	}
-
-	data.Accept(updateResponse.KeyBundle, &resp.Diagnostics)
-	return FlushState
-}
-
-// Delete Performs DELETE operation on the created secret. The implementation disables the secret version
-func (d *ConfidentialAzVaultKeyResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data ConfidentialKeyModel
-
-	// Read Terraform prior state data into the model
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if data.KeyVersion.IsUnknown() {
-		tflog.Warn(ctx, "Deleting resource that doesn't have recorded versioned coordinate.")
-		return
-	}
-
-	destCoordinate, err := data.GetDestinationCoordinateFromId()
-	if err != nil {
-		resp.Diagnostics.AddError("Error getting destination secret coordinate", err.Error())
-		return
-	}
-
-	keysClient, err := d.factory.GetKeysClient(destCoordinate.VaultName)
-	if err != nil {
-		resp.Diagnostics.AddError("Cannot acquire secret client", fmt.Sprintf("Cannot acquire secret client to vault %s: %s", destCoordinate.VaultName, err.Error()))
-		return
-	} else if keysClient == nil {
-		resp.Diagnostics.AddError("Cannot acquire secret client", "Secrets client returned is nil")
-		return
-	}
-
-	enabledVal := false
-
-	_, azErr := keysClient.UpdateKey(ctx,
-		destCoordinate.Name,
-		destCoordinate.Version,
-		azkeys.UpdateKeyParameters{
-			KeyAttributes: &azkeys.KeyAttributes{
-				Enabled: &enabledVal,
-			},
-		},
-		nil,
-	)
-
-	if azErr != nil {
-		resp.Diagnostics.AddError("Cannot disable key  version", fmt.Sprintf("Request to disable key's %s version %s in vault %s failed: %s",
-			destCoordinate.Name,
-			destCoordinate.Version,
-			destCoordinate.VaultName,
-			azErr.Error(),
-		))
-	}
-}
-
-// Ensure provider defined types fully satisfy framework interfaces.
-var _ resource.Resource = &ConfidentialAzVaultKeyResource{}
-
-func NewConfidentialAzVaultKeyResource() resource.Resource {
-	return &ConfidentialAzVaultKeyResource{}
 }

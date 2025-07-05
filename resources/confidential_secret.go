@@ -109,8 +109,9 @@ func (a *AzKeyVaultSecretResourceSpecializer) AssignIdTo(secret azsecrets.Secret
 	}
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) ConvertToTerraform(secret azsecrets.Secret, tfModel *ConfidentialSecretModel) {
+func (a *AzKeyVaultSecretResourceSpecializer) ConvertToTerraform(secret azsecrets.Secret, tfModel *ConfidentialSecretModel) diag.Diagnostics {
 	tfModel.Accept(secret)
+	return nil
 }
 
 func (a *AzKeyVaultSecretResourceSpecializer) GetConfidentialMaterialFrom(mdl ConfidentialSecretModel) ConfidentialMaterialModel {

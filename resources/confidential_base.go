@@ -42,6 +42,10 @@ type ConfidentialMaterialModel struct {
 	EncryptedSecret types.String `tfsdk:"content"`
 }
 
+func (wcmmm *ConfidentialMaterialModel) SetContainsValues(s *types.Set) bool {
+	return !s.IsNull() && !s.IsUnknown() && len(s.Elements()) > 0
+}
+
 func (wcmm *ConfidentialMaterialModel) GetDestinationCoordinateFromId() (core.AzKeyVaultObjectVersionedCoordinate, error) {
 	rv := core.AzKeyVaultObjectVersionedCoordinate{}
 	err := rv.FromId(wcmm.Id.ValueString())

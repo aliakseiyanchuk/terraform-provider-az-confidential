@@ -24,6 +24,20 @@ type VersionedConfidentialData struct {
 	Labels     []string
 }
 
+func (vcd *VersionedConfidentialData) ImportJsonSerializable(value interface{}) {
+	data, _ := json.Marshal(value)
+	vcd.BinaryData = GZipCompress(data)
+}
+
+func (vcd *VersionedConfidentialData) ExportToJson(value interface{}) error {
+	decompressed, err := GZipDecompress(vcd.BinaryData)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(decompressed, &value)
+}
+
 func (vcd *VersionedConfidentialData) PayloadAsB64Ptr() *string {
 	if len(vcd.BinaryData) == 0 {
 		return nil
@@ -39,10 +53,17 @@ type AzSecretsClientAbstraction interface {
 	UpdateSecretProperties(ctx context.Context, name string, version string, parameters azsecrets.UpdateSecretPropertiesParameters, options *azsecrets.UpdateSecretPropertiesOptions) (azsecrets.UpdateSecretPropertiesResponse, error)
 }
 
+type AzKeyClientAbstraction interface {
+	ImportKey(ctx context.Context, name string, parameters azkeys.ImportKeyParameters, options *azkeys.ImportKeyOptions) (azkeys.ImportKeyResponse, error)
+	Decrypt(ctx context.Context, name string, version string, parameters azkeys.KeyOperationParameters, options *azkeys.DecryptOptions) (azkeys.DecryptResponse, error)
+	UpdateKey(ctx context.Context, name string, version string, parameters azkeys.UpdateKeyParameters, options *azkeys.UpdateKeyOptions) (azkeys.UpdateKeyResponse, error)
+	GetKey(ctx context.Context, name string, version string, options *azkeys.GetKeyOptions) (azkeys.GetKeyResponse, error)
+}
+
 // AZClientsFactory interface supplying Azure clients to various services.
 type AZClientsFactory interface {
 	GetSecretsClient(vaultName string) (AzSecretsClientAbstraction, error)
-	GetKeysClient(vaultName string) (*azkeys.Client, error)
+	GetKeysClient(vaultName string) (AzKeyClientAbstraction, error)
 	GetCertificateClient(vaultName string) (*azcertificates.Client, error)
 
 	// GetMergedWrappingKeyCoordinate get merged wrapping key coordinate providing
@@ -55,7 +76,7 @@ type AZClientsFactory interface {
 	// specify this.
 	GetDestinationVaultObjectCoordinate(coordinate AzKeyVaultObjectCoordinateModel, objType string) AzKeyVaultObjectCoordinate
 
-	// EnsureCanPlace ensures that this object can be placed in the destination vault.
+	// EnsureCanPlaceKeyVaultObjectAt ensures that this object can be placed in the destination vault.
 	EnsureCanPlaceKeyVaultObjectAt(ctx context.Context, unwrappedPayload VersionedConfidentialData, targetCoord *AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics)
 
 	IsObjectTrackingEnabled() bool
@@ -207,7 +228,7 @@ func (w *WrappingKeyCoordinate) DefiesKeyAlgorithm() bool {
 	return len(w.Algorithm) > 0
 }
 
-func (w *WrappingKeyCoordinate) FillDefaults(ctx context.Context, client *azkeys.Client, diag *diag.Diagnostics) {
+func (w *WrappingKeyCoordinate) FillDefaults(ctx context.Context, client AzKeyClientAbstraction, diag *diag.Diagnostics) {
 	if len(w.KeyVersion) == 0 {
 		tflog.Trace(ctx, fmt.Sprintf("Attempting establish the latest version of the key %s in vault %s", w.KeyName, w.VaultName))
 

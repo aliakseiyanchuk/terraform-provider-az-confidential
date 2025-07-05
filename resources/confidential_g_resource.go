@@ -31,7 +31,7 @@ type ConfidentialResourceSpecializer[TMdl, AZAPIObject any] interface {
 	SetFactory(factory core.AZClientsFactory)
 	NewTerraformModel() TMdl
 	AssignIdTo(azObj AZAPIObject, tfModel *TMdl)
-	ConvertToTerraform(azObj AZAPIObject, tfModel *TMdl)
+	ConvertToTerraform(azObj AZAPIObject, tfModel *TMdl) diag.Diagnostics
 	GetConfidentialMaterialFrom(mdl TMdl) ConfidentialMaterialModel
 	GetSupportedConfidentialMaterialTypes() []string
 	CheckPlacement(ctx context.Context, tfModel *TMdl, cf core.VersionedConfidentialData) diag.Diagnostics
@@ -87,7 +87,11 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Read(ctx con
 	if resourceExistenceCheck == ResourceNotFound {
 		resp.State.RemoveResource(ctx)
 	} else if resourceExistenceCheck == ResourceExists {
-		d.specializer.ConvertToTerraform(azObj, &data)
+		convertDiagnostics := d.specializer.ConvertToTerraform(azObj, &data)
+		if len(convertDiagnostics) > 0 {
+			resp.Diagnostics.Append(convertDiagnostics...)
+		}
+
 		d.specializer.AssignIdTo(azObj, &data)
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 	} else if resourceExistenceCheck == ResourceCheckError {
@@ -132,7 +136,11 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Create(ctx c
 		return
 	}
 
-	d.specializer.ConvertToTerraform(azObj, &data)
+	convertDiagnostics := d.specializer.ConvertToTerraform(azObj, &data)
+	if len(convertDiagnostics) > 0 {
+		resp.Diagnostics.Append(convertDiagnostics...)
+	}
+
 	d.specializer.AssignIdTo(azObj, &data)
 
 	d.FlushState(ctx, confidentialMaterial.Uuid, &data, resp)
@@ -152,7 +160,10 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Update(ctx c
 		return
 	}
 
-	d.specializer.ConvertToTerraform(azObj, &data)
+	convertDiagnostics := d.specializer.ConvertToTerraform(azObj, &data)
+	if len(convertDiagnostics) > 0 {
+		resp.Diagnostics.Append(convertDiagnostics...)
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 

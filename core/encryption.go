@@ -17,6 +17,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/lestrrat-go/jwx/v3/jwa"
 	"github.com/lestrrat-go/jwx/v3/jwk"
@@ -325,6 +326,52 @@ func SymmetricKeyTOJSONWebKey(input []byte, outKey *azkeys.JSONWebKey) error {
 	}
 }
 
+func ConvertJWKSToAzJWK(set jwk.Set, key *azkeys.JSONWebKey) error {
+	if jwkKey, exists := set.Key(0); exists {
+		return ConvertJWKToAzJWK(jwkKey, key)
+	} else {
+		return errors.New("supplied key set is empty")
+	}
+}
+
+func ConvertJWKToAzJWK(jwkKey interface{}, outKey *azkeys.JSONWebKey) error {
+	if rsaKey, ok := jwkKey.(jwk.RSAPrivateKey); ok {
+		outKey.Kty = to.Ptr(azkeys.KeyTypeRSA)
+		port(&outKey.D, rsaKey.D)
+		port(&outKey.DP, rsaKey.DP)
+		port(&outKey.DQ, rsaKey.DQ)
+		port(&outKey.E, rsaKey.E)
+		port(&outKey.N, rsaKey.N)
+		port(&outKey.P, rsaKey.P)
+		port(&outKey.Q, rsaKey.Q)
+		port(&outKey.QI, rsaKey.QI)
+
+		return nil
+	} else if ecKey, ok := jwkKey.(jwk.ECDSAPrivateKey); ok {
+		outKey.Kty = to.Ptr(azkeys.KeyTypeEC)
+
+		curveAlg, _ := ecKey.Crv()
+		if azCurveAlg, notSupportedErr := azCurveFor(curveAlg); notSupportedErr != nil {
+			return notSupportedErr
+		} else {
+			outKey.Crv = &azCurveAlg
+		}
+
+		port(&outKey.D, ecKey.D)
+		port(&outKey.X, ecKey.X)
+		port(&outKey.Y, ecKey.Y)
+
+		return nil
+	} else if octKey, ok := jwkKey.(jwk.SymmetricKey); ok {
+		outKey.Kty = to.Ptr(azkeys.KeyTypeOct)
+		port(&outKey.N, octKey.Octets)
+
+		return nil
+	} else {
+		return errors.New("unsupported key type")
+	}
+}
+
 func PrivateKeyTOJSONWebKey(input []byte, password string, outKey *azkeys.JSONWebKey) error {
 	var key any
 	var keyLoadErr error
@@ -357,37 +404,7 @@ func PrivateKeyTOJSONWebKey(input []byte, password string, outKey *azkeys.JSONWe
 		return jwkErr
 	}
 
-	if rsaKey, ok := jwkKey.(jwk.RSAPrivateKey); ok {
-		kty := azkeys.KeyTypeRSA
-
-		outKey.Kty = &kty
-		port(&outKey.D, rsaKey.D)
-		port(&outKey.DP, rsaKey.DP)
-		port(&outKey.DQ, rsaKey.DQ)
-		port(&outKey.E, rsaKey.E)
-		port(&outKey.N, rsaKey.N)
-		port(&outKey.P, rsaKey.P)
-		port(&outKey.Q, rsaKey.Q)
-		port(&outKey.QI, rsaKey.QI)
-	} else if ecKey, ok := jwkKey.(jwk.ECDSAPrivateKey); ok {
-		kty := azkeys.KeyTypeEC
-		outKey.Kty = &kty
-
-		curveAlg, _ := ecKey.Crv()
-		if azCurveAlg, notSupportedErr := azCurveFor(curveAlg); notSupportedErr != nil {
-			return notSupportedErr
-		} else {
-			outKey.Crv = &azCurveAlg
-		}
-
-		port(&outKey.D, ecKey.D)
-		port(&outKey.X, ecKey.X)
-		port(&outKey.Y, ecKey.Y)
-	} else {
-		return errors.New("unsupported key type")
-	}
-
-	return nil
+	return ConvertJWKToAzJWK(jwkKey, outKey)
 }
 
 func azCurveFor(algorithm jwa.EllipticCurveAlgorithm) (azkeys.CurveName, error) {
@@ -418,6 +435,19 @@ func RequiresPassword(block *pem.Block) bool {
 
 func PrivateKeyFromDER(data []byte, password string) (any, error) {
 	return pkcs8.ParsePKCS8PrivateKey(data, []byte(password))
+}
+
+func PrivateKeyFromData(data []byte) (any, error) {
+	blocks, err := ParsePEMBlocks(data)
+	if err != nil {
+		return nil, err
+	}
+
+	if block := FindPrivateKeyBlock(blocks); block != nil {
+		return PrivateKeyFromBlock(block)
+	} else {
+		return nil, errors.New("input doesn't contain any known private key block")
+	}
 }
 
 // PrivateKeyFromBlock converts arbitrary bytes to a private key
