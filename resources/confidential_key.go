@@ -474,7 +474,6 @@ func NewConfidentialAzVaultKeyResource() resource.Resource {
 					stringvalidator.OneOf(
 						string(azkeys.KeyOperationDecrypt),
 						string(azkeys.KeyOperationEncrypt),
-						string(azkeys.KeyOperationImport),
 						string(azkeys.KeyOperationSign),
 						string(azkeys.KeyOperationUnwrapKey),
 						string(azkeys.KeyOperationVerify),
