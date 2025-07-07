@@ -1,6 +1,8 @@
 package testkeymaterial
 
-import _ "embed"
+import (
+	_ "embed"
+)
 
 //go:embed km/ephemeral-rsa-public-key.pem
 var EphemeralRsaPublicKey []byte

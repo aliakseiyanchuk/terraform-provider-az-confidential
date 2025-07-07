@@ -110,7 +110,7 @@ func Test_CAzVSR_DoUpdate_IfClientCannotConnect(t *testing.T) {
 	data.Id = types.StringValue("https://cfg-vault.vaults.unittests/secrets/secretName/secretVesion")
 
 	factory := AZClientsFactoryMock{}
-	factory.GivenGetdestinationVaultObjectCoordinate("cfg-vault", "secrets", "secretName")
+	factory.GivenGetDestinationVaultObjectCoordinate("cfg-vault", "secrets", "secretName")
 	factory.GivenGetSecretClientWillReturnError("cfg-vault", "unit-test-error")
 
 	rv := AzKeyVaultSecretResourceSpecializer{}
@@ -129,7 +129,7 @@ func Test_CAzVSR_DoUpdate_IfReturnedClientIsNil(t *testing.T) {
 	data.Id = types.StringValue("https://cfg-vault.vaults.unittests/secrets/secretName/secretVesion")
 
 	factory := AZClientsFactoryMock{}
-	factory.GivenGetdestinationVaultObjectCoordinate("cfg-vault", "secrets", "secretName")
+	factory.GivenGetDestinationVaultObjectCoordinate("cfg-vault", "secrets", "secretName")
 	factory.GivenGetSecretClientWillReturnNilClient("cfg-vault")
 
 	rv := AzKeyVaultSecretResourceSpecializer{}
@@ -151,7 +151,7 @@ func Test_CAzVSR_DoUpdate_IfUpdatingPropertiesWillFail(t *testing.T) {
 	clMock.GivenUpdateSecretPropertiesWillReturnError("secretName", "secretVersion", "unit-test-error")
 
 	factory := AZClientsFactoryMock{}
-	factory.GivenGetdestinationVaultObjectCoordinate("cfg-vault", "secrets", "secretName")
+	factory.GivenGetDestinationVaultObjectCoordinate("cfg-vault", "secrets", "secretName")
 	factory.GivenGetSecretClientWillReturn("cfg-vault", &clMock)
 
 	rv := AzKeyVaultSecretResourceSpecializer{}
@@ -174,7 +174,7 @@ func Test_CAzVSR_DoUpdate_Succeeds(t *testing.T) {
 	clMock.GivenUpdateSecretPropertiesWillSucceed("secretName", "secretVersion", "unit-test-secret")
 
 	factory := AZClientsFactoryMock{}
-	factory.GivenGetdestinationVaultObjectCoordinate("cfg-vault", "secrets", "secretName")
+	factory.GivenGetDestinationVaultObjectCoordinate("cfg-vault", "secrets", "secretName")
 	factory.GivenGetSecretClientWillReturn("cfg-vault", &clMock)
 
 	rv := AzKeyVaultSecretResourceSpecializer{}
@@ -189,7 +189,7 @@ func Test_CAzVSR_DoUpdate_Succeeds(t *testing.T) {
 
 func Test_CAzVSR_DoUpdate_ImplicitMove(t *testing.T) {
 	factory := AZClientsFactoryMock{}
-	factory.GivenGetdestinationVaultObjectCoordinate("movedVault", "secrets", "secretName")
+	factory.GivenGetDestinationVaultObjectCoordinate("movedVault", "secrets", "secretName")
 
 	r := AzKeyVaultSecretResourceSpecializer{}
 	r.factory = &factory
@@ -453,10 +453,10 @@ func Test_CAzVSR_DoDelete(t *testing.T) {
 
 func Test_CAzVSR_DoCreate_IfClientCannotConnect(t *testing.T) {
 	mdl := GivenTypicalConfidentialSecretModel()
-	ptData := core.VersionedConfidentialData{}
+	ptData := givenVersionedStringConfidentialDataFromString("this is a dummy secret", "secret")
 
 	factoryMock := AZClientsFactoryMock{}
-	factoryMock.GivenGetdestinationVaultObjectCoordinate("unit-test-vault", "secrets", "secretName")
+	factoryMock.GivenGetDestinationVaultObjectCoordinate("unit-test-vault", "secrets", "secretName")
 	factoryMock.GivenGetSecretClientWillReturnError("unit-test-vault", "unit-test-error")
 
 	c := AzKeyVaultSecretResourceSpecializer{}
@@ -471,10 +471,10 @@ func Test_CAzVSR_DoCreate_IfClientCannotConnect(t *testing.T) {
 
 func Test_CAzVSR_DoCreate_IfClientIsNil(t *testing.T) {
 	mdl := GivenTypicalConfidentialSecretModel()
-	ptData := core.VersionedConfidentialData{}
+	ptData := givenVersionedStringConfidentialDataFromString("this is a dummy secret", "secret")
 
 	factoryMock := AZClientsFactoryMock{}
-	factoryMock.GivenGetdestinationVaultObjectCoordinate("unit-test-vault", "secrets", "secretName")
+	factoryMock.GivenGetDestinationVaultObjectCoordinate("unit-test-vault", "secrets", "secretName")
 	factoryMock.GivenGetSecretClientWillReturnNilClient("unit-test-vault")
 
 	c := AzKeyVaultSecretResourceSpecializer{}
@@ -489,13 +489,13 @@ func Test_CAzVSR_DoCreate_IfClientIsNil(t *testing.T) {
 
 func Test_CAzVSR_DoCreate_IfSetSecretErrors(t *testing.T) {
 	mdl := GivenTypicalConfidentialSecretModel()
-	ptData := core.VersionedConfidentialData{}
+	ptData := givenVersionedStringConfidentialDataFromString("this is a dummy secret", "secret")
 
 	clMock := SecretClientMock{}
 	clMock.GivenSetSecretWillReturnError("secretName", "unit-test-error")
 
 	factoryMock := AZClientsFactoryMock{}
-	factoryMock.GivenGetdestinationVaultObjectCoordinate("unit-test-vault", "secrets", "secretName")
+	factoryMock.GivenGetDestinationVaultObjectCoordinate("unit-test-vault", "secrets", "secretName")
 	factoryMock.GivenGetSecretClientWillReturn("unit-test-vault", &clMock)
 
 	c := AzKeyVaultSecretResourceSpecializer{}
@@ -510,15 +510,20 @@ func Test_CAzVSR_DoCreate_IfSetSecretErrors(t *testing.T) {
 	clMock.AssertExpectations(t)
 }
 
+func givenVersionedStringConfidentialDataFromString(s, objType string) core.VersionedStringConfidentialData {
+	helper := core.NewVersionedStringConfidentialDataHelper()
+	return helper.CreateConfidentialStringData(s, objType, nil)
+}
+
 func Test_CAzVSR_DoCreate(t *testing.T) {
 	mdl := GivenTypicalConfidentialSecretModel()
-	ptData := core.VersionedConfidentialData{}
+	ptData := givenVersionedStringConfidentialDataFromString("this is a dummy secret", "secret")
 
 	clMock := SecretClientMock{}
 	clMock.GivenSetSecret("secretName", "secretVersion")
 
 	factoryMock := AZClientsFactoryMock{}
-	factoryMock.GivenGetdestinationVaultObjectCoordinate("unit-test-vault", "secrets", "secretName")
+	factoryMock.GivenGetDestinationVaultObjectCoordinate("unit-test-vault", "secrets", "secretName")
 	factoryMock.GivenGetSecretClientWillReturn("unit-test-vault", &clMock)
 
 	c := AzKeyVaultSecretResourceSpecializer{}

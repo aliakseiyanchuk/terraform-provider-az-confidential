@@ -218,5 +218,13 @@ func OutputKeyEncryptedContent(kwp ContentWrappingParams, jwkKey interface{}) (s
 		return "", marshalErr
 	}
 
-	return OutputEncryptedConfidentialData(kwp, core.CreateConfidentialBinaryData(core.GZipCompress(jwkData), "key", kwp.GetLabels()))
+	helper := core.NewVersionedBinaryConfidentialDataHelper()
+	_ = helper.CreateConfidentialBinaryData(jwkData, "key", kwp.GetLabels())
+
+	em, err := helper.ToEncryptedMessage(kwp.LoadedRsaPublicKey)
+	if err != nil {
+		return "", err
+	}
+
+	return em.ToBase64PEM(), nil
 }

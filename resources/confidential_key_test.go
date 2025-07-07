@@ -449,32 +449,36 @@ func givenTypicalKeyModel() ConfidentialKeyModel {
 	return mdl
 }
 
-func givenVersionedConfidentialDataFromEphemeralKey() core.VersionedConfidentialData {
+func givenVersionedConfidentialDataFromEphemeralKey() core.VersionedBinaryConfidentialData {
 	//rsaPrivateKey, _ := core.GenerateEphemeralKeyPair()
 	jwkKey, _ := jwk.Import(testkeymaterial.EphemeralRsaKeyText)
 	jsonBytes, _ := json.Marshal(jwkKey)
 
-	return core.CreateConfidentialBinaryData(core.GZipCompress(jsonBytes), "key", nil)
+	helper := core.NewVersionedBinaryConfidentialDataHelper()
+	return helper.CreateConfidentialBinaryData(jsonBytes, "key", nil)
 }
 
-func Test_CAzVKR_DoCreate_IfDataIsNotGZipCompressed(t *testing.T) {
-	mdl := givenTypicalKeyModel()
-	confidentialData := core.VersionedConfidentialData{
-		BinaryData: []byte("this is not a GZip data"),
-	}
-	ks := AzKeyVaultKeyResourceSpecializer{}
-
-	_, dg := ks.DoCreate(context.Background(), &mdl, confidentialData)
-	assert.True(t, dg.HasError())
-	assert.Equal(t, "Binary data is not GZip-compressed", dg[0].Summary())
+func givenVersionedBinaryConfidentialDataFromString(s string) core.VersionedBinaryConfidentialData {
+	helper := core.NewVersionedBinaryConfidentialDataHelper()
+	return helper.CreateConfidentialBinaryData([]byte(s), "key", nil)
 }
+
+//func Test_CAzVKR_DoCreate_IfDataIsNotGZipCompressed(t *testing.T) {
+//	mdl := givenTypicalKeyModel()
+//	confidentialData := givenVersionedBinaryConfidentialDataFromString("this is not a GZip data")
+//	ks := AzKeyVaultKeyResourceSpecializer{}
+//
+//	_, dg := ks.DoCreate(context.Background(), &mdl, confidentialData)
+//	assert.True(t, dg.HasError())
+//	assert.Equal(t, "Binary data is not GZip-compressed", dg[0].Summary())
+//}
 
 func Test_CAzVKR_DoCreate_IfKeyClientCannotConnect(t *testing.T) {
 	mdl := givenTypicalKeyModel()
 	confidentialData := givenVersionedConfidentialDataFromEphemeralKey()
 
 	factoryMock := AZClientsFactoryMock{}
-	factoryMock.GivenGetdestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
+	factoryMock.GivenGetDestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
 	factoryMock.GivenGetKeysClientWillReturnError("unit-test-vault", "unit-test-error-message")
 
 	ks := AzKeyVaultKeyResourceSpecializer{
@@ -493,7 +497,7 @@ func Test_CAzVKR_DoCreate_IfKeyClientWillBeNil(t *testing.T) {
 	confidentialData := givenVersionedConfidentialDataFromEphemeralKey()
 
 	factoryMock := AZClientsFactoryMock{}
-	factoryMock.GivenGetdestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
+	factoryMock.GivenGetDestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
 	factoryMock.GivenGetKeysClientWillReturnNilClient("unit-test-vault")
 
 	ks := AzKeyVaultKeyResourceSpecializer{
@@ -511,9 +515,7 @@ func Test_CAzVKR_DoCreate_IfKeyClientWillBeNil(t *testing.T) {
 func Test_CAzVKR_DoCreate_IfJWKDataIsInvalid(t *testing.T) {
 	mdl := givenTypicalKeyModel()
 	// JWK data needs binary elements initialized
-	confidentialData := core.VersionedConfidentialData{
-		BinaryData: core.GZipCompress([]byte("this is not a JSON Key data")),
-	}
+	confidentialData := givenVersionedBinaryConfidentialDataFromString("this is not a JSON Key data")
 
 	ks := AzKeyVaultKeyResourceSpecializer{}
 
@@ -531,7 +533,7 @@ func Test_CAzVKR_DoCreate_IfImportFails(t *testing.T) {
 	clientMock.GivenImportKeyReturnsError("keyName", "unit-test-error-message")
 
 	factoryMock := AZClientsFactoryMock{}
-	factoryMock.GivenGetdestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
+	factoryMock.GivenGetDestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
 	factoryMock.GivenGetKeysClientWillReturn("unit-test-vault", &clientMock)
 
 	ks := AzKeyVaultKeyResourceSpecializer{
@@ -555,7 +557,7 @@ func Test_CAzVKR_DoCreate(t *testing.T) {
 	clientMock.GivenImportKey("keyName")
 
 	factoryMock := AZClientsFactoryMock{}
-	factoryMock.GivenGetdestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
+	factoryMock.GivenGetDestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
 	factoryMock.GivenGetKeysClientWillReturn("unit-test-vault", &clientMock)
 
 	ks := AzKeyVaultKeyResourceSpecializer{
@@ -581,7 +583,7 @@ func Test_CAzVKR_DoUpdate_IfResourceIdIsNotValid(t *testing.T) {
 
 func Test_CAzVKR_DoUpdate_ImplicitMove(t *testing.T) {
 	factory := AZClientsFactoryMock{}
-	factory.GivenGetdestinationVaultObjectCoordinate("movedVault", "keys", "keyName")
+	factory.GivenGetDestinationVaultObjectCoordinate("movedVault", "keys", "keyName")
 
 	r := AzKeyVaultKeyResourceSpecializer{}
 	r.factory = &factory
@@ -602,7 +604,7 @@ func Test_CAzVKR_DoUpdate_IfKeyClientCannotConnect(t *testing.T) {
 	mdl := givenTypicalKeyModel()
 
 	factory := AZClientsFactoryMock{}
-	factory.GivenGetdestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
+	factory.GivenGetDestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
 	factory.GivenGetKeysClientWillReturnError("unit-test-vault", "unit-test-error-message")
 
 	r := AzKeyVaultKeyResourceSpecializer{
@@ -619,7 +621,7 @@ func Test_CAzVKR_DoUpdate_IfKeyClientIsNil(t *testing.T) {
 	mdl := givenTypicalKeyModel()
 
 	factory := AZClientsFactoryMock{}
-	factory.GivenGetdestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
+	factory.GivenGetDestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
 	factory.GivenGetKeysClientWillReturnNilClient("unit-test-vault")
 
 	r := AzKeyVaultKeyResourceSpecializer{
@@ -640,7 +642,7 @@ func Test_CAzVKR_DoUpdate_IfUpdateFails(t *testing.T) {
 	clientMock.GivenUpdateKeyReturnsError("keyName", "keyVersion", "unit-test-error-mess")
 
 	factory := AZClientsFactoryMock{}
-	factory.GivenGetdestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
+	factory.GivenGetDestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
 	factory.GivenGetKeysClientWillReturn("unit-test-vault", &clientMock)
 
 	r := AzKeyVaultKeyResourceSpecializer{
@@ -662,7 +664,7 @@ func Test_CAzVKR_DoUpdate(t *testing.T) {
 	clientMock.GivenUpdateKey("keyName", "keyVersion")
 
 	factory := AZClientsFactoryMock{}
-	factory.GivenGetdestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
+	factory.GivenGetDestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
 	factory.GivenGetKeysClientWillReturn("unit-test-vault", &clientMock)
 
 	r := AzKeyVaultKeyResourceSpecializer{

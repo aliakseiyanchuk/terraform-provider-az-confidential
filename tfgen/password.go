@@ -64,5 +64,12 @@ func OutputDatasourcePasswordTerraformCode(kwp ContentWrappingParams, passwordSt
 }
 
 func OutputPasswordEncryptedContent(kwp ContentWrappingParams, passwordString string) (string, error) {
-	return OutputEncryptedConfidentialData(kwp, core.CreateConfidentialStringData(passwordString, "password", kwp.GetLabels()))
+	helper := core.NewVersionedStringConfidentialDataHelper()
+	_ = helper.CreateConfidentialStringData(passwordString, "password", kwp.GetLabels())
+	em, err := helper.ToEncryptedMessage(kwp.LoadedRsaPublicKey)
+	if err != nil {
+		return "", err
+	}
+
+	return em.ToBase64PEM(), nil
 }

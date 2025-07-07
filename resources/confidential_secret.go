@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -122,7 +123,7 @@ func (a *AzKeyVaultSecretResourceSpecializer) GetSupportedConfidentialMaterialTy
 	return []string{"secret"}
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) CheckPlacement(ctx context.Context, mdl *ConfidentialSecretModel, cf core.VersionedConfidentialData) diag.Diagnostics {
+func (a *AzKeyVaultSecretResourceSpecializer) CheckPlacement(ctx context.Context, mdl *ConfidentialSecretModel, cf core.VersionedStringConfidentialData) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 
 	destSecretCoordinate := a.factory.GetDestinationVaultObjectCoordinate(mdl.DestinationSecret, "secrets")
@@ -182,7 +183,7 @@ func (a *AzKeyVaultSecretResourceSpecializer) DoRead(ctx context.Context, data *
 	return secretState.Secret, ResourceExists, rv
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialSecretModel, unwrappedData core.VersionedConfidentialData) (azsecrets.Secret, diag.Diagnostics) {
+func (a *AzKeyVaultSecretResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialSecretModel, unwrappedData core.VersionedStringConfidentialData) (azsecrets.Secret, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
 	destSecretCoordinate := a.factory.GetDestinationVaultObjectCoordinate(data.DestinationSecret, "secrets")
 
@@ -196,7 +197,8 @@ func (a *AzKeyVaultSecretResourceSpecializer) DoCreate(ctx context.Context, data
 	}
 
 	params := data.ConvertToSetSecretParam(data)
-	params.Value = &unwrappedData.StringData
+	secretValue := unwrappedData.GetStingData()
+	params.Value = to.Ptr(secretValue)
 
 	setResp, setErr := secretClient.SetSecret(ctx, destSecretCoordinate.Name, params, nil)
 	if setErr != nil {
@@ -295,6 +297,10 @@ func (a *AzKeyVaultSecretResourceSpecializer) DoDelete(ctx context.Context, data
 	return rv
 }
 
+func (a *AzKeyVaultSecretResourceSpecializer) GetPlaintextImporter() core.ObjectExportSupport[core.VersionedStringConfidentialData, []byte] {
+	return core.NewVersionedStringConfidentialDataHelper()
+}
+
 // --------------------------------------------------------------------------------
 // Factory method
 
@@ -347,7 +353,7 @@ func NewConfidentialAzVaultSecretResource() resource.Resource {
 		Attributes: WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(modelAttributes),
 	}
 
-	return &ConfidentialGenericResource[ConfidentialSecretModel, int, azsecrets.Secret]{
+	return &ConfidentialGenericResource[ConfidentialSecretModel, int, core.VersionedStringConfidentialData, azsecrets.Secret]{
 		specializer:    &AzKeyVaultSecretResourceSpecializer{},
 		resourceType:   "secret",
 		resourceSchema: resourceSchema,

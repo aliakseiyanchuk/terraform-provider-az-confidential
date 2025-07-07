@@ -38,6 +38,14 @@ func MapSlice[K, V any](mapper Mapper[K, V], inputSlice []K) []V {
 type Comparator[K any] = func(a, b K) bool
 type EquivalenceComparator[K, V any] = func(a K, b V) bool
 
+// ObjectExportSupport support for exporting data to a model-at-rest
+type ObjectExportSupport[T, K any] interface {
+	Export() (K, error)
+	Import(K) (T, error)
+	// Value returns the value immediately known
+	Value() T
+}
+
 func SameBag[K any](comparator Comparator[K], a, b []K) bool {
 	if len(a) != len(b) {
 		return false

@@ -325,33 +325,32 @@ type CommonConfidentialResource struct {
 	factory core.AZClientsFactory
 }
 
-func (d *CommonConfidentialResource) UnwrapEncryptedConfidentialData(ctx context.Context, mdl ConfidentialMaterialModel, diagnostics *diag.Diagnostics) core.VersionedConfidentialData {
+func (d *CommonConfidentialResource) ExtractConfidentialModelPlainText(ctx context.Context, mdl ConfidentialMaterialModel, diagnostics *diag.Diagnostics) []byte {
 	if d.factory == nil {
 		diagnostics.AddError("incomplete provider configuration", "provider does no have an initialized Azure objects factory")
-		return core.VersionedConfidentialData{}
+		return nil
 	}
 
 	// To create a secret, a coordinate of the wrapping key needs to be established and known
 	wrappingKeyCoordinate := d.factory.GetMergedWrappingKeyCoordinate(ctx, mdl.WrappingKeyCoordinate, diagnostics)
 	if diagnostics.HasError() {
 		tflog.Error(ctx, "Wrapping key coordinate resulted in error diagnostics; this is probably incomplete/inconsistent configuration")
-		return core.VersionedConfidentialData{}
+		return nil
 	}
 
 	em := core.EncryptedMessage{}
 	if emErr := em.FromBase64PEM(mdl.EncryptedSecret.ValueString()); emErr != nil {
 		diagnostics.AddError("Invalid encrypted message", fmt.Sprintf("Encrypted message cannot be read from input: %s", emErr.Error()))
-		return core.VersionedConfidentialData{}
+		return nil
 	}
 
-	rv, err := core.ConvertEncryptedMessageToConfidentialData(em, d.factory.GetDecrypterFor(ctx, wrappingKeyCoordinate))
-	if err != nil {
-		diagnostics.AddError(
-			"Error restoring plaintext from ciphertext",
-			fmt.Sprintf("Error restoring decrypted secret value: %s", err.Error()),
-		)
+	payloadBytes, pbErr := em.ExtractPlainText(d.factory.GetDecrypterFor(ctx, wrappingKeyCoordinate))
+	if pbErr != nil {
+		diagnostics.AddError("Failed to decrypt message", fmt.Sprintf("Encrypted message cannot be decrypted: %s", pbErr.Error()))
+		return nil
 	}
-	return rv
+
+	return payloadBytes
 }
 
 type ConfidentialDatasourceBase struct {
@@ -382,11 +381,6 @@ func (d *ConfidentialDatasourceBase) Configure(ctx context.Context, req datasour
 func (d *ConfidentialDatasourceBase) FlushState(ctx context.Context, uuid string, data interface{}, resp *datasource.ReadResponse) {
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-	if trackErr := d.factory.TrackObjectId(ctx, uuid); trackErr != nil {
-		errMsg := fmt.Sprintf("could not track the password entered into the state: %s", trackErr.Error())
-		tflog.Error(ctx, errMsg)
-		resp.Diagnostics.AddError("incoming object tracking", errMsg)
-	}
 }
 
 type ConfidentialResourceBase struct {

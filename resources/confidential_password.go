@@ -21,12 +21,12 @@ type ConfidentialPasswordModel struct {
 	PlaintextPasswordHex    types.String `tfsdk:"plaintext_password_hex"`
 }
 
-func (cpm *ConfidentialPasswordModel) Accept(unwrappedPayload core.VersionedConfidentialData) {
+func (cpm *ConfidentialPasswordModel) Accept(unwrappedPayload core.VersionedStringConfidentialData) {
 	// For this example code, hardcoding a response value to
 	// save into the Terraform state.
-	cpm.Id = types.StringValue(unwrappedPayload.Uuid)
-	if len(unwrappedPayload.StringData) > 0 {
-		strVal := unwrappedPayload.StringData
+	cpm.Id = types.StringValue(unwrappedPayload.GetUUID())
+	if len(unwrappedPayload.GetStingData()) > 0 {
+		strVal := unwrappedPayload.GetStingData()
 
 		cpm.PlaintextPassword = types.StringValue(strVal)
 		cpm.PlaintextPasswordBase64 = types.StringValue(base64.StdEncoding.EncodeToString([]byte(strVal)))
@@ -35,11 +35,6 @@ func (cpm *ConfidentialPasswordModel) Accept(unwrappedPayload core.VersionedConf
 		cpm.PlaintextPassword = types.StringNull()
 		cpm.PlaintextPasswordBase64 = types.StringNull()
 		cpm.PlaintextPasswordHex = types.StringNull()
-	}
-
-	if unwrappedPayload.BinaryData != nil {
-		cpm.PlaintextPasswordBase64 = types.StringValue(base64.StdEncoding.EncodeToString(unwrappedPayload.BinaryData))
-		cpm.PlaintextPasswordHex = types.StringValue(hex.EncodeToString(unwrappedPayload.BinaryData))
 	}
 }
 
@@ -95,14 +90,24 @@ func (d *ConfidentialPasswordDataSource) Read(ctx context.Context, req datasourc
 		return
 	}
 
-	confidentialData := d.UnwrapEncryptedConfidentialData(ctx, data.ConfidentialMaterialModel, &resp.Diagnostics)
+	plainText := d.ExtractConfidentialModelPlainText(ctx, data.ConfidentialMaterialModel, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx, "diagnostics contain error after unwrapping the ciphertext; cannot continue")
 		return
 	}
 
-	if confidentialData.Type != "password" {
-		resp.Diagnostics.AddError("Mismatching confidential object type", fmt.Sprintf("Expected `password`, received `%s`", confidentialData.Type))
+	helper := core.NewVersionedStringConfidentialDataHelper()
+	confidentialData, importErr := helper.Import(plainText)
+	if importErr != nil {
+		tflog.Error(ctx, "diagnostics contain error after unwrapping the ciphertext; cannot continue")
+		resp.Diagnostics.AddError(
+			"Cannot parse plain text",
+			fmt.Sprintf("Plain text could not be parsed for further processing due to this error: %s. Are you specifying correct ciphertext for this datasource?", importErr.Error()),
+		)
+		return
+	}
+
+	if confidentialData.GetType() != "password" {
+		resp.Diagnostics.AddError("Mismatching confidential object type", fmt.Sprintf("Expected `password`, received `%s`", confidentialData.GetType()))
 	}
 
 	d.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, confidentialData, nil, &resp.Diagnostics)
@@ -112,7 +117,7 @@ func (d *ConfidentialPasswordDataSource) Read(ctx context.Context, req datasourc
 	}
 
 	data.Accept(confidentialData)
-	d.FlushState(ctx, confidentialData.Uuid, &data, resp)
+	d.FlushState(ctx, confidentialData.GetUUID(), &data, resp)
 }
 
 // Ensure provider defined types fully satisfy framework interfaces.

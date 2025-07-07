@@ -263,7 +263,7 @@ func (a *AzKeyVaultKeyResourceSpecializer) GetSupportedConfidentialMaterialTypes
 	return []string{"key", "symmetric-key"}
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) CheckPlacement(ctx context.Context, tfModel *ConfidentialKeyModel, cf core.VersionedConfidentialData) diag.Diagnostics {
+func (a *AzKeyVaultKeyResourceSpecializer) CheckPlacement(ctx context.Context, tfModel *ConfidentialKeyModel, cf core.VersionedBinaryConfidentialData) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 
 	destKeyCoordinate := a.factory.GetDestinationVaultObjectCoordinate(tfModel.DestinationKey, "keys")
@@ -326,18 +326,18 @@ func (a *AzKeyVaultKeyResourceSpecializer) DoRead(ctx context.Context, data *Con
 	return keyState.KeyBundle, ResourceExists, rv
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialKeyModel, confidentialData core.VersionedConfidentialData) (azkeys.KeyBundle, diag.Diagnostics) {
+func (a *AzKeyVaultKeyResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialKeyModel, confidentialData core.VersionedBinaryConfidentialData) (azkeys.KeyBundle, diag.Diagnostics) {
 	rvDiag := diag.Diagnostics{}
 
-	gunzip, gunzipErr := core.GZipDecompress(confidentialData.BinaryData)
-	if gunzipErr != nil {
-		rvDiag.AddError("Binary data is not GZip-compressed", gunzipErr.Error())
-		return azkeys.KeyBundle{}, rvDiag
-	}
+	//gunzip, gunzipErr := core.GZipDecompress(confidentialData.GetBinaryData())
+	//if gunzipErr != nil {
+	//	rvDiag.AddError("Binary data is not GZip-compressed", gunzipErr.Error())
+	//	return azkeys.KeyBundle{}, rvDiag
+	//}
 
 	params := data.ConvertToImportKeyParam(ctx)
 
-	jwkSet, jwkErr := jwk.Parse(gunzip)
+	jwkSet, jwkErr := jwk.Parse(confidentialData.GetBinaryData())
 	if jwkErr != nil {
 		rvDiag.AddError("Cannot read JSON Web Key data", jwkErr.Error())
 		return azkeys.KeyBundle{}, rvDiag
@@ -458,6 +458,10 @@ func (a *AzKeyVaultKeyResourceSpecializer) DoDelete(ctx context.Context, data *C
 	return rv
 }
 
+func (a *AzKeyVaultKeyResourceSpecializer) GetPlaintextImporter() core.ObjectExportSupport[core.VersionedBinaryConfidentialData, []byte] {
+	return core.NewVersionedBinaryConfidentialDataHelper()
+}
+
 func NewConfidentialAzVaultKeyResource() resource.Resource {
 	specificAttrs := map[string]schema.Attribute{
 		"key_opts": schema.SetAttribute{
@@ -538,7 +542,7 @@ func NewConfidentialAzVaultKeyResource() resource.Resource {
 		Attributes: WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(specificAttrs),
 	}
 
-	return &ConfidentialGenericResource[ConfidentialKeyModel, int, azkeys.KeyBundle]{
+	return &ConfidentialGenericResource[ConfidentialKeyModel, int, core.VersionedBinaryConfidentialData, azkeys.KeyBundle]{
 		specializer:    &AzKeyVaultKeyResourceSpecializer{},
 		resourceType:   "key",
 		resourceSchema: resourceSchema,

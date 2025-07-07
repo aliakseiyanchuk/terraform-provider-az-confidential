@@ -83,17 +83,13 @@ func OutputSecretTerraformCode(kwp ContentWrappingParams, secretDataAsStr string
 	return rv.Render("secret", secretTFTemplate)
 }
 
-func OutputSecretEncryptedContent(kwp ContentWrappingParams, secretDataAsStr string) (string, error) {
-	return OutputEncryptedConfidentialData(kwp, core.CreateConfidentialStringData(secretDataAsStr, "secret", kwp.GetLabels()))
-}
-
-func OutputEncryptedConfidentialData(kwp ContentWrappingParams, confidentialData core.VersionedConfidentialData) (string, error) {
-	encContent := ""
-	em, emErr := core.ConvertConfidentialDataToEncryptedMessage(confidentialData, kwp.LoadedRsaPublicKey)
-	if emErr != nil {
-		return encContent, emErr
-	} else {
-		encContent = em.ToBase64PEM()
+func OutputSecretEncryptedContent(kwp ContentWrappingParams, secretText string) (string, error) {
+	helper := core.NewVersionedStringConfidentialDataHelper()
+	_ = helper.CreateConfidentialStringData(secretText, "secret", kwp.GetLabels())
+	em, err := helper.ToEncryptedMessage(kwp.LoadedRsaPublicKey)
+	if err != nil {
+		return "", err
 	}
-	return encContent, nil
+
+	return em.ToBase64PEM(), nil
 }

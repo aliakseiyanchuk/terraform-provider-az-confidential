@@ -27,34 +27,34 @@ type IdAssigner[TMdl, AZAPIObject any] func(azObj AZAPIObject, tfModel *TMdl)
 type ConfidentialMaterialLocator[TMdl any] func(mdl TMdl) ConfidentialMaterialModel
 type PlacementChecker func(ctx context.Context, cf core.VersionedConfidentialData, diagnostics *diag.Diagnostics)
 
-type ConfidentialResourceSpecializer[TMdl, AZAPIObject any] interface {
+type ConfidentialResourceSpecializer[TMdl any, TConfData core.VersionedConfidentialData, AZAPIObject any] interface {
 	SetFactory(factory core.AZClientsFactory)
 	NewTerraformModel() TMdl
-	AssignIdTo(azObj AZAPIObject, tfModel *TMdl)
 	ConvertToTerraform(azObj AZAPIObject, tfModel *TMdl) diag.Diagnostics
 	GetConfidentialMaterialFrom(mdl TMdl) ConfidentialMaterialModel
 	GetSupportedConfidentialMaterialTypes() []string
-	CheckPlacement(ctx context.Context, tfModel *TMdl, cf core.VersionedConfidentialData) diag.Diagnostics
+	CheckPlacement(ctx context.Context, tfModel *TMdl, cf TConfData) diag.Diagnostics
+	GetPlaintextImporter() core.ObjectExportSupport[TConfData, []byte]
 
-	DoRead(_ context.Context, planData *TMdl) (AZAPIObject, ResourceExistenceCheck, diag.Diagnostics)
-	DoCreate(_ context.Context, planData *TMdl, unwrappedData core.VersionedConfidentialData) (AZAPIObject, diag.Diagnostics)
+	DoRead(ctx context.Context, planData *TMdl) (AZAPIObject, ResourceExistenceCheck, diag.Diagnostics)
+	DoCreate(ctx context.Context, planData *TMdl, plainData TConfData) (AZAPIObject, diag.Diagnostics)
 	DoUpdate(ctx context.Context, planData *TMdl) (AZAPIObject, diag.Diagnostics)
 	DoDelete(ctx context.Context, planData *TMdl) diag.Diagnostics
 }
 
-type ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject any] struct {
+type ConfidentialGenericResource[TMdl, TIdentity any, TConfData core.VersionedConfidentialData, AZAPIObject any] struct {
 	ConfidentialResourceBase
-	specializer ConfidentialResourceSpecializer[TMdl, AZAPIObject]
+	specializer ConfidentialResourceSpecializer[TMdl, TConfData, AZAPIObject]
 
 	resourceType   string
 	resourceSchema schema.Schema
 }
 
-func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = fmt.Sprintf("%s_%s", req.ProviderTypeName, d.resourceType)
 }
 
-func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	d.ConfidentialResourceBase.Configure(ctx, req, resp)
 	if resp.Diagnostics.HasError() {
 		return
@@ -63,11 +63,11 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Configure(ct
 	d.specializer.SetFactory(d.factory)
 }
 
-func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = d.resourceSchema
 }
 
-func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	data := d.specializer.NewTerraformModel()
 
 	// Read Terraform prior state data into the model
@@ -92,7 +92,6 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Read(ctx con
 			resp.Diagnostics.Append(convertDiagnostics...)
 		}
 
-		d.specializer.AssignIdTo(azObj, &data)
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 	} else if resourceExistenceCheck == ResourceCheckError {
 		tflog.Error(ctx, "Failed to check the existence of resource during read; consult diagnostic messages")
@@ -101,7 +100,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Read(ctx con
 	}
 }
 
-func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	data := d.specializer.NewTerraformModel()
 
 	// Read Terraform prior state data into the model
@@ -110,16 +109,26 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Create(ctx c
 		return
 	}
 
-	confidentialMaterial := d.UnwrapEncryptedConfidentialData(ctx, d.specializer.GetConfidentialMaterialFrom(data), &resp.Diagnostics)
+	plainText := d.ExtractConfidentialModelPlainText(ctx, d.specializer.GetConfidentialMaterialFrom(data), &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if !slices.Contains(d.specializer.GetSupportedConfidentialMaterialTypes(), confidentialMaterial.Type) {
+	importer := d.specializer.GetPlaintextImporter()
+	confidentialMaterial, importErr := importer.Import(plainText)
+	if importErr != nil {
+		resp.Diagnostics.AddError(
+			"Cannot parse plain text",
+			fmt.Sprintf("Plain text could not be parsed for further processing due to this error: %s. Are you specifying correct ciphertext for this resource?", importErr.Error()),
+		)
+		return
+	}
+
+	if !slices.Contains(d.specializer.GetSupportedConfidentialMaterialTypes(), confidentialMaterial.GetType()) {
 		resp.Diagnostics.AddError("Unexpected object type", fmt.Sprintf(
 			"Expected %s, got %s",
 			d.specializer.GetSupportedConfidentialMaterialTypes(),
-			confidentialMaterial.Type))
+			confidentialMaterial.GetType()))
 		return
 	}
 
@@ -141,12 +150,10 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Create(ctx c
 		resp.Diagnostics.Append(convertDiagnostics...)
 	}
 
-	d.specializer.AssignIdTo(azObj, &data)
-
-	d.FlushState(ctx, confidentialMaterial.Uuid, &data, resp)
+	d.FlushState(ctx, confidentialMaterial.GetUUID(), &data, resp)
 }
 
-func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	data := d.specializer.NewTerraformModel()
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 
@@ -167,7 +174,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Update(ctx c
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	data := d.specializer.NewTerraformModel()
 
 	// Read Terraform prior state data into the model
@@ -181,4 +188,4 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, AZAPIObject]) Delete(ctx c
 }
 
 // Ensure compilation of the resources
-var _ resource.Resource = &ConfidentialGenericResource[string, int, string]{}
+var _ resource.Resource = &ConfidentialGenericResource[string, int, core.VersionedConfidentialData, string]{}

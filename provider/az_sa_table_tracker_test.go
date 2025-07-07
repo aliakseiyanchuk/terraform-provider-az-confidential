@@ -33,6 +33,7 @@ func getTestAzCredential(t *testing.T) *azidentity.ClientSecretCredential {
 func Test_AZTATT_Integration(t *testing.T) {
 	cred := getTestAzCredential(t)
 	if cred == nil {
+		t.SkipNow()
 		fmt.Println("Az Table Tracker integration test skipped: no credential set")
 		return
 	}

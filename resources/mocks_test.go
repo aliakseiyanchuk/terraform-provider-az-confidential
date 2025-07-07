@@ -28,6 +28,18 @@ func (m *AZClientsFactoryMock) GivenGetSecretClientWillReturn(vaultAddr string, 
 		Return(cl, nil)
 }
 
+func (m *AZClientsFactoryMock) GivenGetCertificatesClientWillReturnError(vaultAddr, msg string) {
+	m.Mock.
+		On("GetCertificateClient", vaultAddr).
+		Return(nil, errors.New(msg))
+}
+
+func (m *AZClientsFactoryMock) GivenGetCertificatesClientWillReturn(vaultAddr string, cl core.AzCertificateClientAbstraction) {
+	m.Mock.
+		On("GetCertificateClient", vaultAddr).
+		Return(cl, nil)
+}
+
 func (m *AZClientsFactoryMock) GivenIsObjectTrackingEnabled(enableOpt bool) {
 	m.On("IsObjectTrackingEnabled").Return(enableOpt)
 }
@@ -38,7 +50,7 @@ func (m *AZClientsFactoryMock) GivenGetSecretClientWillReturnNilClient(vaultAddr
 		Return(nil, nil)
 }
 
-func (m *AZClientsFactoryMock) GivenGetdestinationVaultObjectCoordinate(vaultAddr, objectType, objectName string) {
+func (m *AZClientsFactoryMock) GivenGetDestinationVaultObjectCoordinate(vaultAddr, objectType, objectName string) {
 	m.Mock.
 		On("GetDestinationVaultObjectCoordinate", mock.Anything, objectType).
 		Return(core.AzKeyVaultObjectCoordinate{
@@ -57,6 +69,12 @@ func (m *AZClientsFactoryMock) GivenGetKeysClientWillReturnError(vaultAddr, msg 
 func (m *AZClientsFactoryMock) GivenGetKeysClientWillReturnNilClient(vaultAddr string) {
 	m.Mock.
 		On("GetKeysClient", vaultAddr).
+		Return(nil, nil)
+}
+
+func (m *AZClientsFactoryMock) GivenGetCertificatesClientWillReturnNilClient(vaultAddr string) {
+	m.Mock.
+		On("GetCertificateClient", vaultAddr).
 		Return(nil, nil)
 }
 
@@ -90,9 +108,15 @@ func (m *AZClientsFactoryMock) GetKeysClient(vaultName string) (core.AzKeyClient
 	return rvCl, rv.Error(1)
 }
 
-func (m *AZClientsFactoryMock) GetCertificateClient(vaultName string) (*azcertificates.Client, error) {
+func (m *AZClientsFactoryMock) GetCertificateClient(vaultName string) (core.AzCertificateClientAbstraction, error) {
 	rv := m.Mock.Called(vaultName)
-	return rv.Get(0).(*azcertificates.Client), rv.Error(1)
+
+	var rvCl core.AzCertificateClientAbstraction = nil
+	if rv.Get(0) != nil {
+		rvCl = rv.Get(0).(core.AzCertificateClientAbstraction)
+	}
+
+	return rvCl, rv.Error(1)
 }
 
 func (m *AZClientsFactoryMock) GetMergedWrappingKeyCoordinate(ctx context.Context, param *core.WrappingKeyCoordinateModel, diag *diag.Diagnostics) core.WrappingKeyCoordinate {
@@ -292,4 +316,65 @@ func (k *KeysClientMock) UpdateKey(ctx context.Context, name string, version str
 func (k *KeysClientMock) GetKey(ctx context.Context, name string, version string, options *azkeys.GetKeyOptions) (azkeys.GetKeyResponse, error) {
 	args := k.Called(ctx, name, version, options)
 	return args.Get(0).(azkeys.GetKeyResponse), args.Error(1)
+}
+
+type CertificateClientMock struct {
+	mock.Mock
+}
+
+func (c *CertificateClientMock) GivenGetCertificateReturnsObjectNotFound(name, version string) {
+	var opts *azcertificates.GetCertificateOptions = nil
+	c.On("GetCertificate", mock.Anything, name, version, opts).
+		Return(azcertificates.GetCertificateResponse{}, MockedAzObjectNotFoundError())
+}
+
+func (c *CertificateClientMock) GivenGetCertificateErrs(name, version, errorMessage string) {
+	var opts *azcertificates.GetCertificateOptions = nil
+	c.On("GetCertificate", mock.Anything, name, version, opts).
+		Return(azcertificates.GetCertificateResponse{}, errors.New(errorMessage))
+}
+
+func (c *CertificateClientMock) GivenImportCertificateErrs(name, errorMessage string) {
+	var opts *azcertificates.ImportCertificateOptions = nil
+	c.On("ImportCertificate", mock.Anything, name, mock.Anything, opts).
+		Return(azcertificates.ImportCertificateResponse{}, errors.New(errorMessage))
+}
+
+func (c *CertificateClientMock) GivenImportCertificate(name string) {
+	var opts *azcertificates.ImportCertificateOptions = nil
+	c.On("ImportCertificate", mock.Anything, name, opts).
+		Return(azcertificates.ImportCertificateResponse{}, nil)
+}
+
+func (c *CertificateClientMock) GivenGetCertificate(name, version string) {
+	var opts *azcertificates.GetCertificateOptions = nil
+	c.On("GetCertificate", mock.Anything, name, version, opts).
+		Return(azcertificates.GetCertificateResponse{}, nil)
+}
+
+func (c *CertificateClientMock) GivenUpdateCertificate(name, version string) {
+	var opts *azcertificates.UpdateCertificateOptions = nil
+	c.On("UpdateCertificate", mock.Anything, name, version, mock.Anything, opts).
+		Return(azcertificates.UpdateCertificateResponse{}, nil)
+}
+
+func (c *CertificateClientMock) GivenUpdateCertificateErrs(name, version string, errorMessage string) {
+	var opts *azcertificates.UpdateCertificateOptions = nil
+	c.On("UpdateCertificate", mock.Anything, name, version, mock.Anything, opts).
+		Return(azcertificates.UpdateCertificateResponse{}, errors.New(errorMessage))
+}
+
+func (c *CertificateClientMock) GetCertificate(ctx context.Context, name string, version string, options *azcertificates.GetCertificateOptions) (azcertificates.GetCertificateResponse, error) {
+	args := c.Called(ctx, name, version, options)
+	return args.Get(0).(azcertificates.GetCertificateResponse), args.Error(1)
+}
+
+func (c *CertificateClientMock) ImportCertificate(ctx context.Context, name string, parameters azcertificates.ImportCertificateParameters, options *azcertificates.ImportCertificateOptions) (azcertificates.ImportCertificateResponse, error) {
+	args := c.Called(ctx, name, parameters, options)
+	return args.Get(0).(azcertificates.ImportCertificateResponse), args.Error(1)
+}
+
+func (c *CertificateClientMock) UpdateCertificate(ctx context.Context, name string, version string, parameters azcertificates.UpdateCertificateParameters, options *azcertificates.UpdateCertificateOptions) (azcertificates.UpdateCertificateResponse, error) {
+	args := c.Called(ctx, name, version, parameters, options)
+	return args.Get(0).(azcertificates.UpdateCertificateResponse), args.Error(1)
 }

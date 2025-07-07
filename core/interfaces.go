@@ -2,50 +2,15 @@ package core
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azcertificates"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"net/url"
 	"strings"
 )
-
-type VersionedConfidentialData struct {
-	Uuid       string
-	Type       string
-	BinaryData []byte
-	StringData string
-	Labels     []string
-}
-
-func (vcd *VersionedConfidentialData) ImportJsonSerializable(value interface{}) {
-	data, _ := json.Marshal(value)
-	vcd.BinaryData = GZipCompress(data)
-}
-
-func (vcd *VersionedConfidentialData) ExportToJson(value interface{}) error {
-	decompressed, err := GZipDecompress(vcd.BinaryData)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(decompressed, &value)
-}
-
-func (vcd *VersionedConfidentialData) PayloadAsB64Ptr() *string {
-	if len(vcd.BinaryData) == 0 {
-		return nil
-	} else {
-		out := base64.StdEncoding.EncodeToString(vcd.BinaryData)
-		return &out
-	}
-}
 
 type AzSecretsClientAbstraction interface {
 	GetSecret(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error)
@@ -60,11 +25,17 @@ type AzKeyClientAbstraction interface {
 	GetKey(ctx context.Context, name string, version string, options *azkeys.GetKeyOptions) (azkeys.GetKeyResponse, error)
 }
 
+type AzCertificateClientAbstraction interface {
+	GetCertificate(ctx context.Context, name string, version string, options *azcertificates.GetCertificateOptions) (azcertificates.GetCertificateResponse, error)
+	ImportCertificate(ctx context.Context, name string, parameters azcertificates.ImportCertificateParameters, options *azcertificates.ImportCertificateOptions) (azcertificates.ImportCertificateResponse, error)
+	UpdateCertificate(ctx context.Context, name string, version string, parameters azcertificates.UpdateCertificateParameters, options *azcertificates.UpdateCertificateOptions) (azcertificates.UpdateCertificateResponse, error)
+}
+
 // AZClientsFactory interface supplying Azure clients to various services.
 type AZClientsFactory interface {
 	GetSecretsClient(vaultName string) (AzSecretsClientAbstraction, error)
 	GetKeysClient(vaultName string) (AzKeyClientAbstraction, error)
-	GetCertificateClient(vaultName string) (*azcertificates.Client, error)
+	GetCertificateClient(vaultName string) (AzCertificateClientAbstraction, error)
 
 	// GetMergedWrappingKeyCoordinate get merged wrapping key coordinate providing
 	// the values the parameter doesn't specify from the provider's default settings
@@ -175,133 +146,4 @@ func (c *AzKeyVaultObjectCoordinate) DefinesVaultName() bool {
 
 func (c *AzKeyVaultObjectCoordinate) GetLabel() string {
 	return fmt.Sprintf("az-c-label://%s/%s@%s;", c.VaultName, c.Name, c.Type)
-}
-
-// AzKeyVaultPayload payload transferred to the vault coordinate
-type AzKeyVaultPayload struct {
-	AzKeyVaultObjectCoordinate
-	Payload []byte
-}
-
-type WrappingKeyCoordinateModel struct {
-	VaultName  types.String `tfsdk:"vault_name"`
-	KeyName    types.String `tfsdk:"name"`
-	KeyVersion types.String `tfsdk:"version"`
-	Algorithm  types.String `tfsdk:"algorithm"`
-}
-
-func (w *WrappingKeyCoordinateModel) AsCoordinate() WrappingKeyCoordinate {
-	return WrappingKeyCoordinate{
-		VaultName:  w.VaultName.ValueString(),
-		KeyName:    w.KeyName.ValueString(),
-		KeyVersion: w.KeyVersion.ValueString(),
-		Algorithm:  w.Algorithm.ValueString(),
-	}
-}
-
-type WrappingKeyCoordinate struct {
-	VaultName  string
-	KeyName    string
-	KeyVersion string
-	Algorithm  string
-
-	AzEncryptionAlg azkeys.EncryptionAlgorithm
-}
-
-func (w *WrappingKeyCoordinate) IsEmpty() bool {
-	return len(w.VaultName) == 0 && len(w.KeyName) == 0 && len(w.KeyVersion) == 0 && len(w.Algorithm) == 0
-}
-
-func (w *WrappingKeyCoordinate) DefiesVaultName() bool {
-	return len(w.VaultName) > 0
-}
-
-func (w *WrappingKeyCoordinate) DefiesKeyName() bool {
-	return len(w.KeyName) > 0
-}
-
-func (w *WrappingKeyCoordinate) DefiesKeyVersion() bool {
-	return len(w.KeyName) > 0
-}
-
-func (w *WrappingKeyCoordinate) DefiesKeyAlgorithm() bool {
-	return len(w.Algorithm) > 0
-}
-
-func (w *WrappingKeyCoordinate) FillDefaults(ctx context.Context, client AzKeyClientAbstraction, diag *diag.Diagnostics) {
-	if len(w.KeyVersion) == 0 {
-		tflog.Trace(ctx, fmt.Sprintf("Attempting establish the latest version of the key %s in vault %s", w.KeyName, w.VaultName))
-
-		if keyResp, readKeyErr := client.GetKey(ctx, w.KeyName, "", nil); readKeyErr != nil {
-			diag.AddError("Was unable to retrieve the latest version of key", fmt.Sprintf("%s", readKeyErr.Error()))
-			return
-		} else {
-			w.KeyVersion = keyResp.Key.KID.Version()
-		}
-	} else {
-		if _, readKeyErr := client.GetKey(ctx, w.KeyName, w.KeyVersion, nil); readKeyErr != nil {
-			diag.AddError("Was unable to retrieve the specified version of key", fmt.Sprintf("%s", readKeyErr.Error()))
-			return
-		}
-	}
-
-	azAlg, algDetectError := w.GetAzEncryptionAlgorithm()
-	if algDetectError != nil {
-		diag.AddError("Missing decryption algorithm", "The algorithm supplied doesn't match any supported decryption algorithms")
-		return
-	} else {
-		w.AzEncryptionAlg = azAlg
-	}
-}
-
-func (w *WrappingKeyCoordinate) GetAzEncryptionAlgorithm() (azkeys.EncryptionAlgorithm, error) {
-	p_alg := w.GetAlgorithm()
-	for _, alg := range azkeys.PossibleEncryptionAlgorithmValues() {
-		if p_alg == string(alg) {
-			return alg, nil
-		}
-	}
-
-	return azkeys.EncryptionAlgorithmA128CBC, errors.New(fmt.Sprintf("Unknown algorithm: %s", w.Algorithm))
-}
-
-func (w *WrappingKeyCoordinate) GetAlgorithm() string {
-	if len(w.Algorithm) > 0 {
-		return w.Algorithm
-	} else {
-		return string(azkeys.EncryptionAlgorithmRSAOAEP256)
-	}
-}
-
-func (w *WrappingKeyCoordinate) AddressesKey() bool {
-	return len(w.VaultName) > 0 && len(w.KeyName) > 0
-}
-
-func (w *WrappingKeyCoordinate) Validate() diag.Diagnostics {
-	var rv diag.Diagnostics
-
-	if !w.AddressesKey() {
-		summary := "Incomplete wrapping key address"
-
-		detail := strings.Builder{}
-		detail.WriteString("To unwrap a key, a at least vault name and wrapping key name must be supplied.")
-		if len(w.VaultName) == 0 {
-			detail.WriteString(" Vault name was not provided for this resource.")
-		}
-		if len(w.KeyName) == 0 {
-			detail.WriteString(" Wrapping key name is not provided for this resource.")
-		}
-
-		rv = append(rv, diag.NewErrorDiagnostic(summary, detail.String()))
-	}
-
-	return rv
-}
-
-func mustMarshalJSON(v interface{}) string {
-	if b, err := json.Marshal(v); err != nil {
-		panic(err)
-	} else {
-		return string(b)
-	}
 }

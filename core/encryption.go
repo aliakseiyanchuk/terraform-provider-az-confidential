@@ -65,6 +65,69 @@ type EncryptedMessage struct {
 	contentEncryptionKey []byte
 }
 
+func (em *EncryptedMessage) EncryptPlainText(payload []byte, rsaKey *rsa.PublicKey) error {
+	em.secretText = nil
+	em.contentEncryptionKey = nil
+
+	// If the message is too long to be just encrypted with the RSA, we need to
+	// habe a two-step scheme
+	if len(payload) > rsaKey.Size()-2*sha256HashSize-2 {
+		// First step: create AES encryption key and wrap the payload with it.
+		encryptedPayload, aesData, encryptionErr := AESEncrypt(payload)
+		if encryptionErr != nil {
+			return encryptionErr
+		}
+		em.secretText = encryptedPayload
+
+		encryptedCEK, cekEncryptionErr := RsaEncryptBytes(rsaKey, aesData.ToBytes(), nil)
+		if cekEncryptionErr != nil {
+			return cekEncryptionErr
+		}
+
+		em.contentEncryptionKey = encryptedCEK
+		return nil
+	} else {
+		encryptedPayload, encryptionErr := RsaEncryptBytes(rsaKey, payload, nil)
+		if encryptionErr != nil {
+			return encryptionErr
+		}
+
+		em.contentEncryptionKey = nil
+		em.secretText = encryptedPayload
+		return nil
+	}
+}
+
+func (em *EncryptedMessage) ExtractPlainText(decrypter RSADecrypter) ([]byte, error) {
+	var plaintext []byte
+
+	if em.HasContentEncryptionKey() {
+		cek, rsaErr := decrypter(em.contentEncryptionKey)
+		if rsaErr != nil {
+			return nil, fmt.Errorf("cannot decrypt CEK: %s", rsaErr.Error())
+		}
+
+		aesData := AESData{}
+		if aesErr := aesData.FromBytes(cek); aesErr != nil {
+			return nil, fmt.Errorf("cannot unmarshal AES key: %s", aesErr.Error())
+		}
+
+		if pt, decrErr := AESDecrypt(em.secretText, aesData); decrErr != nil {
+			return nil, fmt.Errorf("cannot decrypt AES text: %s", decrErr.Error())
+		} else {
+			plaintext = pt
+		}
+	} else {
+		if pt, rsaErr := decrypter(em.secretText); rsaErr != nil {
+			return nil, fmt.Errorf("cannot decrypt plain text using RSA: %s", rsaErr.Error())
+		} else {
+			plaintext = pt
+		}
+	}
+
+	return plaintext, nil
+}
+
 func (em *EncryptedMessage) GetContentEncryptionKeyExpr() string {
 	if len(em.contentEncryptionKey) == 0 {
 		return ""
@@ -157,34 +220,8 @@ var sha256HashSize = sha256.New().Size()
 
 func CreateEncryptedMessage(rsaKey *rsa.PublicKey, payload []byte) (EncryptedMessage, error) {
 	rv := EncryptedMessage{}
-
-	// If the message is too long to be just encrypted with the RSA, we need to
-	// habe a two-step scheme
-	if len(payload) > rsaKey.Size()-2*sha256HashSize-2 {
-		// First step: create AES encryption key and wrap the payload with it.
-		encryptedPayload, aesData, encryptionErr := AESEncrypt(payload)
-		if encryptionErr != nil {
-			return rv, encryptionErr
-		}
-		rv.secretText = encryptedPayload
-
-		encryptedCEK, cekEncryptionErr := RsaEncryptBytes(rsaKey, aesData.ToBytes(), nil)
-		if cekEncryptionErr != nil {
-			return rv, cekEncryptionErr
-		}
-
-		rv.contentEncryptionKey = encryptedCEK
-		return rv, nil
-	} else {
-		encryptedPayload, encryptionErr := RsaEncryptBytes(rsaKey, payload, nil)
-		if encryptionErr != nil {
-			return rv, encryptionErr
-		}
-
-		rv.contentEncryptionKey = nil
-		rv.secretText = encryptedPayload
-		return rv, nil
-	}
+	err := rv.EncryptPlainText(payload, rsaKey)
+	return rv, err
 }
 
 const aesKeySizeBits = 256
@@ -240,9 +277,9 @@ func AESEncrypt(plaintext []byte) ([]byte, AESData, error) {
 	return output, rv, nil
 }
 
-func RsaEncryptBytes(key *rsa.PublicKey, plaintext []byte, label []byte) ([]byte, error) {
+func RsaEncryptBytes(key *rsa.PublicKey, plaintext []byte, oaepLabel []byte) ([]byte, error) {
 	hash := sha256.New()
-	ciphertext, _ := rsa.EncryptOAEP(hash, rand.Reader, key, plaintext, label)
+	ciphertext, _ := rsa.EncryptOAEP(hash, rand.Reader, key, plaintext, oaepLabel)
 
 	return ciphertext, nil
 }

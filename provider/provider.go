@@ -91,7 +91,7 @@ func (ccs *CachedAzClientsSupplier) GetKeysClient(vaultName string) (core.AzKeyC
 
 // GetCertificateClient return (potentially cached) secrets client to connect to the specified
 // vault name. The `vaultName` is the (url) name of the vault to have the client connect to
-func (ccs *CachedAzClientsSupplier) GetCertificateClient(vaultName string) (*azcertificates.Client, error) {
+func (ccs *CachedAzClientsSupplier) GetCertificateClient(vaultName string) (core.AzCertificateClientAbstraction, error) {
 	if ccs.certificateClients == nil {
 		ccs.certificateClients = map[string]*azcertificates.Client{}
 	}
@@ -240,25 +240,25 @@ func (f *AZClientsFactoryImpl) TrackObjectId(ctx context.Context, id string) err
 
 var _ core.AZClientsFactory = &AZClientsFactoryImpl{}
 
-func (f *AZClientsFactoryImpl) EnsureCanPlaceKeyVaultObjectAt(ctx context.Context, unwrappedData core.VersionedConfidentialData, targetCoord *core.AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics) {
-	if objIsTracked, trackerCheckErr := f.IsObjectIdTracked(ctx, unwrappedData.Uuid); trackerCheckErr != nil {
+func (f *AZClientsFactoryImpl) EnsureCanPlaceKeyVaultObjectAt(ctx context.Context, confData core.VersionedConfidentialData, targetCoord *core.AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics) {
+	if objIsTracked, trackerCheckErr := f.IsObjectIdTracked(ctx, confData.GetUUID()); trackerCheckErr != nil {
 		diagnostics.AddError("cannot check tracking status of this secret", trackerCheckErr.Error())
 	} else if objIsTracked {
 		diagnostics.AddError(
-			fmt.Sprintf("%s is already tracked", unwrappedData.Type),
-			fmt.Sprintf("Potential attempt to copy confidential data detected: someone is trying to create a %s from ciphertext that was previously used", unwrappedData.Type),
+			fmt.Sprintf("%s is already tracked", confData.GetType()),
+			fmt.Sprintf("Potential attempt to copy confidential data detected: someone is trying to create a %s from ciphertext that was previously used", confData.GetType()),
 		)
 	}
 
 	if f.LabelMatchRequirement == TargetCoordinate && targetCoord != nil {
-		if !slices.Contains(unwrappedData.Labels, targetCoord.GetLabel()) {
-			diagnostics.AddError("mismatched placement", fmt.Sprintf("The constraints embedded in the ciphertext of this %s disallow unwrapped into vault %s/%s", unwrappedData.Type, targetCoord.VaultName, targetCoord.Name))
+		if !slices.Contains(confData.GetLabels(), targetCoord.GetLabel()) {
+			diagnostics.AddError("mismatched placement", fmt.Sprintf("The constraints embedded in the ciphertext of this %s disallow unwrapped into vault %s/%s", confData.GetType(), targetCoord.VaultName, targetCoord.Name))
 		}
 	} else if f.LabelMatchRequirement == ProviderLabels || (f.LabelMatchRequirement == TargetCoordinate && targetCoord == nil) {
 		// This situation with nil target coordinate will only when unwrapping the password,
 		//which doesn't have a target Vault object to be associated with.
-		if !core.AnyIsIn(f.ProviderLabels, unwrappedData.Labels) {
-			diagnostics.AddError("mismatched placement", fmt.Sprintf("The constraints embedded in the ciphertext of this %s disallow unwrapping the ciphertext by this provider", unwrappedData.Type))
+		if !core.AnyIsIn(f.ProviderLabels, confData.GetLabels()) {
+			diagnostics.AddError("mismatched placement", fmt.Sprintf("The constraints embedded in the ciphertext of this %s disallow unwrapping the ciphertext by this provider", confData.GetType()))
 		}
 	}
 	// If no label matching is required, no actions would be performed.

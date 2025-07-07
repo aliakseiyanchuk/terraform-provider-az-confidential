@@ -1,6 +1,7 @@
 package core
 
 import (
+	"crypto/rsa"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,18 @@ import (
 	"testing"
 )
 import _ "github.com/stretchr/testify/assert"
+
+var LoadedEphemeralRsaPrivateKey *rsa.PrivateKey
+var LoadedEphemeralRsaPublicKey *rsa.PublicKey
+
+func init() {
+	fmt.Print("Loading...")
+	LoadedEphemeralRsaPublicKey, _ = LoadPublicKeyFromData(testkeymaterial.EphemeralRsaPublicKey)
+	rawKew, _ := PrivateKeyFromData(testkeymaterial.EphemeralRsaKeyText)
+	LoadedEphemeralRsaPrivateKey = rawKew.(*rsa.PrivateKey)
+
+	fmt.Print("Loaded!...")
+}
 
 func TestAESEncryption(t *testing.T) {
 	plainText := []byte("this is a secret string")

@@ -129,12 +129,12 @@ func GenerateConfidentialCertificateTerraformTemplate(kwp ContentWrappingParams,
 	if outputTFCOde {
 		return OutputConfidentialCertificateTerraformCode(kwp, certData, certPass, nil)
 	} else {
-		return OutputCertificateEncryptedContent(kwp, certData, certPass)
+		return OutputCertificateEncryptedContent(kwp, certData, "pem", certPass) // TODO check this
 	}
 }
 
 func OutputConfidentialCertificateTerraformCode(kwp ContentWrappingParams, data []byte, passwordString string, tags map[string]string) (string, error) {
-	ciphertext, err := OutputCertificateEncryptedContent(kwp, data, passwordString)
+	ciphertext, err := OutputCertificateEncryptedContent(kwp, data, "pem", passwordString) // todo check this
 	if err != nil {
 		return ciphertext, err
 	}
@@ -154,6 +154,20 @@ func OutputConfidentialCertificateTerraformCode(kwp ContentWrappingParams, data 
 	return rv.Render("cert", certTFTemplate)
 }
 
-func OutputCertificateEncryptedContent(kwp ContentWrappingParams, data []byte, passwordString string) (string, error) {
-	return OutputEncryptedConfidentialData(kwp, core.CreateDualConfidentialData(data, passwordString, "certificate", kwp.GetLabels()))
+func OutputCertificateEncryptedContent(kwp ContentWrappingParams, data []byte, certFormat string, passwordString string) (string, error) {
+	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
+	_ = helper.CreateConfidentialCertificateData(
+		data,
+		certFormat,
+		passwordString,
+		"certificate",
+		kwp.GetLabels(),
+	)
+
+	em, err := helper.ToEncryptedMessage(kwp.LoadedRsaPublicKey)
+	if err != nil {
+		return "", err
+	}
+
+	return em.ToBase64PEM(), nil
 }

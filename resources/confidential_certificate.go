@@ -9,6 +9,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azcertificates"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -32,20 +33,40 @@ type ConfidentialCertificateModel struct {
 }
 
 func (cm *ConfidentialCertificateModel) Accept(cert azcertificates.Certificate) {
-	tfVersionVal := types.StringNull()
-	tfVersionlessIdVal := types.StringNull()
+	cm.AssignId(cert)
+
 	tfSecretIdVal := types.StringNull()
 	tfVersionlessSecretIdVal := types.StringNull()
-	tfIdVal := types.StringNull()
 
 	if cert.Attributes != nil {
 		cm.NotBefore = core.FormatTime(cert.Attributes.NotBefore)
 		cm.NotAfter = core.FormatTime(cert.Attributes.Expires)
 
-		if cert.Attributes.Enabled != nil {
-			cm.Enabled = types.BoolValue(*cert.Attributes.Enabled)
+		cm.ConvertAzBool(cert.Attributes.Enabled, &cm.Enabled)
+	}
+
+	if cert.SID != nil {
+		azIdStr := string(*cert.SID)
+		tfSecretIdVal = types.StringValue(azIdStr)
+
+		coord := core.AzKeyVaultObjectVersionedCoordinate{}
+		if err := coord.FromId(azIdStr); err == nil {
+			tfVersionlessSecretIdVal = types.StringValue(coord.VersionlessId())
 		}
 	}
+
+	cm.SecretId = tfSecretIdVal
+	cm.VersionlessSecretId = tfVersionlessSecretIdVal
+	cm.Thumbprint = types.StringValue(hex.EncodeToString(cert.X509Thumbprint))
+
+	cm.CertificateData = types.StringValue(hex.EncodeToString(cert.CER))
+	cm.CertificateDataBase64 = types.StringValue(base64.StdEncoding.EncodeToString(cert.CER))
+}
+
+func (cm *ConfidentialCertificateModel) AssignId(cert azcertificates.Certificate) {
+	tfIdVal := types.StringNull()
+	tfVersionVal := types.StringNull()
+	tfVersionlessIdVal := types.StringNull()
 
 	if cert.ID != nil {
 		azIdStr := string(*cert.ID)
@@ -63,39 +84,262 @@ func (cm *ConfidentialCertificateModel) Accept(cert azcertificates.Certificate) 
 		tfVersionVal = types.StringValue(cert.ID.Version())
 	}
 
-	if cert.SID != nil {
-		azIdStr := string(*cert.SID)
-		tfSecretIdVal = types.StringValue(azIdStr)
+	cm.Id = tfIdVal
+	cm.CertificateVersion = tfVersionVal
+	cm.VersionlessId = tfVersionlessIdVal
+}
 
-		coord := core.AzKeyVaultObjectVersionedCoordinate{}
-		if err := coord.FromId(azIdStr); err == nil {
-			tfVersionlessSecretIdVal = types.StringValue(coord.VersionlessId())
-		}
+func (d *ConfidentialCertificateModel) ConvertToImportCertParam() azcertificates.ImportCertificateParameters {
+	certAttr := azcertificates.CertificateAttributes{
+		NotBefore: d.NotBeforeDateAtPtr(),
+		Expires:   d.NotAfterDateAtPtr(),
+		Enabled:   d.Enabled.ValueBoolPointer(),
 	}
 
-	cm.Id = tfIdVal
-	cm.VersionlessId = tfVersionlessIdVal
-	cm.SecretId = tfSecretIdVal
-	cm.VersionlessSecretId = tfVersionlessSecretIdVal
-	cm.CertificateVersion = tfVersionVal
-	cm.Thumbprint = types.StringValue(hex.EncodeToString(cert.X509Thumbprint))
+	// Question: what to do with DER-encoded certificates?
+	// May need to be set to:
+	//application/x-pem-file for .pem
+	//application/x-pkcs12 for .p12 .pfx
+	rv := azcertificates.ImportCertificateParameters{
+		CertificateAttributes: &certAttr,
+		CertificatePolicy: &azcertificates.CertificatePolicy{
+			SecretProperties: &azcertificates.SecretProperties{
+				ContentType: to.Ptr("application/x-pem-file"),
+			},
+		},
+		Password: to.Ptr(""),
+		Tags:     d.TagsAsPtr(),
+	}
 
-	cm.CertificateData = types.StringValue(hex.EncodeToString(cert.CER))
-	cm.CertificateDataBase64 = types.StringValue(base64.StdEncoding.EncodeToString(cert.CER))
+	return rv
 }
 
-type ConfidentialAzVaultCertificateResource struct {
-	ConfidentialResourceBase
-}
+func (d *ConfidentialCertificateModel) ConvertToUpdateCertParam() azcertificates.UpdateCertificateParameters {
+	certAttr := azcertificates.CertificateAttributes{
+		NotBefore: d.NotBeforeDateAtPtr(),
+		Expires:   d.NotAfterDateAtPtr(),
+		Enabled:   d.Enabled.ValueBoolPointer(),
+	}
+	rv := azcertificates.UpdateCertificateParameters{
+		CertificateAttributes: &certAttr,
+		Tags:                  d.TagsAsPtr(),
+	}
 
-func (d *ConfidentialAzVaultCertificateResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_certificate"
+	return rv
 }
 
 //go:embed confidential_certificate.md
 var certificateResourceMarkdownDescription string
 
-func (d *ConfidentialAzVaultCertificateResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+type AzKeyVaultCertificateResourceSpecializer struct {
+	factory core.AZClientsFactory
+}
+
+func (a *AzKeyVaultCertificateResourceSpecializer) SetFactory(factory core.AZClientsFactory) {
+	a.factory = factory
+}
+
+func (a *AzKeyVaultCertificateResourceSpecializer) NewTerraformModel() ConfidentialCertificateModel {
+	return ConfidentialCertificateModel{}
+}
+
+func (a *AzKeyVaultCertificateResourceSpecializer) ConvertToTerraform(azObj azcertificates.Certificate, tfModel *ConfidentialCertificateModel) diag.Diagnostics {
+	tfModel.Accept(azObj)
+	return diag.Diagnostics{}
+}
+
+func (a *AzKeyVaultCertificateResourceSpecializer) GetConfidentialMaterialFrom(mdl ConfidentialCertificateModel) ConfidentialMaterialModel {
+	return mdl.ConfidentialMaterialModel
+}
+
+func (a *AzKeyVaultCertificateResourceSpecializer) GetSupportedConfidentialMaterialTypes() []string {
+	return []string{"certificate"}
+}
+
+func (a *AzKeyVaultCertificateResourceSpecializer) CheckPlacement(ctx context.Context, tfModel *ConfidentialCertificateModel, cf core.VersionedKeyVaultCertificateData) diag.Diagnostics {
+	rv := diag.Diagnostics{}
+
+	destKeyCoordinate := a.factory.GetDestinationVaultObjectCoordinate(tfModel.DestinationCert, "certificates")
+
+	a.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, cf, &destKeyCoordinate, &rv)
+	return rv
+}
+
+func (a *AzKeyVaultCertificateResourceSpecializer) DoRead(ctx context.Context, data *ConfidentialCertificateModel) (azcertificates.Certificate, ResourceExistenceCheck, diag.Diagnostics) {
+	rv := diag.Diagnostics{}
+	// The key version was never created; nothing needs to be read here.
+	if data.Id.IsUnknown() {
+		return azcertificates.Certificate{}, ResourceNotYetCreated, rv
+	}
+
+	destCertCoordinate, err := data.GetDestinationCoordinateFromId()
+	if err != nil {
+		rv.AddError("Cannot establish reference to the created certificate version", err.Error())
+		return azcertificates.Certificate{}, ResourceCheckError, rv
+	}
+
+	certClient, err := a.factory.GetCertificateClient(destCertCoordinate.VaultName)
+	if err != nil {
+		rv.AddError("Cannot acquire certificates client", fmt.Sprintf("Cannot acquire cert client to vault %s: %s", destCertCoordinate.VaultName, err.Error()))
+		return azcertificates.Certificate{}, ResourceCheckError, rv
+	} else if certClient == nil {
+		rv.AddError("Cannot acquire certificates client", "Cert client returned is nil")
+		return azcertificates.Certificate{}, ResourceCheckError, rv
+	}
+
+	certState, err := certClient.GetCertificate(ctx, destCertCoordinate.Name, destCertCoordinate.Version, nil)
+	if err != nil {
+		if core.IsResourceNotFoundError(err) {
+			if a.factory.IsObjectTrackingEnabled() {
+				rv.AddWarning(
+					"Certificate removed from key vault",
+					fmt.Sprintf("Certificate %s version %s is no longer in vault %s. The provider tracks confidential objects; creating this certificate again will be rejected as duplicate. If creathing this certificate again is intentional, re-encrypt ciphertext.",
+						destCertCoordinate.Name,
+						destCertCoordinate.Version,
+						destCertCoordinate.VaultName,
+					),
+				)
+			}
+
+			return azcertificates.Certificate{}, ResourceNotFound, rv
+		} else {
+			rv.AddError("Cannot read certificate", fmt.Sprintf("Cannot acquire certificatge %s version %s from vault %s: %s",
+				destCertCoordinate.Name,
+				destCertCoordinate.Version,
+				destCertCoordinate.VaultName,
+				err.Error()))
+			return azcertificates.Certificate{}, ResourceCheckError, rv
+		}
+	}
+
+	return certState.Certificate, ResourceExists, rv
+}
+
+func (a *AzKeyVaultCertificateResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialCertificateModel, confidentialData core.VersionedKeyVaultCertificateData) (azcertificates.Certificate, diag.Diagnostics) {
+	rv := diag.Diagnostics{}
+	if len(confidentialData.GetCertificateData()) == 0 {
+		rv.AddError("Missing payload", "Unwrapped payload does not contain expected content")
+		return azcertificates.Certificate{}, rv
+	}
+
+	params := data.ConvertToImportCertParam()
+	params.Base64EncodedCertificate = core.ConvertBytesAsBase64StringPtr(confidentialData.GetCertificateData)
+	params.CertificatePolicy.SecretProperties.ContentType = core.ConvertToPrt(confidentialData.GetCertificateDataFormat)
+	params.Password = core.ConvertToPrt(confidentialData.GetCertificateDataPassword)
+
+	destSecretCoordinate := a.factory.GetDestinationVaultObjectCoordinate(data.DestinationCert, "certificates")
+
+	certClient, secErr := a.factory.GetCertificateClient(destSecretCoordinate.VaultName)
+	if secErr != nil {
+		rv.AddError("Error acquiring certificates client", secErr.Error())
+		return azcertificates.Certificate{}, rv
+	} else if certClient == nil {
+		rv.AddError("Az certificates vault keys client cannot be retrieved", "Nil client returned while no error was raised. This is a provider bug. Please report this")
+		return azcertificates.Certificate{}, rv
+	}
+
+	setResp, setErr := certClient.ImportCertificate(ctx, destSecretCoordinate.Name, params, nil)
+	if setErr != nil {
+		rv.AddError("Certificate import failed", setErr.Error())
+		return azcertificates.Certificate{}, rv
+	} else {
+		return setResp.Certificate, nil
+	}
+}
+
+func (a *AzKeyVaultCertificateResourceSpecializer) DoUpdate(ctx context.Context, planData *ConfidentialCertificateModel) (azcertificates.Certificate, diag.Diagnostics) {
+
+	tflog.Info(ctx, fmt.Sprintf("Available object Id: %s", planData.Id.ValueString()))
+
+	rv := diag.Diagnostics{}
+
+	destCertCoordinate, err := planData.GetDestinationCoordinateFromId()
+	if err != nil {
+		rv.AddError("Error getting previously created certificate coordinate", err.Error())
+		return azcertificates.Certificate{}, rv
+	}
+
+	destCertCoordinateFromCfg := a.factory.GetDestinationVaultObjectCoordinate(planData.DestinationCert, "certificates")
+	if !destCertCoordinateFromCfg.SameAs(destCertCoordinate.AzKeyVaultObjectCoordinate) {
+		rv.AddError(
+			"Implicit object move",
+			"The destination for this confidential certificate changed after the certificate was created. "+
+				"This can happen e.g. when target vault was not explicitly specified. "+
+				"Delete this certificate instead",
+		)
+		return azcertificates.Certificate{}, rv
+	}
+
+	certClient, err := a.factory.GetCertificateClient(destCertCoordinate.VaultName)
+	if err != nil {
+		rv.AddError("Cannot acquire cert client", fmt.Sprintf("Cannot acquire secret client to vault %s: %s", destCertCoordinate.VaultName, err.Error()))
+		return azcertificates.Certificate{}, rv
+	} else if certClient == nil {
+		rv.AddError("Cannot acquire cert client", "Cert client returned is nil")
+		return azcertificates.Certificate{}, rv
+	}
+
+	param := planData.ConvertToUpdateCertParam()
+	tflog.Info(ctx, fmt.Sprintf("Updating with %d tags", len(param.Tags)))
+
+	updateResponse, updateErr := certClient.UpdateCertificate(ctx, destCertCoordinate.Name, destCertCoordinate.Version, param, nil)
+
+	if updateErr != nil {
+		rv.AddError("Error updating certificate properties", updateErr.Error())
+		return azcertificates.Certificate{}, rv
+	} else {
+		return updateResponse.Certificate, rv
+	}
+}
+
+func (a *AzKeyVaultCertificateResourceSpecializer) DoDelete(ctx context.Context, data *ConfidentialCertificateModel) diag.Diagnostics {
+	rv := diag.Diagnostics{}
+
+	destCoordinate, err := data.GetDestinationCoordinateFromId()
+	if err != nil {
+		rv.AddError("Error getting previously created certificate coordinate", err.Error())
+		return rv
+	}
+
+	certsClient, err := a.factory.GetCertificateClient(destCoordinate.VaultName)
+	if err != nil {
+		rv.AddError("Cannot acquire certificate client", fmt.Sprintf("Cannot acquire certificatge client to vault %s: %s", destCoordinate.VaultName, err.Error()))
+		return rv
+	} else if certsClient == nil {
+		rv.AddError("Cannot acquire certificate client", "Certificate client returned is nil")
+		return rv
+	}
+
+	enabledVal := false
+
+	_, azErr := certsClient.UpdateCertificate(ctx,
+		destCoordinate.Name,
+		destCoordinate.Version,
+		azcertificates.UpdateCertificateParameters{
+			CertificateAttributes: &azcertificates.CertificateAttributes{
+				Enabled: &enabledVal,
+			},
+		},
+		nil,
+	)
+
+	if azErr != nil {
+		rv.AddError("Cannot disable cert version", fmt.Sprintf("Request to disable cert's %s version %s in vault %s failed: %s",
+			destCoordinate.Name,
+			destCoordinate.Version,
+			destCoordinate.VaultName,
+			azErr.Error(),
+		))
+	}
+
+	return rv
+}
+
+func (a *AzKeyVaultCertificateResourceSpecializer) GetPlaintextImporter() core.ObjectExportSupport[core.VersionedKeyVaultCertificateData, []byte] {
+	return core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
+}
+
+func NewConfidentialAzVaultCertificateResource() resource.Resource {
 	specificAttrs := map[string]schema.Attribute{
 		"versionless_id": schema.StringAttribute{
 			Computed: true,
@@ -141,277 +385,16 @@ func (d *ConfidentialAzVaultCertificateResource) Schema(_ context.Context, _ res
 		},
 	}
 
-	resp.Schema = schema.Schema{
+	resourceSchema := schema.Schema{
 		Description:         "Create a certificate in Azure KeyVault without revealing its value in state",
 		MarkdownDescription: certificateResourceMarkdownDescription,
 
 		Attributes: WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(specificAttrs),
 	}
-}
 
-func (d *ConfidentialAzVaultCertificateResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data ConfidentialCertificateModel
-
-	// Read Terraform prior state data into the model
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
+	return &ConfidentialGenericResource[ConfidentialCertificateModel, int, core.VersionedKeyVaultCertificateData, azcertificates.Certificate]{
+		specializer:    &AzKeyVaultCertificateResourceSpecializer{},
+		resourceType:   "certificate",
+		resourceSchema: resourceSchema,
 	}
-
-	// The key version was never created; nothing needs to be read here.
-	if data.CertificateVersion.IsUnknown() {
-		return
-	}
-
-	destSecretCoordinate, err := data.GetDestinationCoordinateFromId()
-	if err != nil {
-		resp.Diagnostics.AddError("cannot establish reference to the created certificate version", err.Error())
-		return
-	}
-
-	certClient, err := d.factory.GetCertificateClient(destSecretCoordinate.VaultName)
-	if err != nil {
-		resp.Diagnostics.AddError("Cannot acquire cert client", fmt.Sprintf("Cannot acquire cert client to vault %s: %s", destSecretCoordinate.VaultName, err.Error()))
-		return
-	} else if certClient == nil {
-		resp.Diagnostics.AddError("Cannot acquire cert client", "Cert client returned is nil")
-		return
-	}
-
-	certState, err := certClient.GetCertificate(ctx, destSecretCoordinate.Name, destSecretCoordinate.Version, nil)
-	if err != nil {
-		resp.Diagnostics.AddError("Cannot read key", fmt.Sprintf("Cannot acquire key %s version %s from vault %s: %s",
-			destSecretCoordinate.Name,
-			destSecretCoordinate.Version,
-			destSecretCoordinate.VaultName,
-			err.Error()))
-		return
-	}
-	if certState.ID == nil {
-		resp.Diagnostics.AddWarning(
-			"Certificate removed outside of Terraform control",
-			fmt.Sprintf("Aecret %s version %s from vault %s has been removed outside of Terraform control",
-				destSecretCoordinate.Name,
-				destSecretCoordinate.Version,
-				destSecretCoordinate.Version),
-		)
-		return
-	}
-
-	data.Accept(certState.Certificate)
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-}
-
-func (d *ConfidentialAzVaultCertificateResource) convertToImportCertParam(data *ConfidentialCertificateModel) azcertificates.ImportCertificateParameters {
-	certAttr := azcertificates.CertificateAttributes{
-		NotBefore: data.NotBeforeDateAtPtr(),
-		Expires:   data.NotAfterDateAtPtr(),
-		Enabled:   data.Enabled.ValueBoolPointer(),
-	}
-
-	// Question: what to do with DER-encoded certificates?
-	// May need to be set to:
-	//application/x-pem-file for .pem
-	//application/x-pkcs12 for .p12 .pfx
-	rv := azcertificates.ImportCertificateParameters{
-		CertificateAttributes: &certAttr,
-		CertificatePolicy: &azcertificates.CertificatePolicy{
-			SecretProperties: &azcertificates.SecretProperties{
-				ContentType: to.Ptr("application/x-pem-file"),
-			},
-		},
-		Password: to.Ptr(""),
-		Tags:     data.TagsAsPtr(),
-	}
-
-	return rv
-}
-
-func (d *ConfidentialAzVaultCertificateResource) convertToUpdateCertParam(data *ConfidentialCertificateModel) azcertificates.UpdateCertificateParameters {
-	certAttr := azcertificates.CertificateAttributes{
-		NotBefore: data.NotBeforeDateAtPtr(),
-		Expires:   data.NotAfterDateAtPtr(),
-		Enabled:   data.Enabled.ValueBoolPointer(),
-	}
-	rv := azcertificates.UpdateCertificateParameters{
-		CertificateAttributes: &certAttr,
-		Tags:                  data.TagsAsPtr(),
-	}
-
-	return rv
-}
-
-func (d *ConfidentialAzVaultCertificateResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data ConfidentialCertificateModel
-
-	// Read Terraform prior state data into the model
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	confidentialData := d.UnwrapEncryptedConfidentialData(ctx, data.ConfidentialMaterialModel, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if confidentialData.Type != "certificate" {
-		resp.Diagnostics.AddError("Unexpected object type", fmt.Sprintf("Expected 'certificate', got '%s'", confidentialData.Type))
-		return
-	}
-
-	if len(confidentialData.BinaryData) == 0 {
-		resp.Diagnostics.AddError("Missing payload", "Unwrapped payload does not contain expected content")
-		return
-	}
-
-	destSecretCoordinate := d.factory.GetDestinationVaultObjectCoordinate(data.DestinationCert, "certificates")
-
-	d.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, confidentialData, nil, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx, "checking possibility to place this object raised an error")
-		return
-	}
-
-	tflog.Info(ctx, fmt.Sprintf("Will import certificate into %s/%s vault/certficiate", data.DestinationCert.VaultName, data.DestinationCert.Name))
-
-	certClient, secErr := d.factory.GetCertificateClient(destSecretCoordinate.VaultName)
-	if secErr != nil {
-		resp.Diagnostics.AddError("Error acquiring secret client", secErr.Error())
-		return
-	}
-
-	params := d.convertToImportCertParam(&data)
-	params.Base64EncodedCertificate = confidentialData.PayloadAsB64Ptr()
-
-	tflog.Trace(ctx, *params.Base64EncodedCertificate)
-
-	setResp, setErr := certClient.ImportCertificate(ctx, destSecretCoordinate.Name, params, nil)
-	if setErr != nil {
-		resp.Diagnostics.AddError("Error setting secret", setErr.Error())
-		return
-	}
-
-	data.Accept(setResp.Certificate)
-	d.FlushState(ctx, confidentialData.Uuid, &data, resp)
-}
-
-func (d *ConfidentialAzVaultCertificateResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var stateData ConfidentialCertificateModel
-	var data ConfidentialCertificateModel
-
-	resp.Diagnostics.Append(req.State.Get(ctx, &stateData)...)
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if d.DoUpdate(ctx, &stateData, &data, resp) {
-		return
-	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-}
-
-func (d *ConfidentialAzVaultCertificateResource) DoUpdate(ctx context.Context, stateData *ConfidentialCertificateModel, planData *ConfidentialCertificateModel, resp *resource.UpdateResponse) StateFlushFlag {
-	tflog.Info(ctx, fmt.Sprintf("Available object Id: %s", stateData.Id.ValueString()))
-
-	destCertCoordinate, err := stateData.GetDestinationCoordinateFromId()
-	if err != nil {
-		resp.Diagnostics.AddError("Error getting destination secret coordinate", err.Error())
-		return DoNotFlushState
-	}
-
-	destCertCoordinateFromCfg := d.factory.GetDestinationVaultObjectCoordinate(planData.DestinationCert, "certificates")
-	if !destCertCoordinateFromCfg.SameAs(destCertCoordinate.AzKeyVaultObjectCoordinate) {
-		resp.Diagnostics.AddError(
-			"Implicit object move",
-			"The destination for this confidential certificate changed after the certificate was created. "+
-				"This can happen e.g. when target vault was not explicitly specified. "+
-				"Delete this certificate instead",
-		)
-		return DoNotFlushState
-	}
-
-	certClient, err := d.factory.GetCertificateClient(destCertCoordinate.VaultName)
-	if err != nil {
-		resp.Diagnostics.AddError("Cannot acquire cert client", fmt.Sprintf("Cannot acquire secret client to vault %s: %s", destCertCoordinate.VaultName, err.Error()))
-		return DoNotFlushState
-	} else if certClient == nil {
-		resp.Diagnostics.AddError("Cannot acquire cert client", "Cert client returned is nil")
-		return DoNotFlushState
-	}
-
-	param := d.convertToUpdateCertParam(planData)
-	tflog.Info(ctx, fmt.Sprintf("Updating with %d tags", len(param.Tags)))
-
-	updateResponse, updateErr := certClient.UpdateCertificate(ctx, destCertCoordinate.Name, destCertCoordinate.Version, param, nil)
-
-	if updateErr != nil {
-		resp.Diagnostics.AddError("Error updating secret properties", updateErr.Error())
-		return DoNotFlushState
-	}
-
-	planData.Accept(updateResponse.Certificate)
-	return FlushState
-}
-
-// Delete Performs DELETE operation on the created secret. The implementation disables the secret version
-func (d *ConfidentialAzVaultCertificateResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data ConfidentialCertificateModel
-
-	// Read Terraform prior state data into the model
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if data.CertificateVersion.IsUnknown() {
-		tflog.Warn(ctx, "Deleting resource that doesn't have recorded versioned coordinate.")
-		return
-	}
-
-	destCoordinate, err := data.GetDestinationCoordinateFromId()
-	if err != nil {
-		resp.Diagnostics.AddError("Error getting destination secret coordinate", err.Error())
-		return
-	}
-
-	certsClient, err := d.factory.GetCertificateClient(destCoordinate.VaultName)
-	if err != nil {
-		resp.Diagnostics.AddError("Cannot acquire secret client", fmt.Sprintf("Cannot acquire secret client to vault %s: %s", destCoordinate.VaultName, err.Error()))
-		return
-	} else if certsClient == nil {
-		resp.Diagnostics.AddError("Cannot acquire secret client", "Secrets client returned is nil")
-		return
-	}
-
-	enabledVal := false
-
-	_, azErr := certsClient.UpdateCertificate(ctx,
-		destCoordinate.Name,
-		destCoordinate.Version,
-		azcertificates.UpdateCertificateParameters{
-			CertificateAttributes: &azcertificates.CertificateAttributes{
-				Enabled: &enabledVal,
-			},
-		},
-		nil,
-	)
-
-	if azErr != nil {
-		resp.Diagnostics.AddError("Cannot disable cert version", fmt.Sprintf("Request to disable cert's %s version %s in vault %s failed: %s",
-			destCoordinate.Name,
-			destCoordinate.Version,
-			destCoordinate.VaultName,
-			azErr.Error(),
-		))
-	}
-}
-
-// Ensure provider defined types fully satisfy framework interfaces.
-var _ resource.Resource = &ConfidentialAzVaultCertificateResource{}
-
-func NewConfidentialAzVaultCertificateResource() resource.Resource {
-	return &ConfidentialAzVaultCertificateResource{}
 }
