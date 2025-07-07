@@ -346,23 +346,6 @@ func LoadPublicKeyFromData(pubText []byte) (*rsa.PublicKey, error) {
 	}
 }
 
-func SymmetricKeyTOJSONWebKey(input []byte, outKey *azkeys.JSONWebKey) error {
-	jwkKey, jwkErr := jwk.Import(input)
-	if jwkErr != nil {
-		return jwkErr
-	}
-
-	if octKey, ok := jwkKey.(jwk.SymmetricKey); ok {
-		kty := azkeys.KeyTypeOct
-		outKey.Kty = &kty
-
-		port(&outKey.K, octKey.Octets)
-		return nil
-	} else {
-		return errors.New("bytes did not procedure a symmetric key")
-	}
-}
-
 func ConvertJWKSToAzJWK(set jwk.Set, key *azkeys.JSONWebKey) error {
 	if jwkKey, exists := set.Key(0); exists {
 		return ConvertJWKToAzJWK(jwkKey, key)

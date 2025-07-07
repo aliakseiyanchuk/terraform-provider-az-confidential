@@ -350,7 +350,7 @@ func (lm LabelMatchRequirement) AsString() string {
 //go:embed provider_description.md
 var providerDescription string
 
-func (p *AZConnectorProviderImpl) ConfigValidators(ctx context.Context) []tfprovider.ConfigValidator {
+func (p *AZConnectorProviderImpl) ConfigValidators(_ context.Context) []tfprovider.ConfigValidator {
 	return []tfprovider.ConfigValidator{
 		providervalidator.Conflicting(
 			path.MatchRoot("file_hash_tracker"),

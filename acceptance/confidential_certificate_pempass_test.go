@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func generatePEMEncodedCertificateResource(t *testing.T) string {
+func generatePEMEncodedPasswordProtectedCertificateResource(t *testing.T) string {
 	kwp := tfgen.ContentWrappingParams{
 		RSAPublicKeyFile: wrappingKey,
 		Labels:           "acceptance-testing",
@@ -18,7 +18,7 @@ func generatePEMEncodedCertificateResource(t *testing.T) string {
 
 		DestinationCoordinate: tfgen.AzKeyVaultObjectCoordinateTFCode{
 			AzKeyVaultObjectCoordinate: core.AzKeyVaultObjectCoordinate{
-				Name: "acceptance-test-pem-cert",
+				Name: "acceptance-test-pem-cert-pwd",
 			},
 		},
 
@@ -35,9 +35,9 @@ func generatePEMEncodedCertificateResource(t *testing.T) string {
 	}
 
 	if rv, tfErr := tfgen.OutputConfidentialCertificateTerraformCode(kwp,
-		testkeymaterial.EphemeralCertificatePEM, // this is plain PEM
-		tfgen.CERT_FORMAT_PEM,                   // the certificate format is PEM
-		"",                                      // password is not required
+		testkeymaterial.EphemeralCertificatePEMWithEncryptedKey, // this is plain PEM with encrypted key
+		tfgen.CERT_FORMAT_PEM, // the certificate format is PEM
+		"s1cr3t",              // password is not required
 		tags); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
 		return rv
@@ -47,13 +47,13 @@ func generatePEMEncodedCertificateResource(t *testing.T) string {
 	}
 }
 
-func TestAccConfidentialPEMEncodedCertificate(t *testing.T) {
+func TestAccConfidentialPEMEncodedCertificateWithPasswordProtectedKey(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Read testing
 			{
-				Config: providerConfig + generatePEMEncodedCertificateResource(t),
+				Config: providerConfig + generatePEMEncodedPasswordProtectedCertificateResource(t),
 				Check: resource.ComposeTestCheckFunc(
 					// Validate that the secret version is set after creation
 					resource.TestCheckResourceAttrSet("az-confidential_certificate.cert", "secret_id"),

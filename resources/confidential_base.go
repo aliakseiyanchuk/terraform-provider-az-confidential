@@ -23,13 +23,6 @@ import (
 	"time"
 )
 
-type StateFlushFlag bool
-
-const (
-	FlushState      StateFlushFlag = true
-	DoNotFlushState StateFlushFlag = false
-)
-
 var validDateTime = regexp.MustCompile(`^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z`)
 
 // Basis for the confidential object processing and creation.
@@ -376,11 +369,6 @@ func (d *ConfidentialDatasourceBase) Configure(ctx context.Context, req datasour
 	}
 
 	d.factory = factory
-}
-
-func (d *ConfidentialDatasourceBase) FlushState(ctx context.Context, uuid string, data interface{}, resp *datasource.ReadResponse) {
-	// Save data into Terraform state
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 type ConfidentialResourceBase struct {

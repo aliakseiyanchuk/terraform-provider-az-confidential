@@ -16,7 +16,10 @@ require (
 	github.com/hashicorp/terraform-plugin-log v0.9.0
 )
 
-require github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78
+require (
+	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78
+	software.sslmate.com/src/go-pkcs12 v0.5.0
+)
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.1 // indirect

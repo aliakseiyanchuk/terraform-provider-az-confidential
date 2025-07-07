@@ -342,7 +342,7 @@ func (c *CertificateClientMock) GivenImportCertificateErrs(name, errorMessage st
 
 func (c *CertificateClientMock) GivenImportCertificate(name string) {
 	var opts *azcertificates.ImportCertificateOptions = nil
-	c.On("ImportCertificate", mock.Anything, name, opts).
+	c.On("ImportCertificate", mock.Anything, name, mock.Anything, opts).
 		Return(azcertificates.ImportCertificateResponse{}, nil)
 }
 

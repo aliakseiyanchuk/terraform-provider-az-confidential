@@ -42,14 +42,14 @@ type ConfidentialPasswordDataSource struct {
 	ConfidentialDatasourceBase
 }
 
-func (d *ConfidentialPasswordDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *ConfidentialPasswordDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_password"
 }
 
 //go:embed confidential_password.md
 var passwordDataSourceMarkdownDescription string
 
-func (d *ConfidentialPasswordDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *ConfidentialPasswordDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	specificAttr := map[string]schema.Attribute{
 		"plaintext_password": schema.StringAttribute{
 			Description:         "Decrypted password",
@@ -117,7 +117,7 @@ func (d *ConfidentialPasswordDataSource) Read(ctx context.Context, req datasourc
 	}
 
 	data.Accept(confidentialData)
-	d.FlushState(ctx, confidentialData.GetUUID(), &data, resp)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 // Ensure provider defined types fully satisfy framework interfaces.

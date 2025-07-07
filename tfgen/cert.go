@@ -6,15 +6,13 @@ import (
 	"flag"
 	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
-	"golang.org/x/crypto/pkcs12"
+	pkcs12 "software.sslmate.com/src/go-pkcs12"
 )
 
 const certCliArg = "cert"
 
 //go:embed templates/cert_template.tmpl
 var certTFTemplate string
-
-var certCmd = flag.NewFlagSet(certCliArg, flag.ContinueOnError)
 
 type CertTFGenParams struct {
 	SecretTFGenParams
@@ -23,9 +21,16 @@ type CertTFGenParams struct {
 	noDERVerify      bool
 }
 
-var certParams = CertTFGenParams{}
+const (
+	CERT_FORMAT_PEM    = "application/x-pem-file"
+	CERT_FORMAT_PKCS12 = "application/x-pkcs12"
+)
 
-func init() {
+func CreateCertArgsParser() (*CertTFGenParams, *flag.FlagSet) {
+	var certParams = CertTFGenParams{}
+
+	var certCmd = flag.NewFlagSet(certCliArg, flag.ContinueOnError)
+
 	certCmd.StringVar(&certParams.secretFromFile,
 		"cert-file",
 		"",
@@ -43,14 +48,18 @@ func init() {
 
 	certCmd.BoolVar(&certParams.noDERVerify,
 		"no-der-verify",
-		true,
+		false,
 		"Do not try parsing DER-encode files")
+
+	return &certParams, certCmd
 }
 
 func GenerateConfidentialCertificateTerraformTemplate(kwp ContentWrappingParams, inputReader InputReader, outputTFCOde bool, args []string) (string, error) {
 	if vErr := kwp.ValidateHasDestination(); vErr != nil {
 		return "", vErr
 	}
+
+	certParams, certCmd := CreateCertArgsParser()
 
 	if parseErr := certCmd.Parse(args); parseErr != nil {
 		return "", parseErr
@@ -66,8 +75,11 @@ func GenerateConfidentialCertificateTerraformTemplate(kwp ContentWrappingParams,
 	}
 
 	certPass := ""
+	certFormat := "application/unknown"
 
 	if core.IsPEMEncoded(certData) {
+		certFormat = CERT_FORMAT_PEM
+
 		blocks, blockErr := core.ParsePEMBlocks(certData)
 		if blockErr != nil {
 			return "", fmt.Errorf("cannot parse PEM blocks: %s", blockErr.Error())
@@ -83,7 +95,7 @@ func GenerateConfidentialCertificateTerraformTemplate(kwp ContentWrappingParams,
 		}
 
 		if privateKeyBlock.Type == "ENCRYPTED PRIVATE KEY" {
-			password, passReadErr := ReadInput("Private key requires password", certParams.certPasswordFile, false, false)
+			password, passReadErr := inputReader("Private key requires password", certParams.certPasswordFile, false, false)
 			if passReadErr != nil {
 				return "", passReadErr
 			}
@@ -96,30 +108,24 @@ func GenerateConfidentialCertificateTerraformTemplate(kwp ContentWrappingParams,
 				certPass = string(password)
 			}
 		} else if privateKeyBlock.Type != "PRIVATE KEY" {
-			return "", errors.New("input certificate data does not contain private key as first element")
+			return "", errors.New("input certificate data does not contain private key")
 		}
 	} else {
-		// Read the password for DER file
+		certFormat = CERT_FORMAT_PKCS12
+
 		var certPassBytes []byte
 		var certPassErr error
-		certPassBytes, certPassErr = ReadInput("Enter certificate password", certParams.certPasswordFile, false, false)
+		certPassBytes, certPassErr = inputReader("Enter certificate password", certParams.certPasswordFile, false, false)
 		if certPassErr != nil {
 			return "", fmt.Errorf("cannot read certificate password: %s", certPassErr.Error())
 		}
 
-		vCerPass := string(certPassBytes)
-
-		// Pass the DER file if no password verification is enabled, accept the passed data as-is
 		if certParams.noDERVerify {
 			certPass = string(certPassBytes)
 		} else {
 			// Try reading parsing certificate data
-			if _, _, err := pkcs12.Decode(certData, ""); err != nil {
-				if _, _, pwdErr := pkcs12.Decode(certData, vCerPass); pwdErr != nil {
-					return "", fmt.Errorf("cannot decrypt certificate data: %s", pwdErr.Error())
-				} else {
-					certPass = vCerPass
-				}
+			if _, _, pwdErr := pkcs12.Decode(certData, string(certPassBytes)); pwdErr != nil {
+				return "", fmt.Errorf("cannot load certificate from PKCS12/PFX bag; %s", pwdErr.Error())
 			}
 		}
 	}
@@ -127,14 +133,14 @@ func GenerateConfidentialCertificateTerraformTemplate(kwp ContentWrappingParams,
 	kwp.TFBlockNameIfUndefined("cert")
 
 	if outputTFCOde {
-		return OutputConfidentialCertificateTerraformCode(kwp, certData, certPass, nil)
+		return OutputConfidentialCertificateTerraformCode(kwp, certData, certFormat, certPass, nil)
 	} else {
-		return OutputCertificateEncryptedContent(kwp, certData, "pem", certPass) // TODO check this
+		return OutputCertificateEncryptedContent(kwp, certData, certFormat, certPass)
 	}
 }
 
-func OutputConfidentialCertificateTerraformCode(kwp ContentWrappingParams, data []byte, passwordString string, tags map[string]string) (string, error) {
-	ciphertext, err := OutputCertificateEncryptedContent(kwp, data, "pem", passwordString) // todo check this
+func OutputConfidentialCertificateTerraformCode(kwp ContentWrappingParams, data []byte, certFormat, passwordString string, tags map[string]string) (string, error) {
+	ciphertext, err := OutputCertificateEncryptedContent(kwp, data, certFormat, passwordString)
 	if err != nil {
 		return ciphertext, err
 	}

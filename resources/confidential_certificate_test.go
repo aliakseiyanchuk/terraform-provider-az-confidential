@@ -252,23 +252,22 @@ func Test_CAzVCR_DoCreate_IfCertificateImportFails(t *testing.T) {
 func Test_CAzVCR_DoCreate(t *testing.T) {
 
 	certClient := CertificateClientMock{}
-	certClient.GivenImportCertificateErrs("certName", "unit-test-cert-import-error")
+	certClient.GivenImportCertificate("certName")
 
 	factory := AZClientsFactoryMock{}
 	factory.GivenGetDestinationVaultObjectCoordinate("unit-test-vault", "certificates", "certName")
-	factory.GivenGetCertificatesClientWillReturnNilClient("unit-test-vault")
+	factory.GivenGetCertificatesClientWillReturn("unit-test-vault", &certClient)
 
 	ks := AzKeyVaultCertificateResourceSpecializer{
 		factory: &factory,
 	}
 
-	data := ConfidentialCertificateModel{}
+	data := GivenTypicalInitialCertModel()
 	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
 	confData := helper.CreateConfidentialCertificateData(testkeymaterial.EphemeralCertificatePEM, "application/x-pem-file", "", "certificate", nil)
 
 	_, dg := ks.DoCreate(context.Background(), &data, confData)
-	assert.True(t, dg.HasError())
-	assert.Equal(t, "Az certificates vault keys client cannot be retrieved", dg[0].Summary())
+	assert.False(t, dg.HasError())
 
 	factory.AssertExpectations(t)
 	certClient.AssertExpectations(t)

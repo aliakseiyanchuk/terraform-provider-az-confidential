@@ -44,11 +44,11 @@ var RsaPrivateKey []byte
 //go:embed km/ephemeral-certificate.pem
 var EphemeralCertificatePEM []byte
 
-//go:embed km/cert.pkcs12
-var EphemeralCertPFX12 []byte
+//go:embed km/ephemeral-certificate-encrypted.pem
+var EphemeralCertificatePEMWithEncryptedKey []byte
 
 //go:embed km/cert.pkcs12
-var Pkcs12File []byte
+var EphemeralCertPFX12 []byte
 
 //func TestPKCS12Import(t *testing.T) {
 //	_, _, pwdErr := pkcs12.Decode(Pkcs12File, "s1cr3t")

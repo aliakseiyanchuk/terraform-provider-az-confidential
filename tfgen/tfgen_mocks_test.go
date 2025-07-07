@@ -9,6 +9,10 @@ type InputReaderMock struct {
 	mock.Mock
 }
 
+func (m *InputReaderMock) GivenReadRequestReturnsString(prompt string, s string) {
+	m.GivenReadRequestReturns(prompt, []byte(s))
+}
+
 func (m *InputReaderMock) GivenReadRequestReturns(prompt string, data []byte) {
 	m.On("ReadInput", prompt, mock.Anything, mock.Anything, mock.Anything).
 		Return(data, nil)
