@@ -1,4 +1,4 @@
-package resources
+package keyvault
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core/testkeymaterial"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -301,7 +302,7 @@ func Test_CAzVKR_DoRead_IfNotInitialized(t *testing.T) {
 
 	ks := AzKeyVaultKeyResourceSpecializer{}
 	_, state, dg := ks.DoRead(context.Background(), &mdl)
-	assert.Equal(t, ResourceNotYetCreated, state)
+	assert.Equal(t, resources.ResourceNotYetCreated, state)
 	assert.False(t, dg.HasError())
 }
 
@@ -311,7 +312,7 @@ func Test_CAzVKR_DoRead_IfIdIsMalformed(t *testing.T) {
 
 	ks := AzKeyVaultKeyResourceSpecializer{}
 	_, state, dg := ks.DoRead(context.Background(), &mdl)
-	assert.Equal(t, ResourceCheckError, state)
+	assert.Equal(t, resources.ResourceCheckError, state)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "cannot establish reference to the created key version", dg[0].Summary())
 }
@@ -326,7 +327,7 @@ func Test_CAzVKR_DoRead_IfKeysClientCannotConnect(t *testing.T) {
 	}
 
 	_, state, dg := ks.DoRead(context.Background(), &mdl)
-	assert.Equal(t, ResourceCheckError, state)
+	assert.Equal(t, resources.ResourceCheckError, state)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "Cannot acquire keys client", dg[0].Summary())
 
@@ -343,7 +344,7 @@ func Test_CAzVKR_DoRead_IfNilKeysClientReturned(t *testing.T) {
 	}
 
 	_, state, dg := ks.DoRead(context.Background(), &mdl)
-	assert.Equal(t, ResourceCheckError, state)
+	assert.Equal(t, resources.ResourceCheckError, state)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "Cannot acquire keys client", dg[0].Summary())
 	assert.Equal(t, "Keys client returned is nil", dg[0].Detail())
@@ -366,7 +367,7 @@ func Test_CAzVKR_DoRead_WhenKeyNotFoundAndTrackingEnabled(t *testing.T) {
 	}
 
 	_, state, dg := ks.DoRead(context.Background(), &mdl)
-	assert.Equal(t, ResourceNotFound, state)
+	assert.Equal(t, resources.ResourceNotFound, state)
 	assert.False(t, dg.HasError())
 	assert.Equal(t, "Warning", dg[0].Severity().String())
 	assert.Equal(t, "Key removed from key vault", dg[0].Summary())
@@ -391,7 +392,7 @@ func Test_CAzVKR_DoRead_WhenKeyNotFoundAndTrackingDisabled(t *testing.T) {
 	}
 
 	_, state, dg := ks.DoRead(context.Background(), &mdl)
-	assert.Equal(t, ResourceNotFound, state)
+	assert.Equal(t, resources.ResourceNotFound, state)
 	assert.Equal(t, 0, len(dg))
 
 	factory.AssertExpectations(t)
@@ -413,7 +414,7 @@ func Test_CAzVKR_DoRead_WhenReadingKeyReturnsAnError(t *testing.T) {
 	}
 
 	_, state, dg := ks.DoRead(context.Background(), &mdl)
-	assert.Equal(t, ResourceCheckError, state)
+	assert.Equal(t, resources.ResourceCheckError, state)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "Cannot read key", dg[0].Summary())
 
@@ -436,7 +437,7 @@ func Test_CAzVKR_DoRead(t *testing.T) {
 	}
 
 	_, state, dg := ks.DoRead(context.Background(), &mdl)
-	assert.Equal(t, ResourceExists, state)
+	assert.Equal(t, resources.ResourceExists, state)
 	assert.False(t, dg.HasError())
 
 	factory.AssertExpectations(t)

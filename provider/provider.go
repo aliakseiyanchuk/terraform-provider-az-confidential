@@ -11,6 +11,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/keyvault"
 	"github.com/hashicorp/terraform-plugin-framework-validators/providervalidator"
 	tfsetvalidators "github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	tfstringvalidators "github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -485,9 +486,9 @@ func (p *AZConnectorProviderImpl) DataSources(ctx context.Context) []func() data
 func (p *AZConnectorProviderImpl) Resources(ctx context.Context) []func() resource.Resource {
 	tflog.Debug(ctx, "AzConfidential: initializing resources")
 	return []func() resource.Resource{
-		resources.NewConfidentialAzVaultSecretResource,
-		resources.NewConfidentialAzVaultKeyResource,
-		resources.NewConfidentialAzVaultCertificateResource,
+		keyvault.NewConfidentialAzVaultSecretResource,
+		keyvault.NewConfidentialAzVaultKeyResource,
+		keyvault.NewConfidentialAzVaultCertificateResource,
 	}
 }
 

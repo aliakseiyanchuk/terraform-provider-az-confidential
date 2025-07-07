@@ -1,4 +1,4 @@
-package resources
+package keyvault
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -17,7 +18,7 @@ import (
 )
 
 type ConfidentialSecretModel struct {
-	WrappedAzKeyVaultObjectConfidentialMaterialModel
+	resources.WrappedAzKeyVaultObjectConfidentialMaterialModel
 
 	ContentType       types.String                         `tfsdk:"content_type"`
 	DestinationSecret core.AzKeyVaultObjectCoordinateModel `tfsdk:"destination_secret"`
@@ -115,7 +116,7 @@ func (a *AzKeyVaultSecretResourceSpecializer) ConvertToTerraform(secret azsecret
 	return nil
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) GetConfidentialMaterialFrom(mdl ConfidentialSecretModel) ConfidentialMaterialModel {
+func (a *AzKeyVaultSecretResourceSpecializer) GetConfidentialMaterialFrom(mdl ConfidentialSecretModel) resources.ConfidentialMaterialModel {
 	return mdl.ConfidentialMaterialModel
 }
 
@@ -132,27 +133,27 @@ func (a *AzKeyVaultSecretResourceSpecializer) CheckPlacement(ctx context.Context
 	return rv
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) DoRead(ctx context.Context, data *ConfidentialSecretModel) (azsecrets.Secret, ResourceExistenceCheck, diag.Diagnostics) {
+func (a *AzKeyVaultSecretResourceSpecializer) DoRead(ctx context.Context, data *ConfidentialSecretModel) (azsecrets.Secret, resources.ResourceExistenceCheck, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
 	// The secret version was never created; nothing needs to be read here.
 	if data.Id.IsUnknown() {
 		tflog.Info(ctx, "Secret version is not yet known during read; the secret was never created.")
-		return azsecrets.Secret{}, ResourceNotYetCreated, rv
+		return azsecrets.Secret{}, resources.ResourceNotYetCreated, rv
 	}
 
 	destSecretCoordinate, err := data.GetDestinationCoordinateFromId()
 	if err != nil {
 		rv.AddError("cannot establish reference to the created secret version", err.Error())
-		return azsecrets.Secret{}, ResourceCheckError, rv
+		return azsecrets.Secret{}, resources.ResourceCheckError, rv
 	}
 
 	secretClient, err := a.factory.GetSecretsClient(destSecretCoordinate.VaultName)
 	if err != nil {
 		rv.AddError("Cannot acquire secret client", fmt.Sprintf("Cannot acquire secret client to vault %s: %s", destSecretCoordinate.VaultName, err.Error()))
-		return azsecrets.Secret{}, ResourceCheckError, rv
+		return azsecrets.Secret{}, resources.ResourceCheckError, rv
 	} else if secretClient == nil {
 		rv.AddError("Cannot acquire secret client", "Secrets client returned is nil")
-		return azsecrets.Secret{}, ResourceCheckError, rv
+		return azsecrets.Secret{}, resources.ResourceCheckError, rv
 	}
 
 	secretState, err := secretClient.GetSecret(ctx, destSecretCoordinate.Name, destSecretCoordinate.Version, nil)
@@ -169,7 +170,7 @@ func (a *AzKeyVaultSecretResourceSpecializer) DoRead(ctx context.Context, data *
 				)
 			}
 
-			return azsecrets.Secret{}, ResourceNotFound, rv
+			return azsecrets.Secret{}, resources.ResourceNotFound, rv
 		} else {
 			rv.AddError("Cannot read secret", fmt.Sprintf("Cannot acquire secret %s version %s from vault %s: %s",
 				destSecretCoordinate.Name,
@@ -177,10 +178,10 @@ func (a *AzKeyVaultSecretResourceSpecializer) DoRead(ctx context.Context, data *
 				destSecretCoordinate.VaultName,
 				err.Error()))
 		}
-		return azsecrets.Secret{}, ResourceCheckError, rv
+		return azsecrets.Secret{}, resources.ResourceCheckError, rv
 	}
 
-	return secretState.Secret, ResourceExists, rv
+	return secretState.Secret, resources.ResourceExists, rv
 }
 
 func (a *AzKeyVaultSecretResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialSecretModel, unwrappedData core.VersionedStringConfidentialData) (azsecrets.Secret, diag.Diagnostics) {
@@ -350,12 +351,12 @@ func NewConfidentialAzVaultSecretResource() resource.Resource {
 		Description:         "Creates a secret in Azure KeyVault without revealing its value in state",
 		MarkdownDescription: secretResourceMarkdownDescription,
 
-		Attributes: WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(modelAttributes),
+		Attributes: resources.WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(modelAttributes),
 	}
 
-	return &ConfidentialGenericResource[ConfidentialSecretModel, int, core.VersionedStringConfidentialData, azsecrets.Secret]{
-		specializer:    &AzKeyVaultSecretResourceSpecializer{},
-		resourceType:   "secret",
-		resourceSchema: resourceSchema,
+	return &resources.ConfidentialGenericResource[ConfidentialSecretModel, int, core.VersionedStringConfidentialData, azsecrets.Secret]{
+		Specializer:    &AzKeyVaultSecretResourceSpecializer{},
+		ResourceType:   "secret",
+		ResourceSchema: resourceSchema,
 	}
 }

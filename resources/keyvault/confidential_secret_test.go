@@ -1,10 +1,11 @@
-package resources
+package keyvault
 
 import (
 	"context"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/assert"
@@ -214,7 +215,7 @@ func Test_CAzVSR_DoRead_WillExitIfSecretVersionIsNotKnown(t *testing.T) {
 	mdl.Id = types.StringUnknown()
 
 	_, resourceExistsCheck, dg := c.DoRead(context.Background(), &mdl)
-	assert.Equal(t, ResourceNotYetCreated, resourceExistsCheck)
+	assert.Equal(t, resources.ResourceNotYetCreated, resourceExistsCheck)
 	assert.False(t, dg.HasError())
 }
 
@@ -227,7 +228,7 @@ func Test_CAzVSR_DoRead_WillExitErrIfIdIsMalformed(t *testing.T) {
 
 	_, resourceExistsCheck, dg := c.DoRead(context.Background(), &mdl)
 	assert.True(t, dg.HasError())
-	assert.Equal(t, ResourceCheckError, resourceExistsCheck)
+	assert.Equal(t, resources.ResourceCheckError, resourceExistsCheck)
 }
 
 func Test_CAzVSR_DoRead_WillReportErrorIfKVClientCannotBeGained(t *testing.T) {
@@ -243,7 +244,7 @@ func Test_CAzVSR_DoRead_WillReportErrorIfKVClientCannotBeGained(t *testing.T) {
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "Cannot acquire secret client", dg[0].Summary())
 	assert.Equal(t, "Cannot acquire secret client to vault unit-test-vault: unit-test-error", dg[0].Detail())
-	assert.Equal(t, ResourceCheckError, resourceExistsCheck)
+	assert.Equal(t, resources.ResourceCheckError, resourceExistsCheck)
 }
 
 func Test_CAzVSR_DoRead_WillReportErrorIfKVClientWillBeNull(t *testing.T) {
@@ -259,7 +260,7 @@ func Test_CAzVSR_DoRead_WillReportErrorIfKVClientWillBeNull(t *testing.T) {
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "Cannot acquire secret client", dg[0].Summary())
 	assert.Equal(t, "Secrets client returned is nil", dg[0].Detail())
-	assert.Equal(t, ResourceCheckError, resourceExistsCheck)
+	assert.Equal(t, resources.ResourceCheckError, resourceExistsCheck)
 }
 
 func Test_CAzVSR_DoRead_WillAddWarningOnDeletedObjectIfTrackingIsEnabled(t *testing.T) {
@@ -278,7 +279,7 @@ func Test_CAzVSR_DoRead_WillAddWarningOnDeletedObjectIfTrackingIsEnabled(t *test
 	_, resourceExistsCheck, dg := c.DoRead(context.Background(), &mdl)
 	assert.Equal(t, "Secret removed from key vault", dg[0].Summary())
 	assert.Equal(t, "Warning", dg[0].Severity().String())
-	assert.Equal(t, ResourceNotFound, resourceExistsCheck)
+	assert.Equal(t, resources.ResourceNotFound, resourceExistsCheck)
 
 	secretClient.AssertExpectations(t)
 	factoryMock.AssertExpectations(t)
@@ -299,7 +300,7 @@ func Test_CAzVSR_DoRead_WillNotAddWarningOnDeletedObjectIfTrackingIsDisabled(t *
 
 	_, resourceExistsCheck, dg := c.DoRead(context.Background(), &mdl)
 	assert.Equal(t, 0, len(dg))
-	assert.Equal(t, ResourceNotFound, resourceExistsCheck)
+	assert.Equal(t, resources.ResourceNotFound, resourceExistsCheck)
 
 	secretClient.AssertExpectations(t)
 	factoryMock.AssertExpectations(t)
@@ -320,7 +321,7 @@ func Test_CAzVSR_DoRead_IfReadingSecretReturnsAnError(t *testing.T) {
 	_, resourceExistsCheck, dg := c.DoRead(context.Background(), &mdl)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "Cannot read secret", dg[0].Summary())
-	assert.Equal(t, ResourceCheckError, resourceExistsCheck)
+	assert.Equal(t, resources.ResourceCheckError, resourceExistsCheck)
 
 	secretClient.AssertExpectations(t)
 	factoryMock.AssertExpectations(t)
@@ -340,7 +341,7 @@ func Test_CAzVSR_DoRead(t *testing.T) {
 
 	_, resourceExistsCheck, dg := c.DoRead(context.Background(), &mdl)
 	assert.False(t, dg.HasError())
-	assert.Equal(t, ResourceExists, resourceExistsCheck)
+	assert.Equal(t, resources.ResourceExists, resourceExistsCheck)
 
 	secretClient.AssertExpectations(t)
 	factoryMock.AssertExpectations(t)

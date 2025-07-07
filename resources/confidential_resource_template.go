@@ -44,14 +44,14 @@ type ConfidentialResourceSpecializer[TMdl any, TConfData core.VersionedConfident
 
 type ConfidentialGenericResource[TMdl, TIdentity any, TConfData core.VersionedConfidentialData, AZAPIObject any] struct {
 	ConfidentialResourceBase
-	specializer ConfidentialResourceSpecializer[TMdl, TConfData, AZAPIObject]
+	Specializer ConfidentialResourceSpecializer[TMdl, TConfData, AZAPIObject]
 
-	resourceType   string
-	resourceSchema schema.Schema
+	ResourceType   string
+	ResourceSchema schema.Schema
 }
 
 func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = fmt.Sprintf("%s_%s", req.ProviderTypeName, d.resourceType)
+	resp.TypeName = fmt.Sprintf("%s_%s", req.ProviderTypeName, d.ResourceType)
 }
 
 func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -60,15 +60,15 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		return
 	}
 
-	d.specializer.SetFactory(d.factory)
+	d.Specializer.SetFactory(d.factory)
 }
 
 func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
-	resp.Schema = d.resourceSchema
+	resp.Schema = d.ResourceSchema
 }
 
 func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	data := d.specializer.NewTerraformModel()
+	data := d.Specializer.NewTerraformModel()
 
 	// Read Terraform prior state data into the model
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
@@ -76,7 +76,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 		return
 	}
 
-	azObj, resourceExistenceCheck, dg := d.specializer.DoRead(ctx, &data)
+	azObj, resourceExistenceCheck, dg := d.Specializer.DoRead(ctx, &data)
 	dg.Append(dg...)
 
 	// If there were errors in the process, return
@@ -87,7 +87,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 	if resourceExistenceCheck == ResourceNotFound {
 		resp.State.RemoveResource(ctx)
 	} else if resourceExistenceCheck == ResourceExists {
-		convertDiagnostics := d.specializer.ConvertToTerraform(azObj, &data)
+		convertDiagnostics := d.Specializer.ConvertToTerraform(azObj, &data)
 		if len(convertDiagnostics) > 0 {
 			resp.Diagnostics.Append(convertDiagnostics...)
 		}
@@ -101,7 +101,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 }
 
 func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	data := d.specializer.NewTerraformModel()
+	data := d.Specializer.NewTerraformModel()
 
 	// Read Terraform prior state data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
@@ -109,12 +109,12 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		return
 	}
 
-	plainText := d.ExtractConfidentialModelPlainText(ctx, d.specializer.GetConfidentialMaterialFrom(data), &resp.Diagnostics)
+	plainText := d.ExtractConfidentialModelPlainText(ctx, d.Specializer.GetConfidentialMaterialFrom(data), &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	importer := d.specializer.GetPlaintextImporter()
+	importer := d.Specializer.GetPlaintextImporter()
 	confidentialMaterial, importErr := importer.Import(plainText)
 	if importErr != nil {
 		resp.Diagnostics.AddError(
@@ -124,28 +124,28 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		return
 	}
 
-	if !slices.Contains(d.specializer.GetSupportedConfidentialMaterialTypes(), confidentialMaterial.GetType()) {
+	if !slices.Contains(d.Specializer.GetSupportedConfidentialMaterialTypes(), confidentialMaterial.GetType()) {
 		resp.Diagnostics.AddError("Unexpected object type", fmt.Sprintf(
 			"Expected %s, got %s",
-			d.specializer.GetSupportedConfidentialMaterialTypes(),
+			d.Specializer.GetSupportedConfidentialMaterialTypes(),
 			confidentialMaterial.GetType()))
 		return
 	}
 
-	placementDiags := d.specializer.CheckPlacement(ctx, &data, confidentialMaterial)
+	placementDiags := d.Specializer.CheckPlacement(ctx, &data, confidentialMaterial)
 	resp.Diagnostics.Append(placementDiags...)
 	if resp.Diagnostics.HasError() {
 		tflog.Error(ctx, "checking possibility to place this object raised an error")
 		return
 	}
 
-	azObj, dg := d.specializer.DoCreate(ctx, &data, confidentialMaterial)
+	azObj, dg := d.Specializer.DoCreate(ctx, &data, confidentialMaterial)
 	resp.Diagnostics.Append(dg...)
 	if dg.HasError() {
 		return
 	}
 
-	convertDiagnostics := d.specializer.ConvertToTerraform(azObj, &data)
+	convertDiagnostics := d.Specializer.ConvertToTerraform(azObj, &data)
 	if len(convertDiagnostics) > 0 {
 		resp.Diagnostics.Append(convertDiagnostics...)
 	}
@@ -154,20 +154,20 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 }
 
 func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	data := d.specializer.NewTerraformModel()
+	data := d.Specializer.NewTerraformModel()
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	azObj, dg := d.specializer.DoUpdate(ctx, &data)
+	azObj, dg := d.Specializer.DoUpdate(ctx, &data)
 	resp.Diagnostics.Append(dg...)
 	if dg.HasError() {
 		return
 	}
 
-	convertDiagnostics := d.specializer.ConvertToTerraform(azObj, &data)
+	convertDiagnostics := d.Specializer.ConvertToTerraform(azObj, &data)
 	if len(convertDiagnostics) > 0 {
 		resp.Diagnostics.Append(convertDiagnostics...)
 	}
@@ -175,7 +175,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) U
 }
 
 func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	data := d.specializer.NewTerraformModel()
+	data := d.Specializer.NewTerraformModel()
 
 	// Read Terraform prior state data into the model
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
@@ -183,7 +183,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) D
 		return
 	}
 
-	dg := d.specializer.DoDelete(ctx, &data)
+	dg := d.Specializer.DoDelete(ctx, &data)
 	resp.Diagnostics.Append(dg...)
 }
 

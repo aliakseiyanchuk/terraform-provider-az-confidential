@@ -1,4 +1,4 @@
-package resources
+package keyvault
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azcertificates"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -19,7 +20,7 @@ import (
 )
 
 type ConfidentialCertificateModel struct {
-	WrappedAzKeyVaultObjectConfidentialMaterialModel
+	resources.WrappedAzKeyVaultObjectConfidentialMaterialModel
 	VersionlessId       types.String `tfsdk:"versionless_id"`
 	SecretId            types.String `tfsdk:"secret_id"`
 	VersionlessSecretId types.String `tfsdk:"versionless_secret_id"`
@@ -148,7 +149,7 @@ func (a *AzKeyVaultCertificateResourceSpecializer) ConvertToTerraform(azObj azce
 	return diag.Diagnostics{}
 }
 
-func (a *AzKeyVaultCertificateResourceSpecializer) GetConfidentialMaterialFrom(mdl ConfidentialCertificateModel) ConfidentialMaterialModel {
+func (a *AzKeyVaultCertificateResourceSpecializer) GetConfidentialMaterialFrom(mdl ConfidentialCertificateModel) resources.ConfidentialMaterialModel {
 	return mdl.ConfidentialMaterialModel
 }
 
@@ -165,26 +166,26 @@ func (a *AzKeyVaultCertificateResourceSpecializer) CheckPlacement(ctx context.Co
 	return rv
 }
 
-func (a *AzKeyVaultCertificateResourceSpecializer) DoRead(ctx context.Context, data *ConfidentialCertificateModel) (azcertificates.Certificate, ResourceExistenceCheck, diag.Diagnostics) {
+func (a *AzKeyVaultCertificateResourceSpecializer) DoRead(ctx context.Context, data *ConfidentialCertificateModel) (azcertificates.Certificate, resources.ResourceExistenceCheck, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
 	// The key version was never created; nothing needs to be read here.
 	if data.Id.IsUnknown() {
-		return azcertificates.Certificate{}, ResourceNotYetCreated, rv
+		return azcertificates.Certificate{}, resources.ResourceNotYetCreated, rv
 	}
 
 	destCertCoordinate, err := data.GetDestinationCoordinateFromId()
 	if err != nil {
 		rv.AddError("Cannot establish reference to the created certificate version", err.Error())
-		return azcertificates.Certificate{}, ResourceCheckError, rv
+		return azcertificates.Certificate{}, resources.ResourceCheckError, rv
 	}
 
 	certClient, err := a.factory.GetCertificateClient(destCertCoordinate.VaultName)
 	if err != nil {
 		rv.AddError("Cannot acquire certificates client", fmt.Sprintf("Cannot acquire cert client to vault %s: %s", destCertCoordinate.VaultName, err.Error()))
-		return azcertificates.Certificate{}, ResourceCheckError, rv
+		return azcertificates.Certificate{}, resources.ResourceCheckError, rv
 	} else if certClient == nil {
 		rv.AddError("Cannot acquire certificates client", "Cert client returned is nil")
-		return azcertificates.Certificate{}, ResourceCheckError, rv
+		return azcertificates.Certificate{}, resources.ResourceCheckError, rv
 	}
 
 	certState, err := certClient.GetCertificate(ctx, destCertCoordinate.Name, destCertCoordinate.Version, nil)
@@ -201,18 +202,18 @@ func (a *AzKeyVaultCertificateResourceSpecializer) DoRead(ctx context.Context, d
 				)
 			}
 
-			return azcertificates.Certificate{}, ResourceNotFound, rv
+			return azcertificates.Certificate{}, resources.ResourceNotFound, rv
 		} else {
 			rv.AddError("Cannot read certificate", fmt.Sprintf("Cannot acquire certificatge %s version %s from vault %s: %s",
 				destCertCoordinate.Name,
 				destCertCoordinate.Version,
 				destCertCoordinate.VaultName,
 				err.Error()))
-			return azcertificates.Certificate{}, ResourceCheckError, rv
+			return azcertificates.Certificate{}, resources.ResourceCheckError, rv
 		}
 	}
 
-	return certState.Certificate, ResourceExists, rv
+	return certState.Certificate, resources.ResourceExists, rv
 }
 
 func (a *AzKeyVaultCertificateResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialCertificateModel, confidentialData core.VersionedKeyVaultCertificateData) (azcertificates.Certificate, diag.Diagnostics) {
@@ -389,12 +390,12 @@ func NewConfidentialAzVaultCertificateResource() resource.Resource {
 		Description:         "Create a certificate in Azure KeyVault without revealing its value in state",
 		MarkdownDescription: certificateResourceMarkdownDescription,
 
-		Attributes: WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(specificAttrs),
+		Attributes: resources.WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(specificAttrs),
 	}
 
-	return &ConfidentialGenericResource[ConfidentialCertificateModel, int, core.VersionedKeyVaultCertificateData, azcertificates.Certificate]{
-		specializer:    &AzKeyVaultCertificateResourceSpecializer{},
-		resourceType:   "certificate",
-		resourceSchema: resourceSchema,
+	return &resources.ConfidentialGenericResource[ConfidentialCertificateModel, int, core.VersionedKeyVaultCertificateData, azcertificates.Certificate]{
+		Specializer:    &AzKeyVaultCertificateResourceSpecializer{},
+		ResourceType:   "certificate",
+		ResourceSchema: resourceSchema,
 	}
 }

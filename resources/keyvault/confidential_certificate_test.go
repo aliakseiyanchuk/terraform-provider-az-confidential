@@ -1,9 +1,10 @@
-package resources
+package keyvault
 
 import (
 	"context"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core/testkeymaterial"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -17,7 +18,7 @@ func Test_CAzVCR_DoRead_IfCertWasNeverCreated(t *testing.T) {
 
 	_, v, dg := ks.DoRead(context.Background(), &data)
 	assert.False(t, dg.HasError())
-	assert.Equal(t, ResourceNotYetCreated, v)
+	assert.Equal(t, resources.ResourceNotYetCreated, v)
 }
 
 func Test_CAzVCR_DoRead_IfCertIdIsMalformed(t *testing.T) {
@@ -29,7 +30,7 @@ func Test_CAzVCR_DoRead_IfCertIdIsMalformed(t *testing.T) {
 	_, v, dg := ks.DoRead(context.Background(), &data)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "Cannot establish reference to the created certificate version", dg[0].Summary())
-	assert.Equal(t, ResourceCheckError, v)
+	assert.Equal(t, resources.ResourceCheckError, v)
 }
 
 func GivenTypicalConfidentialCertificateModel() ConfidentialCertificateModel {
@@ -51,7 +52,7 @@ func Test_CAzVCR_DoRead_IfCertificatesClientCannotConnect(t *testing.T) {
 	_, v, dg := ks.DoRead(context.Background(), &data)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "Cannot acquire certificates client", dg[0].Summary())
-	assert.Equal(t, ResourceCheckError, v)
+	assert.Equal(t, resources.ResourceCheckError, v)
 
 	factory.AssertExpectations(t)
 }
@@ -68,7 +69,7 @@ func Test_CAzVCR_DoRead_IfCertificatesClientIsNil(t *testing.T) {
 	_, v, dg := ks.DoRead(context.Background(), &data)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "Cannot acquire certificates client", dg[0].Summary())
-	assert.Equal(t, ResourceCheckError, v)
+	assert.Equal(t, resources.ResourceCheckError, v)
 
 	factory.AssertExpectations(t)
 }
@@ -90,7 +91,7 @@ func Test_CAzVCR_DoRead_WhenCertNotFoundAndTrackingEnabled(t *testing.T) {
 	assert.False(t, dg.HasError())
 	assert.Equal(t, "Warning", dg[0].Severity().String())
 	assert.Equal(t, "Certificate removed from key vault", dg[0].Summary())
-	assert.Equal(t, ResourceNotFound, v)
+	assert.Equal(t, resources.ResourceNotFound, v)
 
 	factory.AssertExpectations(t)
 	certClient.AssertExpectations(t)
@@ -112,7 +113,7 @@ func Test_CAzVCR_DoRead_WhenCertNotFoundAndTrackingDisabled(t *testing.T) {
 	_, v, dg := ks.DoRead(context.Background(), &data)
 	assert.False(t, dg.HasError())
 	assert.Equal(t, 0, len(dg))
-	assert.Equal(t, ResourceNotFound, v)
+	assert.Equal(t, resources.ResourceNotFound, v)
 
 	factory.AssertExpectations(t)
 	certClient.AssertExpectations(t)
@@ -133,7 +134,7 @@ func Test_CAzVCR_DoRead_WhenReadingCertReturnsError(t *testing.T) {
 	_, v, dg := ks.DoRead(context.Background(), &data)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "Cannot read certificate", dg[0].Summary())
-	assert.Equal(t, ResourceCheckError, v)
+	assert.Equal(t, resources.ResourceCheckError, v)
 
 	factory.AssertExpectations(t)
 	certClient.AssertExpectations(t)
@@ -153,7 +154,7 @@ func Test_CAzVCR_DoRead(t *testing.T) {
 
 	_, v, dg := ks.DoRead(context.Background(), &data)
 	assert.False(t, dg.HasError())
-	assert.Equal(t, ResourceExists, v)
+	assert.Equal(t, resources.ResourceExists, v)
 
 	factory.AssertExpectations(t)
 	certClient.AssertExpectations(t)

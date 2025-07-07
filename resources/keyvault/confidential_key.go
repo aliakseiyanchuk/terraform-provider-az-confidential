@@ -1,4 +1,4 @@
-package resources
+package keyvault
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -29,7 +30,7 @@ import (
 )
 
 type ConfidentialKeyModel struct {
-	WrappedAzKeyVaultObjectConfidentialMaterialModel
+	resources.WrappedAzKeyVaultObjectConfidentialMaterialModel
 
 	HSM            types.Bool                           `tfsdk:"hsm"`
 	DestinationKey core.AzKeyVaultObjectCoordinateModel `tfsdk:"destination_key"`
@@ -255,7 +256,7 @@ func (a *AzKeyVaultKeyResourceSpecializer) ConvertToTerraform(azObj azkeys.KeyBu
 	return dg
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) GetConfidentialMaterialFrom(mdl ConfidentialKeyModel) ConfidentialMaterialModel {
+func (a *AzKeyVaultKeyResourceSpecializer) GetConfidentialMaterialFrom(mdl ConfidentialKeyModel) resources.ConfidentialMaterialModel {
 	return mdl.ConfidentialMaterialModel
 }
 
@@ -272,12 +273,12 @@ func (a *AzKeyVaultKeyResourceSpecializer) CheckPlacement(ctx context.Context, t
 	return rv
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) DoRead(ctx context.Context, data *ConfidentialKeyModel) (azkeys.KeyBundle, ResourceExistenceCheck, diag.Diagnostics) {
+func (a *AzKeyVaultKeyResourceSpecializer) DoRead(ctx context.Context, data *ConfidentialKeyModel) (azkeys.KeyBundle, resources.ResourceExistenceCheck, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
 
 	// The key version was never created; nothing needs to be read here.
 	if data.Id.IsUnknown() {
-		return azkeys.KeyBundle{}, ResourceNotYetCreated, rv
+		return azkeys.KeyBundle{}, resources.ResourceNotYetCreated, rv
 
 	}
 
@@ -286,16 +287,16 @@ func (a *AzKeyVaultKeyResourceSpecializer) DoRead(ctx context.Context, data *Con
 
 	if err != nil {
 		rv.AddError("cannot establish reference to the created key version", err.Error())
-		return azkeys.KeyBundle{}, ResourceCheckError, rv
+		return azkeys.KeyBundle{}, resources.ResourceCheckError, rv
 	}
 
 	keyClient, err := a.factory.GetKeysClient(destSecretCoordinate.VaultName)
 	if err != nil {
 		rv.AddError("Cannot acquire keys client", fmt.Sprintf("Cannot acquire keys client to vault %s: %s", destSecretCoordinate.VaultName, err.Error()))
-		return azkeys.KeyBundle{}, ResourceCheckError, rv
+		return azkeys.KeyBundle{}, resources.ResourceCheckError, rv
 	} else if keyClient == nil {
 		rv.AddError("Cannot acquire keys client", "Keys client returned is nil")
-		return azkeys.KeyBundle{}, ResourceCheckError, rv
+		return azkeys.KeyBundle{}, resources.ResourceCheckError, rv
 	}
 
 	keyState, err := keyClient.GetKey(ctx, destSecretCoordinate.Name, destSecretCoordinate.Version, nil)
@@ -312,18 +313,18 @@ func (a *AzKeyVaultKeyResourceSpecializer) DoRead(ctx context.Context, data *Con
 				)
 			}
 
-			return azkeys.KeyBundle{}, ResourceNotFound, rv
+			return azkeys.KeyBundle{}, resources.ResourceNotFound, rv
 		} else {
 			rv.AddError("Cannot read key", fmt.Sprintf("Cannot acquire key %s version %s from vault %s: %s",
 				destSecretCoordinate.Name,
 				destSecretCoordinate.Version,
 				destSecretCoordinate.VaultName,
 				err.Error()))
-			return keyState.KeyBundle, ResourceCheckError, rv
+			return keyState.KeyBundle, resources.ResourceCheckError, rv
 		}
 	}
 
-	return keyState.KeyBundle, ResourceExists, rv
+	return keyState.KeyBundle, resources.ResourceExists, rv
 }
 
 func (a *AzKeyVaultKeyResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialKeyModel, confidentialData core.VersionedBinaryConfidentialData) (azkeys.KeyBundle, diag.Diagnostics) {
@@ -539,12 +540,12 @@ func NewConfidentialAzVaultKeyResource() resource.Resource {
 		Description:         "Creates a key in Azure KeyVault without revealing its value in state",
 		MarkdownDescription: confidentialKeyResourceMarkdownDescription,
 
-		Attributes: WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(specificAttrs),
+		Attributes: resources.WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(specificAttrs),
 	}
 
-	return &ConfidentialGenericResource[ConfidentialKeyModel, int, core.VersionedBinaryConfidentialData, azkeys.KeyBundle]{
-		specializer:    &AzKeyVaultKeyResourceSpecializer{},
-		resourceType:   "key",
-		resourceSchema: resourceSchema,
+	return &resources.ConfidentialGenericResource[ConfidentialKeyModel, int, core.VersionedBinaryConfidentialData, azkeys.KeyBundle]{
+		Specializer:    &AzKeyVaultKeyResourceSpecializer{},
+		ResourceType:   "key",
+		ResourceSchema: resourceSchema,
 	}
 }
