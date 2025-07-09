@@ -1,75 +1,64 @@
 package core
 
-import "github.com/google/uuid"
+import (
+	"fmt"
+)
 
-type VersionedKeyVaultCertConfidentialDataJsonModel struct {
-	BaseVersionedConfidentialDataJsonModel
-
+type ConfidentialCertConfidentialDataJsonModel struct {
 	CertificateData         string `json:"crt"`
 	CertificateDataFormat   string `json:"crt_f"`
 	CertificateDataPassword string `json:"crt_p"`
 }
 
-func (vcd *VersionedKeyVaultCertConfidentialDataJsonModel) From(v VersionedKeyVaultCertificateData) {
-	vcd.BaseVersionedConfidentialDataJsonModel.From(v)
-
+func (vcd *ConfidentialCertConfidentialDataJsonModel) From(v ConfidentialCertificateData) {
 	ConvertBytesToBase64(v.GetCertificateData, &vcd.CertificateData)
 	vcd.CertificateDataFormat = v.GetCertificateDataFormat()
 	vcd.CertificateDataPassword = v.GetCertificateDataPassword()
 }
 
-func (vcd *VersionedKeyVaultCertConfidentialDataJsonModel) Into(v SettableVersionedKeyVaultCertificateData) {
-	vcd.BaseVersionedConfidentialDataJsonModel.Into(v)
-
+func (vcd *ConfidentialCertConfidentialDataJsonModel) Into(v SettableConfidentialCertificateData) {
 	ConvertBase64ToBytes(&vcd.CertificateData, v.SetCertificateData)
 	v.SetCertificateDataFormat(vcd.CertificateDataFormat)
 	v.SetCertificateDataPassword(vcd.CertificateDataPassword)
 }
 
-type VersionedKeyVaultCertConfidentialDataStruct struct {
-	BaseVersionedConfidentialDataStruct
-
+type ConfidentialCertConfidentialDataStruct struct {
 	CertificateData         []byte
 	CertificateDataFormat   string
 	CertificateDataPassword string
 }
 
-func (v *VersionedKeyVaultCertConfidentialDataStruct) GetCertificateData() []byte {
+func (v *ConfidentialCertConfidentialDataStruct) GetCertificateData() []byte {
 	return v.CertificateData
 }
 
-func (v *VersionedKeyVaultCertConfidentialDataStruct) GetCertificateDataFormat() string {
+func (v *ConfidentialCertConfidentialDataStruct) GetCertificateDataFormat() string {
 	return v.CertificateDataFormat
 }
 
-func (v *VersionedKeyVaultCertConfidentialDataStruct) GetCertificateDataPassword() string {
+func (v *ConfidentialCertConfidentialDataStruct) GetCertificateDataPassword() string {
 	return v.CertificateDataPassword
 }
 
-func (v *VersionedKeyVaultCertConfidentialDataStruct) SetCertificateData(bytes []byte) {
+func (v *ConfidentialCertConfidentialDataStruct) SetCertificateData(bytes []byte) {
 	v.CertificateData = bytes
 }
 
-func (v *VersionedKeyVaultCertConfidentialDataStruct) SetCertificateDataFormat(s string) {
+func (v *ConfidentialCertConfidentialDataStruct) SetCertificateDataFormat(s string) {
 	v.CertificateDataFormat = s
 }
 
-func (v *VersionedKeyVaultCertConfidentialDataStruct) SetCertificateDataPassword(s string) {
+func (v *ConfidentialCertConfidentialDataStruct) SetCertificateDataPassword(s string) {
 	v.CertificateDataPassword = s
 }
 
 type VersionedKeyVaultCertificateDataHelper struct {
-	VersionedConfidentialDataHelperTemplate[VersionedKeyVaultCertificateData, VersionedKeyVaultCertConfidentialDataJsonModel]
+	VersionedConfidentialDataHelperTemplate[ConfidentialCertificateData, ConfidentialCertConfidentialDataJsonModel]
 }
 
 func (vcd *VersionedKeyVaultCertificateDataHelper) CreateConfidentialCertificateData(
-	certData []byte, certFormat, certPassword, objType string, labels []string) VersionedKeyVaultCertificateData {
-	rv := VersionedKeyVaultCertConfidentialDataStruct{
-		BaseVersionedConfidentialDataStruct: BaseVersionedConfidentialDataStruct{
-			Uuid:   uuid.New().String(),
-			Type:   objType,
-			Labels: labels,
-		},
+	certData []byte, certFormat, certPassword, objType string, labels []string) ConfidentialCertificateData {
+	rv := ConfidentialCertConfidentialDataStruct{
 		CertificateData:         certData,
 		CertificateDataFormat:   certFormat,
 		CertificateDataPassword: certPassword,
@@ -81,17 +70,23 @@ func (vcd *VersionedKeyVaultCertificateDataHelper) CreateConfidentialCertificate
 
 func NewVersionedKeyVaultCertificateConfidentialDataHelper() *VersionedKeyVaultCertificateDataHelper {
 	rv := &VersionedKeyVaultCertificateDataHelper{}
-	rv.KnowValue = &VersionedKeyVaultCertConfidentialDataStruct{}
-	rv.modelAtRestSupplier = func() VersionedKeyVaultCertConfidentialDataJsonModel {
-		return VersionedKeyVaultCertConfidentialDataJsonModel{}
+	rv.KnowValue = &ConfidentialCertConfidentialDataStruct{}
+	rv.ModelName = "core/certificate/v01"
+	rv.modelAtRestSupplier = func(modelName string) (ConfidentialCertConfidentialDataJsonModel, error) {
+		var err error
+		if modelName != "core/certificate/v01" {
+			err = fmt.Errorf("unknown model name %s", modelName)
+		}
+
+		return ConfidentialCertConfidentialDataJsonModel{}, err
 	}
-	rv.valueToRest = func(data VersionedKeyVaultCertificateData) VersionedKeyVaultCertConfidentialDataJsonModel {
-		rvMdl := VersionedKeyVaultCertConfidentialDataJsonModel{}
+	rv.valueToRest = func(data ConfidentialCertificateData) ConfidentialCertConfidentialDataJsonModel {
+		rvMdl := ConfidentialCertConfidentialDataJsonModel{}
 		rvMdl.From(data)
 		return rvMdl
 	}
-	rv.restToValue = func(model VersionedKeyVaultCertConfidentialDataJsonModel) VersionedKeyVaultCertificateData {
-		rvData := &VersionedKeyVaultCertConfidentialDataStruct{}
+	rv.restToValue = func(model ConfidentialCertConfidentialDataJsonModel) ConfidentialCertificateData {
+		rvData := &ConfidentialCertConfidentialDataStruct{}
 		model.Into(rvData)
 		return rvData
 	}

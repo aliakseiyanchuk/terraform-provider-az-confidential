@@ -124,8 +124,8 @@ func (m *AZClientsFactoryMock) GetMergedWrappingKeyCoordinate(ctx context.Contex
 	return rv.Get(0).(core.WrappingKeyCoordinate)
 }
 
-func (m *AZClientsFactoryMock) EnsureCanPlaceKeyVaultObjectAt(ctx context.Context, unwrappedPayload core.VersionedConfidentialData, targetCoord *core.AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics) {
-	m.Mock.Called(ctx, unwrappedPayload, targetCoord, diagnostics)
+func (m *AZClientsFactoryMock) EnsureCanPlaceKeyVaultObjectAt(ctx context.Context, uuid string, labels []string, objectType string, targetCoord *core.AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics) {
+	m.Mock.Called(ctx, uuid, labels, objectType, targetCoord, diagnostics)
 }
 
 func (m *AZClientsFactoryMock) GetDestinationVaultObjectCoordinate(coordinate core.AzKeyVaultObjectCoordinateModel, objType string) core.AzKeyVaultObjectCoordinate {

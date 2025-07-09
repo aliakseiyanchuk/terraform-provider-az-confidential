@@ -13,7 +13,7 @@ func Test_VersionDataToEncryptedMessageConversionWithAES(t *testing.T) {
 	assert.Nil(t, err)
 
 	h := NewVersionedBinaryConfidentialDataHelper()
-	origSecrt := h.CreateConfidentialBinaryData(buf, "example", nil)
+	origSecret := h.CreateConfidentialBinaryData(buf, "example", nil)
 
 	// Perform forward conversion
 	em, err := h.ToEncryptedMessage(LoadedEphemeralRsaPublicKey)
@@ -27,13 +27,14 @@ func Test_VersionDataToEncryptedMessageConversionWithAES(t *testing.T) {
 	plaintext, decryptErr := em.ExtractPlainText(decrypter)
 	assert.Nil(t, decryptErr)
 
-	cm, importErr := h.Import(plaintext)
+	cm, importErr := h.ImportRaw(plaintext)
 	assert.Nil(t, importErr)
 
-	assert.Equal(t, cm.GetBinaryData(), origSecrt.GetBinaryData())
-	assert.Equal(t, cm.GetLabels(), origSecrt.GetLabels())
-	assert.Equal(t, cm.GetUUID(), origSecrt.GetUUID())
-	assert.Equal(t, cm.GetType(), origSecrt.GetType())
+	assert.Equal(t, cm.Data.GetBinaryData(), origSecret.Data.GetBinaryData())
+	assert.Equal(t, cm.Header.Labels, origSecret.Header.Labels)
+	assert.Equal(t, cm.Header.Uuid, origSecret.Header.Uuid)
+	assert.Equal(t, cm.Header.Type, origSecret.Header.Type)
+	assert.Equal(t, cm.Header.ModelReference, origSecret.Header.ModelReference)
 }
 
 func Test_VersionDataToEncryptedMessageConversionWithAESWithBase64(t *testing.T) {
@@ -43,7 +44,7 @@ func Test_VersionDataToEncryptedMessageConversionWithAESWithBase64(t *testing.T)
 	assert.Nil(t, err)
 
 	h := NewVersionedBinaryConfidentialDataHelper()
-	origSecrt := h.CreateConfidentialBinaryData(buf, "example", nil)
+	origSecret := h.CreateConfidentialBinaryData(buf, "example", nil)
 
 	// Perform forward conversion
 	em, err := h.ToEncryptedMessage(LoadedEphemeralRsaPublicKey)
@@ -63,11 +64,12 @@ func Test_VersionDataToEncryptedMessageConversionWithAESWithBase64(t *testing.T)
 	plaintext, decryptErr := em.ExtractPlainText(decrypter)
 	assert.Nil(t, decryptErr)
 
-	cm, importErr := h.Import(plaintext)
+	cm, importErr := h.ImportRaw(plaintext)
 	assert.Nil(t, importErr)
 
-	assert.Equal(t, cm.GetBinaryData(), origSecrt.GetBinaryData())
-	assert.Equal(t, cm.GetLabels(), origSecrt.GetLabels())
-	assert.Equal(t, cm.GetUUID(), origSecrt.GetUUID())
-	assert.Equal(t, cm.GetType(), origSecrt.GetType())
+	assert.Equal(t, cm.Data.GetBinaryData(), origSecret.Data.GetBinaryData())
+	assert.Equal(t, cm.Header.Labels, origSecret.Header.Labels)
+	assert.Equal(t, cm.Header.Uuid, origSecret.Header.Uuid)
+	assert.Equal(t, cm.Header.Type, origSecret.Header.Type)
+	assert.Equal(t, cm.Header.ModelReference, origSecret.Header.ModelReference)
 }

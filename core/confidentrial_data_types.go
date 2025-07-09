@@ -1,50 +1,29 @@
 package core
 
-// VersionedConfidentialData a base interface for an object carrying confidential data. Confidential data
-// in this provider is associated with a unique UUID and set of labels. Subtypes will implement specific
-// fields as required
-type VersionedConfidentialData interface {
-	GetUUID() string
-	GetType() string
-	GetLabels() []string
-}
-
-type SettableVersionedConfidentialData interface {
-	SetUUID(v string)
-	SetType(v string)
-	SetLabels([]string)
-}
-
-type VersionedBinaryConfidentialData interface {
-	VersionedConfidentialData
+type ConfidentialBinaryData interface {
 	GetBinaryData() []byte
 	PayloadAsB64Ptr() *string
 }
 
-type SettableBinaryVersionedConfidentialData interface {
-	SettableVersionedConfidentialData
+type SettableBinaryConfidentialData interface {
 	SetBinaryData([]byte)
 }
 
-type VersionedStringConfidentialData interface {
-	VersionedConfidentialData
+type ConfidentialStringData interface {
 	GetStingData() string
 }
 
-type SettableVersionedStringConfidentialData interface {
-	SettableVersionedConfidentialData
+type SettableStringConfidentialData interface {
 	SetStingData(string)
 }
 
-type VersionedKeyVaultCertificateData interface {
-	VersionedConfidentialData
+type ConfidentialCertificateData interface {
 	GetCertificateData() []byte
 	GetCertificateDataFormat() string
 	GetCertificateDataPassword() string
 }
 
-type SettableVersionedKeyVaultCertificateData interface {
-	SettableVersionedConfidentialData
+type SettableConfidentialCertificateData interface {
 	SetCertificateData([]byte)
 	SetCertificateDataFormat(string)
 	SetCertificateDataPassword(string)

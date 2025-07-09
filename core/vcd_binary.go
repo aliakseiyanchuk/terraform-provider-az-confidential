@@ -1,39 +1,34 @@
 package core
 
 import (
-	"github.com/google/uuid"
+	"fmt"
 	"github.com/segmentio/asm/base64"
 )
 
-type VersionedBinaryConfidentialDataJsonModel struct {
-	BaseVersionedConfidentialDataJsonModel
-
+type BinaryConfidentialDataJsonModel struct {
 	BinaryData string `json:"b"`
 }
 
-func (vcd *VersionedBinaryConfidentialDataJsonModel) From(v VersionedBinaryConfidentialData) {
-	vcd.BaseVersionedConfidentialDataJsonModel.From(v)
-
+func (vcd *BinaryConfidentialDataJsonModel) From(v ConfidentialBinaryData) {
 	ConvertBytesToBase64(v.GetBinaryData, &vcd.BinaryData)
 }
 
-func (vcd *VersionedBinaryConfidentialDataJsonModel) Into(v SettableBinaryVersionedConfidentialData) {
-	vcd.BaseVersionedConfidentialDataJsonModel.Into(v)
-
+func (vcd *BinaryConfidentialDataJsonModel) Into(v SettableBinaryConfidentialData) {
 	ConvertBase64ToBytes(&vcd.BinaryData, v.SetBinaryData)
 }
 
-type VersionedBinaryConfidentialDataStruct struct {
-	BaseVersionedConfidentialDataStruct
-
+// BinaryConfidentialDataStruct shows why runtime struct and model-at-rest exit.
+// The data-at-rest is base-64 encoded, while at runtime these are bytes.
+// Hence two data structures are required.
+type BinaryConfidentialDataStruct struct {
 	BinaryData []byte
 }
 
-func (v *VersionedBinaryConfidentialDataStruct) GetBinaryData() []byte {
+func (v *BinaryConfidentialDataStruct) GetBinaryData() []byte {
 	return v.BinaryData
 }
 
-func (v *VersionedBinaryConfidentialDataStruct) PayloadAsB64Ptr() *string {
+func (v *BinaryConfidentialDataStruct) PayloadAsB64Ptr() *string {
 	if len(v.GetBinaryData()) > 0 {
 		rv := base64.StdEncoding.EncodeToString(v.GetBinaryData())
 		return &rv
@@ -42,40 +37,41 @@ func (v *VersionedBinaryConfidentialDataStruct) PayloadAsB64Ptr() *string {
 	}
 }
 
-func (v *VersionedBinaryConfidentialDataStruct) SetBinaryData(bytes []byte) {
+func (v *BinaryConfidentialDataStruct) SetBinaryData(bytes []byte) {
 	v.BinaryData = bytes
 }
 
 type VersionedBinaryConfidentialDataHelper struct {
-	VersionedConfidentialDataHelperTemplate[VersionedBinaryConfidentialData, VersionedBinaryConfidentialDataJsonModel]
+	VersionedConfidentialDataHelperTemplate[ConfidentialBinaryData, BinaryConfidentialDataJsonModel]
 }
 
-func (vcd *VersionedBinaryConfidentialDataHelper) CreateConfidentialBinaryData(value []byte, objType string, labels []string) VersionedBinaryConfidentialData {
-	rv := VersionedBinaryConfidentialDataStruct{
-		BaseVersionedConfidentialDataStruct: BaseVersionedConfidentialDataStruct{
-			Uuid:   uuid.New().String(),
-			Type:   objType,
-			Labels: labels,
-		},
+func (vcd *VersionedBinaryConfidentialDataHelper) CreateConfidentialBinaryData(value []byte, objType string, labels []string) VersionedConfidentialData[ConfidentialBinaryData] {
+	rv := BinaryConfidentialDataStruct{
 		BinaryData: value,
 	}
 
-	vcd.KnowValue = &rv
-
-	return vcd.KnowValue
+	return vcd.Set(&rv, objType, labels)
 }
 
 func NewVersionedBinaryConfidentialDataHelper() *VersionedBinaryConfidentialDataHelper {
 	rv := &VersionedBinaryConfidentialDataHelper{}
-	rv.KnowValue = &VersionedBinaryConfidentialDataStruct{}
-	rv.modelAtRestSupplier = func() VersionedBinaryConfidentialDataJsonModel { return VersionedBinaryConfidentialDataJsonModel{} }
-	rv.valueToRest = func(data VersionedBinaryConfidentialData) VersionedBinaryConfidentialDataJsonModel {
-		rvMdl := VersionedBinaryConfidentialDataJsonModel{}
+	rv.ModelName = "core/binary/v1"
+	rv.KnowValue = &BinaryConfidentialDataStruct{}
+	rv.modelAtRestSupplier = func(modelRef string) (BinaryConfidentialDataJsonModel, error) {
+		var err error
+		if modelRef != "core/binary/v1" {
+			err = fmt.Errorf("model reference %s is not correct", modelRef)
+		}
+		return BinaryConfidentialDataJsonModel{}, err
+	}
+
+	rv.valueToRest = func(data ConfidentialBinaryData) BinaryConfidentialDataJsonModel {
+		rvMdl := BinaryConfidentialDataJsonModel{}
 		rvMdl.From(data)
 		return rvMdl
 	}
-	rv.restToValue = func(model VersionedBinaryConfidentialDataJsonModel) VersionedBinaryConfidentialData {
-		rvData := &VersionedBinaryConfidentialDataStruct{}
+	rv.restToValue = func(model BinaryConfidentialDataJsonModel) ConfidentialBinaryData {
+		rvData := &BinaryConfidentialDataStruct{}
 		model.Into(rvData)
 		return rvData
 	}

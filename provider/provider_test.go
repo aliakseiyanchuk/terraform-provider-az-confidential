@@ -71,15 +71,10 @@ func Test_EnsureCanPlace_Errs_IfTrackerReturnsError(t *testing.T) {
 	ctx := context.Background()
 	dg := diag.Diagnostics{}
 
-	confDataMock := VersionedConfidentialDataMock{}
-	confDataMock.GivenUUID("obj-uuid")
-
-	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, &confDataMock, nil, &dg)
+	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, "obj-uuid", nil, "anything", nil, &dg)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "unit test track check error", dg[0].Detail())
 	assert.True(t, hashTracker.AssertExpectations(t))
-
-	confDataMock.AssertExpectations(t)
 }
 
 func Test_EnsureCanPlace_Errs_IfTrackerReturnsObjectIsAlreadyTracked(t *testing.T) {
@@ -91,20 +86,14 @@ func Test_EnsureCanPlace_Errs_IfTrackerReturnsObjectIsAlreadyTracked(t *testing.
 		hashTacker:            hashTracker,
 	}
 
-	confDataMock := VersionedConfidentialDataMock{}
-	confDataMock.GivenUUID("obj-uuid")
-	confDataMock.GivenType("secret")
-
 	ctx := context.Background()
 
 	dg := diag.Diagnostics{}
 
-	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, &confDataMock, nil, &dg)
+	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, "obj-uuid", nil, "secret", nil, &dg)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "Potential attempt to copy confidential data detected: someone is trying to create a secret from ciphertext that was previously used", dg[0].Detail())
 	assert.True(t, hashTracker.AssertExpectations(t))
-
-	confDataMock.AssertExpectations(t)
 }
 
 func Test_EnsureCanPlace_Errs_OnMismatchedTargetCoorLabel(t *testing.T) {
@@ -131,21 +120,12 @@ func Test_EnsureCanPlace_Errs_OnMismatchedTargetCoorLabel(t *testing.T) {
 		Name:      "obj-b",
 	}
 
-	confDataMock := VersionedConfidentialDataMock{}
-	confDataMock.GivenUUID("obj-uuid")
-	confDataMock.GivenType("secret")
-	confDataMock.GivenLabels([]string{
-		expCoordinate.GetLabel(),
-	})
-
 	dg := diag.Diagnostics{}
 
-	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, &confDataMock, &reqCoordinate, &dg)
+	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, "obj-uuid", []string{expCoordinate.GetLabel()}, "secret", &reqCoordinate, &dg)
 	assert.True(t, dg.HasError())
-	assert.Equal(t, "The constraints embedded in the ciphertext of this secret disallow unwrapped into vault vault-a/obj-b", dg[0].Detail())
+	assert.Equal(t, "The constraints embedded in the plaintext for this secret disallow unwrapped into vault vault-a/obj-b", dg[0].Detail())
 	assert.True(t, hashTracker.AssertExpectations(t))
-
-	confDataMock.AssertExpectations(t)
 }
 
 func Test_EnsureCanPlace_Ok_OnCoordinateLabelMatch(t *testing.T) {
@@ -172,17 +152,12 @@ func Test_EnsureCanPlace_Ok_OnCoordinateLabelMatch(t *testing.T) {
 		Name:      "obj-a",
 	}
 
-	confDataMock := VersionedConfidentialDataMock{}
-	confDataMock.GivenUUID("obj-uuid")
-	confDataMock.GivenLabels([]string{expCoordinate.GetLabel()})
-
 	dg := diag.Diagnostics{}
 
-	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, &confDataMock, &reqCoordinate, &dg)
+	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, "obj-uuid", []string{expCoordinate.GetLabel()}, "anything", &reqCoordinate, &dg)
 	assert.False(t, dg.HasError())
 
 	hashTracker.AssertExpectations(t)
-	confDataMock.AssertExpectations(t)
 }
 
 func Test_EnsureCanPlace_Ok_OnProviderLabelsMatch(t *testing.T) {
@@ -203,17 +178,17 @@ func Test_EnsureCanPlace_Ok_OnProviderLabelsMatch(t *testing.T) {
 		Name:      "obj-a",
 	}
 
-	confDataMock := VersionedConfidentialDataMock{}
-	confDataMock.GivenUUID("obj-uuid")
-	confDataMock.GivenLabels([]string{"test", "crazy-test", "foo-testing"})
-
 	dg := diag.Diagnostics{}
 
-	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, &confDataMock, &reqCoordinate, &dg)
+	factory.EnsureCanPlaceKeyVaultObjectAt(ctx,
+		"obj-uuid",
+		[]string{"test", "crazy-test", "foo-testing"},
+		"unspecified resource",
+		&reqCoordinate,
+		&dg)
 	assert.False(t, dg.HasError())
 
 	hashTracker.AssertExpectations(t)
-	confDataMock.AssertExpectations(t)
 }
 
 func Test_EnsureCanPlace_Errs_OnLabelMismatchForDataSource(t *testing.T) {
@@ -231,17 +206,15 @@ func Test_EnsureCanPlace_Errs_OnLabelMismatchForDataSource(t *testing.T) {
 
 		ctx := context.Background()
 
-		confDataMock := VersionedConfidentialDataMock{}
-		confDataMock.GivenUUID("obj-uuid")
-		confDataMock.GivenType("secret")
-		confDataMock.GivenLabels([]string{"actual-testing"})
-
 		dg := diag.Diagnostics{}
-		factory.EnsureCanPlaceKeyVaultObjectAt(ctx, &confDataMock, nil, &dg)
+		factory.EnsureCanPlaceKeyVaultObjectAt(ctx,
+			"obj-uuid",
+			[]string{"actual-testing"},
+			"unspecified-resource",
+			nil,
+			&dg)
 		assert.True(t, dg.HasError())
-		assert.Equal(t, "The constraints embedded in the ciphertext of this secret disallow unwrapping the ciphertext by this provider", dg[0].Detail())
-
-		confDataMock.AssertExpectations(t)
+		assert.Equal(t, "The constraints embedded in the ciphertext of this unspecified-resource disallow unwrapping the ciphertext by this provider", dg[0].Detail())
 	}
 
 	assert.True(t, hashTracker.AssertExpectations(t))

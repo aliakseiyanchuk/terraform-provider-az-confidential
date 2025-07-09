@@ -14,9 +14,9 @@ func TestConfidentialPasswordModelAcceptTest(t *testing.T) {
 	helper := core.NewVersionedStringConfidentialDataHelper()
 	bObj := helper.CreateConfidentialStringData("abc", "password", nil)
 
-	mdl.Accept(bObj)
-	assert.Equal(t, bObj.GetUUID(), mdl.Id.ValueString())
-	assert.Equal(t, bObj.GetStingData(), mdl.PlaintextPassword.ValueString())
+	mdl.Accept(bObj.Header.Uuid, bObj.Data)
+	assert.Equal(t, bObj.Header.Uuid, mdl.Id.ValueString())
+	assert.Equal(t, bObj.Data.GetStingData(), mdl.PlaintextPassword.ValueString())
 	assert.Equal(t, "YWJj", mdl.PlaintextPasswordBase64.ValueString())
 	assert.Equal(t, "616263", mdl.PlaintextPasswordHex.ValueString())
 }

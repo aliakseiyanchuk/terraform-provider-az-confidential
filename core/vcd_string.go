@@ -1,53 +1,51 @@
 package core
 
 import (
-	"github.com/google/uuid"
+	"fmt"
 )
 
-// VersionedStringConfidentialDataJsonModel JSON model of the string confidential data
-type VersionedStringConfidentialDataJsonModel struct {
-	BaseVersionedConfidentialDataJsonModel
-
+// StringConfidentialDataJsonModel JSON model of the string confidential data
+type StringConfidentialDataJsonModel struct {
 	StringData string `json:"s"`
 }
 
-func (vcd *VersionedStringConfidentialDataJsonModel) From(v VersionedStringConfidentialData) {
-	vcd.BaseVersionedConfidentialDataJsonModel.From(v)
+func (vcd *StringConfidentialDataJsonModel) From(v ConfidentialStringData) {
 	vcd.StringData = v.GetStingData()
 }
 
-func (vcd *VersionedStringConfidentialDataJsonModel) Into(v SettableVersionedStringConfidentialData) {
-	vcd.BaseVersionedConfidentialDataJsonModel.Into(v)
+func (vcd *StringConfidentialDataJsonModel) Into(v SettableStringConfidentialData) {
 	v.SetStingData(vcd.StringData)
 }
 
-// VersionedStringConfidentialDataStruct is a confidential data comprising a single string
-type VersionedStringConfidentialDataStruct struct {
-	BaseVersionedConfidentialDataStruct
-
-	StringData string
-}
-
-func (vcd *VersionedStringConfidentialDataStruct) GetStingData() string {
+func (vcd *StringConfidentialDataJsonModel) GetStingData() string {
 	return vcd.StringData
 }
 
-func (vcd *VersionedStringConfidentialDataStruct) SetStingData(s string) {
+func (vcd *StringConfidentialDataJsonModel) SetStingData(s string) {
 	vcd.StringData = s
 }
 
 func NewVersionedStringConfidentialDataHelper() *VersionedStringConfidentialDataHelper {
 	rv := &VersionedStringConfidentialDataHelper{}
-	rv.KnowValue = &VersionedStringConfidentialDataStruct{}
+	rv.KnowValue = &StringConfidentialDataJsonModel{}
+	rv.ModelName = "core/string/v1"
 
-	rv.modelAtRestSupplier = func() VersionedStringConfidentialDataJsonModel { return VersionedStringConfidentialDataJsonModel{} }
-	rv.valueToRest = func(data VersionedStringConfidentialData) VersionedStringConfidentialDataJsonModel {
-		rvMdl := VersionedStringConfidentialDataJsonModel{}
+	rv.modelAtRestSupplier = func(modelName string) (StringConfidentialDataJsonModel, error) {
+		if modelName != "core/string/v1" {
+			return StringConfidentialDataJsonModel{}, fmt.Errorf("model name %s is not supported", modelName)
+		}
+
+		return StringConfidentialDataJsonModel{}, nil
+	}
+
+	rv.valueToRest = func(data ConfidentialStringData) StringConfidentialDataJsonModel {
+		rvMdl := StringConfidentialDataJsonModel{}
 		rvMdl.From(data)
 		return rvMdl
 	}
-	rv.restToValue = func(model VersionedStringConfidentialDataJsonModel) VersionedStringConfidentialData {
-		rvData := &VersionedStringConfidentialDataStruct{}
+
+	rv.restToValue = func(model StringConfidentialDataJsonModel) ConfidentialStringData {
+		rvData := &StringConfidentialDataJsonModel{}
 		model.Into(rvData)
 		return rvData
 	}
@@ -56,20 +54,13 @@ func NewVersionedStringConfidentialDataHelper() *VersionedStringConfidentialData
 }
 
 type VersionedStringConfidentialDataHelper struct {
-	VersionedConfidentialDataHelperTemplate[VersionedStringConfidentialData, VersionedStringConfidentialDataJsonModel]
+	VersionedConfidentialDataHelperTemplate[ConfidentialStringData, StringConfidentialDataJsonModel]
 }
 
-func (vcd *VersionedStringConfidentialDataHelper) CreateConfidentialStringData(value, objType string, labels []string) VersionedStringConfidentialData {
-	rv := VersionedStringConfidentialDataStruct{
-		BaseVersionedConfidentialDataStruct: BaseVersionedConfidentialDataStruct{
-			Uuid:   uuid.New().String(),
-			Type:   objType,
-			Labels: labels,
-		},
+func (vcd *VersionedStringConfidentialDataHelper) CreateConfidentialStringData(value, objType string, labels []string) VersionedConfidentialData[ConfidentialStringData] {
+	rv := StringConfidentialDataJsonModel{
 		StringData: value,
 	}
 
-	vcd.KnowValue = &rv
-
-	return vcd.KnowValue
+	return vcd.Set(&rv, objType, labels)
 }

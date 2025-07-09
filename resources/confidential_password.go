@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -21,10 +22,10 @@ type ConfidentialPasswordModel struct {
 	PlaintextPasswordHex    types.String `tfsdk:"plaintext_password_hex"`
 }
 
-func (cpm *ConfidentialPasswordModel) Accept(unwrappedPayload core.VersionedStringConfidentialData) {
+func (cpm *ConfidentialPasswordModel) Accept(uuid string, unwrappedPayload core.ConfidentialStringData) {
 	// For this example code, hardcoding a response value to
 	// save into the Terraform state.
-	cpm.Id = types.StringValue(unwrappedPayload.GetUUID())
+	cpm.Id = types.StringValue(uuid)
 	if len(unwrappedPayload.GetStingData()) > 0 {
 		strVal := unwrappedPayload.GetStingData()
 
@@ -95,8 +96,28 @@ func (d *ConfidentialPasswordDataSource) Read(ctx context.Context, req datasourc
 		return
 	}
 
+	rawMsg := core.ConfidentialDataMessageJson{}
+	if jsonErr := json.Unmarshal(plainText, &rawMsg); jsonErr != nil {
+		resp.Diagnostics.AddError(
+			"Cannot process plain-text data",
+			fmt.Sprintf("The plain-text data does not conform to the minimal expected data structure requirements: %s", jsonErr.Error()),
+		)
+
+		return
+	}
+
+	if rawMsg.Header.Type != "password" {
+		resp.Diagnostics.AddError("Mismatching confidential object type", fmt.Sprintf("Expected `password`, received `%s`", rawMsg.Header.Type))
+	}
+
+	d.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, rawMsg.Header.Uuid, rawMsg.Header.Labels, "password", nil, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		tflog.Error(ctx, "checking possibility to place this object raised an error")
+		return
+	}
+
 	helper := core.NewVersionedStringConfidentialDataHelper()
-	confidentialData, importErr := helper.Import(plainText)
+	confidentialData, importErr := helper.Import(plainText, rawMsg.Header.ModelReference)
 	if importErr != nil {
 		tflog.Error(ctx, "diagnostics contain error after unwrapping the ciphertext; cannot continue")
 		resp.Diagnostics.AddError(
@@ -106,17 +127,7 @@ func (d *ConfidentialPasswordDataSource) Read(ctx context.Context, req datasourc
 		return
 	}
 
-	if confidentialData.GetType() != "password" {
-		resp.Diagnostics.AddError("Mismatching confidential object type", fmt.Sprintf("Expected `password`, received `%s`", confidentialData.GetType()))
-	}
-
-	d.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, confidentialData, nil, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx, "checking possibility to place this object raised an error")
-		return
-	}
-
-	data.Accept(confidentialData)
+	data.Accept(rawMsg.Header.Uuid, confidentialData)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 

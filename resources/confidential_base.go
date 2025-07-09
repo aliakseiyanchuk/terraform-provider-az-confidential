@@ -395,13 +395,3 @@ func (d *ConfidentialResourceBase) Configure(ctx context.Context, req resource.C
 
 	d.factory = factory
 }
-
-func (d *ConfidentialResourceBase) FlushState(ctx context.Context, uuid string, data interface{}, resp *resource.CreateResponse) {
-	// Save data into Terraform state
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-	if trackErr := d.factory.TrackObjectId(ctx, uuid); trackErr != nil {
-		errMsg := fmt.Sprintf("could not track the object entered into the state: %s", trackErr.Error())
-		tflog.Error(ctx, errMsg)
-		resp.Diagnostics.AddError("incomplete object tracking", errMsg)
-	}
-}

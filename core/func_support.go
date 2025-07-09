@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -25,6 +26,7 @@ func GetFirstString[T any](loc Locator[T, types.String], sources ...*T) string {
 }
 
 type Mapper[K, V any] func(K) V
+type MapperWithError[K, V any] func(K) (V, error)
 
 func MapSlice[K, V any](mapper Mapper[K, V], inputSlice []K) []V {
 	rv := make([]V, len(inputSlice))
@@ -44,6 +46,12 @@ type ObjectExportSupport[T, K any] interface {
 	Import(K) (T, error)
 	// Value returns the value immediately known
 	Value() T
+}
+
+// ObjectJsonImportSupport performs importing from raw JSON messages into a
+// defined interface.
+type ObjectJsonImportSupport[K any] interface {
+	Import(msg json.RawMessage, modelName string) (K, error)
 }
 
 func SameBag[K any](comparator Comparator[K], a, b []K) bool {

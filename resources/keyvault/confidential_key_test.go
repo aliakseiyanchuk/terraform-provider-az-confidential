@@ -450,18 +450,18 @@ func givenTypicalKeyModel() ConfidentialKeyModel {
 	return mdl
 }
 
-func givenVersionedConfidentialDataFromEphemeralKey() core.VersionedBinaryConfidentialData {
+func givenVersionedConfidentialDataFromEphemeralKey() core.ConfidentialBinaryData {
 	//rsaPrivateKey, _ := core.GenerateEphemeralKeyPair()
 	jwkKey, _ := jwk.Import(testkeymaterial.EphemeralRsaKeyText)
 	jsonBytes, _ := json.Marshal(jwkKey)
 
 	helper := core.NewVersionedBinaryConfidentialDataHelper()
-	return helper.CreateConfidentialBinaryData(jsonBytes, "key", nil)
+	return helper.CreateConfidentialBinaryData(jsonBytes, "key", nil).Data
 }
 
-func givenVersionedBinaryConfidentialDataFromString(s string) core.VersionedBinaryConfidentialData {
+func givenVersionedBinaryConfidentialDataFromString(s string) core.ConfidentialBinaryData {
 	helper := core.NewVersionedBinaryConfidentialDataHelper()
-	return helper.CreateConfidentialBinaryData([]byte(s), "key", nil)
+	return helper.CreateConfidentialBinaryData([]byte(s), "key", nil).Data
 }
 
 //func Test_CAzVKR_DoCreate_IfDataIsNotGZipCompressed(t *testing.T) {

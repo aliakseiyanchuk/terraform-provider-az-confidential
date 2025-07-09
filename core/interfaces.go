@@ -48,7 +48,7 @@ type AZClientsFactory interface {
 	GetDestinationVaultObjectCoordinate(coordinate AzKeyVaultObjectCoordinateModel, objType string) AzKeyVaultObjectCoordinate
 
 	// EnsureCanPlaceKeyVaultObjectAt ensures that this object can be placed in the destination vault.
-	EnsureCanPlaceKeyVaultObjectAt(ctx context.Context, unwrappedPayload VersionedConfidentialData, targetCoord *AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics)
+	EnsureCanPlaceKeyVaultObjectAt(ctx context.Context, uuid string, labels []string, tfResourceType string, targetCoord *AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics)
 
 	IsObjectTrackingEnabled() bool
 	IsObjectIdTracked(ctx context.Context, id string) (bool, error)

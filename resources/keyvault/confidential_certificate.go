@@ -157,12 +157,12 @@ func (a *AzKeyVaultCertificateResourceSpecializer) GetSupportedConfidentialMater
 	return []string{"certificate"}
 }
 
-func (a *AzKeyVaultCertificateResourceSpecializer) CheckPlacement(ctx context.Context, tfModel *ConfidentialCertificateModel, cf core.VersionedKeyVaultCertificateData) diag.Diagnostics {
+func (a *AzKeyVaultCertificateResourceSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *ConfidentialCertificateModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 
 	destKeyCoordinate := a.factory.GetDestinationVaultObjectCoordinate(tfModel.DestinationCert, "certificates")
 
-	a.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, cf, &destKeyCoordinate, &rv)
+	a.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, uuid, labels, "certificate", &destKeyCoordinate, &rv)
 	return rv
 }
 
@@ -216,7 +216,7 @@ func (a *AzKeyVaultCertificateResourceSpecializer) DoRead(ctx context.Context, d
 	return certState.Certificate, resources.ResourceExists, rv
 }
 
-func (a *AzKeyVaultCertificateResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialCertificateModel, confidentialData core.VersionedKeyVaultCertificateData) (azcertificates.Certificate, diag.Diagnostics) {
+func (a *AzKeyVaultCertificateResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialCertificateModel, confidentialData core.ConfidentialCertificateData) (azcertificates.Certificate, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
 	if len(confidentialData.GetCertificateData()) == 0 {
 		rv.AddError("Missing payload", "Unwrapped payload does not contain expected content")
@@ -336,7 +336,7 @@ func (a *AzKeyVaultCertificateResourceSpecializer) DoDelete(ctx context.Context,
 	return rv
 }
 
-func (a *AzKeyVaultCertificateResourceSpecializer) GetPlaintextImporter() core.ObjectExportSupport[core.VersionedKeyVaultCertificateData, []byte] {
+func (a *AzKeyVaultCertificateResourceSpecializer) GetJsonDataImporter() core.ObjectJsonImportSupport[core.ConfidentialCertificateData] {
 	return core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
 }
 
@@ -393,7 +393,7 @@ func NewConfidentialAzVaultCertificateResource() resource.Resource {
 		Attributes: resources.WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(specificAttrs),
 	}
 
-	return &resources.ConfidentialGenericResource[ConfidentialCertificateModel, int, core.VersionedKeyVaultCertificateData, azcertificates.Certificate]{
+	return &resources.ConfidentialGenericResource[ConfidentialCertificateModel, int, core.ConfidentialCertificateData, azcertificates.Certificate]{
 		Specializer:    &AzKeyVaultCertificateResourceSpecializer{},
 		ResourceType:   "certificate",
 		ResourceSchema: resourceSchema,

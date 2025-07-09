@@ -511,9 +511,9 @@ func Test_CAzVSR_DoCreate_IfSetSecretErrors(t *testing.T) {
 	clMock.AssertExpectations(t)
 }
 
-func givenVersionedStringConfidentialDataFromString(s, objType string) core.VersionedStringConfidentialData {
+func givenVersionedStringConfidentialDataFromString(s, objType string) core.ConfidentialStringData {
 	helper := core.NewVersionedStringConfidentialDataHelper()
-	return helper.CreateConfidentialStringData(s, objType, nil)
+	return helper.CreateConfidentialStringData(s, objType, nil).Data
 }
 
 func Test_CAzVSR_DoCreate(t *testing.T) {

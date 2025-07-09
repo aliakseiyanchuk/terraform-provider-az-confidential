@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -25,16 +26,15 @@ type APIObjectToStateImporter[TMdl, AZAPIObject any] func(azObj AZAPIObject, tfM
 type IdAssigner[TMdl, AZAPIObject any] func(azObj AZAPIObject, tfModel *TMdl)
 
 type ConfidentialMaterialLocator[TMdl any] func(mdl TMdl) ConfidentialMaterialModel
-type PlacementChecker func(ctx context.Context, cf core.VersionedConfidentialData, diagnostics *diag.Diagnostics)
 
-type ConfidentialResourceSpecializer[TMdl any, TConfData core.VersionedConfidentialData, AZAPIObject any] interface {
+type ConfidentialResourceSpecializer[TMdl any, TConfData any, AZAPIObject any] interface {
 	SetFactory(factory core.AZClientsFactory)
 	NewTerraformModel() TMdl
 	ConvertToTerraform(azObj AZAPIObject, tfModel *TMdl) diag.Diagnostics
 	GetConfidentialMaterialFrom(mdl TMdl) ConfidentialMaterialModel
 	GetSupportedConfidentialMaterialTypes() []string
-	CheckPlacement(ctx context.Context, tfModel *TMdl, cf TConfData) diag.Diagnostics
-	GetPlaintextImporter() core.ObjectExportSupport[TConfData, []byte]
+	CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *TMdl) diag.Diagnostics
+	GetJsonDataImporter() core.ObjectJsonImportSupport[TConfData]
 
 	DoRead(ctx context.Context, planData *TMdl) (AZAPIObject, ResourceExistenceCheck, diag.Diagnostics)
 	DoCreate(ctx context.Context, planData *TMdl, plainData TConfData) (AZAPIObject, diag.Diagnostics)
@@ -42,7 +42,7 @@ type ConfidentialResourceSpecializer[TMdl any, TConfData core.VersionedConfident
 	DoDelete(ctx context.Context, planData *TMdl) diag.Diagnostics
 }
 
-type ConfidentialGenericResource[TMdl, TIdentity any, TConfData core.VersionedConfidentialData, AZAPIObject any] struct {
+type ConfidentialGenericResource[TMdl, TIdentity any, TConfData any, AZAPIObject any] struct {
 	ConfidentialResourceBase
 	Specializer ConfidentialResourceSpecializer[TMdl, TConfData, AZAPIObject]
 
@@ -114,28 +114,38 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		return
 	}
 
-	importer := d.Specializer.GetPlaintextImporter()
-	confidentialMaterial, importErr := importer.Import(plainText)
-	if importErr != nil {
+	rawMsg := core.ConfidentialDataMessageJson{}
+	if jsonErr := json.Unmarshal(plainText, &rawMsg); jsonErr != nil {
 		resp.Diagnostics.AddError(
-			"Cannot parse plain text",
-			fmt.Sprintf("Plain text could not be parsed for further processing due to this error: %s. Are you specifying correct ciphertext for this resource?", importErr.Error()),
+			"Cannot process plain-text data",
+			fmt.Sprintf("The plain-text data does not conform to the minimal expected data structure requirements: %s", jsonErr.Error()),
 		)
+
 		return
 	}
 
-	if !slices.Contains(d.Specializer.GetSupportedConfidentialMaterialTypes(), confidentialMaterial.GetType()) {
+	if !slices.Contains(d.Specializer.GetSupportedConfidentialMaterialTypes(), rawMsg.Header.Type) {
 		resp.Diagnostics.AddError("Unexpected object type", fmt.Sprintf(
 			"Expected %s, got %s",
 			d.Specializer.GetSupportedConfidentialMaterialTypes(),
-			confidentialMaterial.GetType()))
+			rawMsg.Header.Type))
 		return
 	}
 
-	placementDiags := d.Specializer.CheckPlacement(ctx, &data, confidentialMaterial)
+	placementDiags := d.Specializer.CheckPlacement(ctx, rawMsg.Header.Uuid, rawMsg.Header.Labels, &data)
 	resp.Diagnostics.Append(placementDiags...)
 	if resp.Diagnostics.HasError() {
 		tflog.Error(ctx, "checking possibility to place this object raised an error")
+		return
+	}
+
+	importer := d.Specializer.GetJsonDataImporter()
+	confidentialMaterial, importErr := importer.Import(rawMsg.ConfidentialData, rawMsg.Header.ModelReference)
+	if importErr != nil {
+		resp.Diagnostics.AddError(
+			"Cannot parse confidential data",
+			fmt.Sprintf("Plain text could not be parsed for further processing due to this error: %s. Are you specifying correct ciphertext for this resource?", importErr.Error()),
+		)
 		return
 	}
 
@@ -150,7 +160,12 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		resp.Diagnostics.Append(convertDiagnostics...)
 	}
 
-	d.FlushState(ctx, confidentialMaterial.GetUUID(), &data, resp)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	if trackErr := d.factory.TrackObjectId(ctx, rawMsg.Header.Uuid); trackErr != nil {
+		errMsg := fmt.Sprintf("could not track the object entered into the state: %s", trackErr.Error())
+		tflog.Error(ctx, errMsg)
+		resp.Diagnostics.AddError("Incomplete object tracking", errMsg)
+	}
 }
 
 func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -188,4 +203,4 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) D
 }
 
 // Ensure compilation of the resources
-var _ resource.Resource = &ConfidentialGenericResource[string, int, core.VersionedConfidentialData, string]{}
+var _ resource.Resource = &ConfidentialGenericResource[string, int, int, string]{}

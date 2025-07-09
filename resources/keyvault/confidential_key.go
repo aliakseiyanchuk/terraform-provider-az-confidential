@@ -264,12 +264,12 @@ func (a *AzKeyVaultKeyResourceSpecializer) GetSupportedConfidentialMaterialTypes
 	return []string{"key", "symmetric-key"}
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) CheckPlacement(ctx context.Context, tfModel *ConfidentialKeyModel, cf core.VersionedBinaryConfidentialData) diag.Diagnostics {
+func (a *AzKeyVaultKeyResourceSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *ConfidentialKeyModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 
 	destKeyCoordinate := a.factory.GetDestinationVaultObjectCoordinate(tfModel.DestinationKey, "keys")
 
-	a.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, cf, &destKeyCoordinate, &rv)
+	a.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, uuid, labels, "key", &destKeyCoordinate, &rv)
 	return rv
 }
 
@@ -327,7 +327,7 @@ func (a *AzKeyVaultKeyResourceSpecializer) DoRead(ctx context.Context, data *Con
 	return keyState.KeyBundle, resources.ResourceExists, rv
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialKeyModel, confidentialData core.VersionedBinaryConfidentialData) (azkeys.KeyBundle, diag.Diagnostics) {
+func (a *AzKeyVaultKeyResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialKeyModel, confidentialData core.ConfidentialBinaryData) (azkeys.KeyBundle, diag.Diagnostics) {
 	rvDiag := diag.Diagnostics{}
 
 	//gunzip, gunzipErr := core.GZipDecompress(confidentialData.GetBinaryData())
@@ -459,7 +459,7 @@ func (a *AzKeyVaultKeyResourceSpecializer) DoDelete(ctx context.Context, data *C
 	return rv
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) GetPlaintextImporter() core.ObjectExportSupport[core.VersionedBinaryConfidentialData, []byte] {
+func (a *AzKeyVaultKeyResourceSpecializer) GetJsonDataImporter() core.ObjectJsonImportSupport[core.ConfidentialBinaryData] {
 	return core.NewVersionedBinaryConfidentialDataHelper()
 }
 
@@ -543,7 +543,7 @@ func NewConfidentialAzVaultKeyResource() resource.Resource {
 		Attributes: resources.WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(specificAttrs),
 	}
 
-	return &resources.ConfidentialGenericResource[ConfidentialKeyModel, int, core.VersionedBinaryConfidentialData, azkeys.KeyBundle]{
+	return &resources.ConfidentialGenericResource[ConfidentialKeyModel, int, core.ConfidentialBinaryData, azkeys.KeyBundle]{
 		Specializer:    &AzKeyVaultKeyResourceSpecializer{},
 		ResourceType:   "key",
 		ResourceSchema: resourceSchema,

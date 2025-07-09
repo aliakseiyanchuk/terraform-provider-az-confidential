@@ -124,12 +124,12 @@ func (a *AzKeyVaultSecretResourceSpecializer) GetSupportedConfidentialMaterialTy
 	return []string{"secret"}
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) CheckPlacement(ctx context.Context, mdl *ConfidentialSecretModel, cf core.VersionedStringConfidentialData) diag.Diagnostics {
+func (a *AzKeyVaultSecretResourceSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *ConfidentialSecretModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 
-	destSecretCoordinate := a.factory.GetDestinationVaultObjectCoordinate(mdl.DestinationSecret, "secrets")
+	destSecretCoordinate := a.factory.GetDestinationVaultObjectCoordinate(tfModel.DestinationSecret, "secrets")
 
-	a.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, cf, &destSecretCoordinate, &rv)
+	a.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, uuid, labels, "secret", &destSecretCoordinate, &rv)
 	return rv
 }
 
@@ -184,7 +184,7 @@ func (a *AzKeyVaultSecretResourceSpecializer) DoRead(ctx context.Context, data *
 	return secretState.Secret, resources.ResourceExists, rv
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialSecretModel, unwrappedData core.VersionedStringConfidentialData) (azsecrets.Secret, diag.Diagnostics) {
+func (a *AzKeyVaultSecretResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialSecretModel, unwrappedData core.ConfidentialStringData) (azsecrets.Secret, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
 	destSecretCoordinate := a.factory.GetDestinationVaultObjectCoordinate(data.DestinationSecret, "secrets")
 
@@ -298,7 +298,7 @@ func (a *AzKeyVaultSecretResourceSpecializer) DoDelete(ctx context.Context, data
 	return rv
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) GetPlaintextImporter() core.ObjectExportSupport[core.VersionedStringConfidentialData, []byte] {
+func (a *AzKeyVaultSecretResourceSpecializer) GetJsonDataImporter() core.ObjectJsonImportSupport[core.ConfidentialStringData] {
 	return core.NewVersionedStringConfidentialDataHelper()
 }
 
@@ -354,7 +354,7 @@ func NewConfidentialAzVaultSecretResource() resource.Resource {
 		Attributes: resources.WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(modelAttributes),
 	}
 
-	return &resources.ConfidentialGenericResource[ConfidentialSecretModel, int, core.VersionedStringConfidentialData, azsecrets.Secret]{
+	return &resources.ConfidentialGenericResource[ConfidentialSecretModel, int, core.ConfidentialStringData, azsecrets.Secret]{
 		Specializer:    &AzKeyVaultSecretResourceSpecializer{},
 		ResourceType:   "secret",
 		ResourceSchema: resourceSchema,
