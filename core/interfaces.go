@@ -2,14 +2,13 @@ package core
 
 import (
 	"context"
-	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azcertificates"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"net/url"
-	"strings"
 )
 
 type AzSecretsClientAbstraction interface {
@@ -25,6 +24,25 @@ type AzKeyClientAbstraction interface {
 	GetKey(ctx context.Context, name string, version string, options *azkeys.GetKeyOptions) (azkeys.GetKeyResponse, error)
 }
 
+type ApimNamedValueClientAbstraction interface {
+	Get(ctx context.Context, resourceGroupName string, serviceName string, namedValueID string, options *armapimanagement.NamedValueClientGetOptions) (armapimanagement.NamedValueClientGetResponse, error)
+	ListValue(ctx context.Context, resourceGroupName string, serviceName string, namedValueID string, options *armapimanagement.NamedValueClientListValueOptions) (armapimanagement.NamedValueClientListValueResponse, error)
+	Delete(ctx context.Context, resourceGroupName string, serviceName string, namedValueID string, ifMatch string, options *armapimanagement.NamedValueClientDeleteOptions) (armapimanagement.NamedValueClientDeleteResponse, error)
+	BeginCreateOrUpdate(ctx context.Context, resourceGroupName string, serviceName string, namedValueID string, parameters armapimanagement.NamedValueCreateContract, options *armapimanagement.NamedValueClientBeginCreateOrUpdateOptions) (PollerAbstraction[armapimanagement.NamedValueClientCreateOrUpdateResponse], error)
+	BeginUpdate(ctx context.Context, resourceGroupName string, serviceName string, namedValueID string, ifMatch string, parameters armapimanagement.NamedValueUpdateParameters, options *armapimanagement.NamedValueClientBeginUpdateOptions) (PollerAbstraction[armapimanagement.NamedValueClientUpdateResponse], error)
+}
+
+type PollerAbstraction[T any] interface {
+	PollUntilDone(ctx context.Context, options *runtime.PollUntilDoneOptions) (res T, err error)
+}
+
+type ApimSubscriptionClientAbstraction interface {
+	Get(ctx context.Context, resourceGroupName string, serviceName string, sid string, options *armapimanagement.SubscriptionClientGetOptions) (armapimanagement.SubscriptionClientGetResponse, error)
+	ListSecrets(ctx context.Context, resourceGroupName string, serviceName string, sid string, options *armapimanagement.SubscriptionClientListSecretsOptions) (armapimanagement.SubscriptionClientListSecretsResponse, error)
+	CreateOrUpdate(ctx context.Context, resourceGroupName string, serviceName string, sid string, parameters armapimanagement.SubscriptionCreateParameters, options *armapimanagement.SubscriptionClientCreateOrUpdateOptions) (armapimanagement.SubscriptionClientCreateOrUpdateResponse, error)
+	Delete(ctx context.Context, resourceGroupName string, serviceName string, sid string, ifMatch string, options *armapimanagement.SubscriptionClientDeleteOptions) (armapimanagement.SubscriptionClientDeleteResponse, error)
+}
+
 type AzCertificateClientAbstraction interface {
 	GetCertificate(ctx context.Context, name string, version string, options *azcertificates.GetCertificateOptions) (azcertificates.GetCertificateResponse, error)
 	ImportCertificate(ctx context.Context, name string, parameters azcertificates.ImportCertificateParameters, options *azcertificates.ImportCertificateOptions) (azcertificates.ImportCertificateResponse, error)
@@ -35,6 +53,8 @@ type AzCertificateClientAbstraction interface {
 type AZClientsFactory interface {
 	GetSecretsClient(vaultName string) (AzSecretsClientAbstraction, error)
 	GetKeysClient(vaultName string) (AzKeyClientAbstraction, error)
+	GetApimSubscriptionClient(subscriptionId string) (ApimSubscriptionClientAbstraction, error)
+	GetApimNamedValueClient(subscriptionId string) (ApimNamedValueClientAbstraction, error)
 	GetCertificateClient(vaultName string) (AzCertificateClientAbstraction, error)
 
 	// GetMergedWrappingKeyCoordinate get merged wrapping key coordinate providing
@@ -47,8 +67,14 @@ type AZClientsFactory interface {
 	// specify this.
 	GetDestinationVaultObjectCoordinate(coordinate AzKeyVaultObjectCoordinateModel, objType string) AzKeyVaultObjectCoordinate
 
-	// EnsureCanPlaceKeyVaultObjectAt ensures that this object can be placed in the destination vault.
-	EnsureCanPlaceKeyVaultObjectAt(ctx context.Context, uuid string, labels []string, tfResourceType string, targetCoord *AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics)
+	// EnsureCanPlaceLabelledObjectAt ensures that objected originating from the ciphertext identified by uuid
+	// and ciphertext bearing labels can be placed at the target coordinate. The logic of this method is as follows:
+	// - if the provider has to ensure strict labeling match, then one of the labels associated with ciphertext must be
+	//   equal to the value the target coordinate provides
+	// - if the provider has to ensure provider-level matching, then at least one ciphertext label must match the one
+	//   assigned to the provider
+	// - where disabled, the check always succeeds.
+	EnsureCanPlaceLabelledObjectAt(ctx context.Context, uuid string, labels []string, tfResourceType string, targetCoord LabelledObject, diagnostics *diag.Diagnostics)
 
 	IsObjectTrackingEnabled() bool
 	IsObjectIdTracked(ctx context.Context, id string) (bool, error)
@@ -57,93 +83,11 @@ type AZClientsFactory interface {
 	GetDecrypterFor(ctx context.Context, coord WrappingKeyCoordinate) RSADecrypter
 }
 
+// TODO Probaaby this model needs to be deleted as not useful
 type AzResourceCoordinateModel struct {
 	ResourceId types.String `tfsdk:"resource_id"`
 }
 
-type AzKeyVaultObjectVersionedCoordinate struct {
-	AzKeyVaultObjectCoordinate
-	Version string
-}
-
-func (c *AzKeyVaultObjectVersionedCoordinate) Clone() AzKeyVaultObjectVersionedCoordinate {
-	return AzKeyVaultObjectVersionedCoordinate{
-		AzKeyVaultObjectCoordinate: c.AzKeyVaultObjectCoordinate.Clone(),
-		Version:                    c.Version,
-	}
-}
-
-func (c *AzKeyVaultObjectVersionedCoordinate) SameAs(other AzKeyVaultObjectVersionedCoordinate) bool {
-	return c.Version == other.Version &&
-		c.AzKeyVaultObjectCoordinate.SameAs(other.AzKeyVaultObjectCoordinate)
-}
-
-func (c *AzKeyVaultObjectVersionedCoordinate) FromId(id string) error {
-	if parsedURL, err := url.Parse(id); err != nil {
-		return err
-	} else {
-		c.idHostName = parsedURL.Host
-		c.VaultName = strings.Split(parsedURL.Host, ".")[0]
-		parsedPath := strings.Split(strings.Trim(parsedURL.Path, "/"), "/")
-
-		if len(parsedPath) != 3 {
-			return fmt.Errorf("invalid reosurce path: %s (id=%s)", parsedURL.Path, id)
-		}
-
-		c.Type = parsedPath[0]
-		c.Name = parsedPath[1]
-		c.Version = parsedPath[2]
-
-		return nil
-	}
-}
-
-func (c *AzKeyVaultObjectVersionedCoordinate) VersionlessId() string {
-	return fmt.Sprintf("https://%s/%s/%s", c.idHostName, c.Type, c.Name)
-}
-
-type AzKeyVaultObjectVersionedCoordinateModel struct {
-	AzResourceCoordinateModel
-	AzKeyVaultObjectCoordinateModel
-
-	Version types.String `tfsdk:"version"`
-}
-
-func (mdl *AzKeyVaultObjectVersionedCoordinateModel) IsEmpty() bool {
-	return mdl.Version.IsNull() && mdl.Name.IsNull() && mdl.VaultName.IsNull() && mdl.ResourceId.IsNull()
-}
-
-// AzKeyVaultObjectCoordinate computed runtime coordinate
-type AzKeyVaultObjectCoordinate struct {
-	VaultName  string
-	idHostName string // Name of the host as fully specified
-	Name       string
-	Type       string
-}
-
-func (c *AzKeyVaultObjectCoordinate) AsString() string {
-	return fmt.Sprintf("v:=%s/t=%s/n=%s", c.VaultName, c.Type, c.Name)
-}
-
-func (c *AzKeyVaultObjectCoordinate) Clone() AzKeyVaultObjectCoordinate {
-	return AzKeyVaultObjectCoordinate{
-		VaultName:  c.VaultName,
-		idHostName: c.idHostName,
-		Name:       c.Name,
-		Type:       c.Type,
-	}
-}
-
-func (c *AzKeyVaultObjectCoordinate) SameAs(other AzKeyVaultObjectCoordinate) bool {
-	return c.VaultName == other.VaultName &&
-		c.Name == other.Name &&
-		c.Type == other.Type
-}
-
-func (c *AzKeyVaultObjectCoordinate) DefinesVaultName() bool {
-	return len(c.VaultName) > 0
-}
-
-func (c *AzKeyVaultObjectCoordinate) GetLabel() string {
-	return fmt.Sprintf("az-c-label://%s/%s@%s;", c.VaultName, c.Name, c.Type)
+type LabelledObject interface {
+	GetLabel() string
 }

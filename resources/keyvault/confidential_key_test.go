@@ -33,7 +33,7 @@ func Test_CKMdl_GetKeyOperations(t *testing.T) {
 	)
 	assert.Nil(t, err)
 
-	mdl := ConfidentialKeyModel{
+	mdl := KeyModel{
 		KeyOperations: set,
 	}
 
@@ -76,17 +76,17 @@ func Test_CKMdl_AcceptECKey(t *testing.T) {
 	assert.False(t, ccm.PublicKeyPem.IsNull())
 }
 
-func givenPreviouslyCreatedKeyModel() ConfidentialKeyModel {
+func givenPreviouslyCreatedKeyModel() KeyModel {
 	keyIdStr := "https://unit-test-fictitious-vault-name.vault.azure.net/keys/importedkeyv1/88ac1c5c71df4c169ab70d3ded5192f4"
 
-	ccm := ConfidentialKeyModel{}
+	ccm := KeyModel{}
 	ccm.Id = types.StringValue(keyIdStr)
 	ccm.KeyVersion = types.StringValue("88ac1c5c71df4c169ab70d3ded5192f4")
 
 	return ccm
 }
 
-func givenInboundKeyForPreviouslyCreated(mdl *ConfidentialKeyModel, cfg core.Consumer[*azkeys.KeyBundle]) *azkeys.KeyBundle {
+func givenInboundKeyForPreviouslyCreated(mdl *KeyModel, cfg core.Consumer[*azkeys.KeyBundle]) *azkeys.KeyBundle {
 	key := azkeys.JSONWebKey{
 		KID: (*azkeys.ID)(to.Ptr(mdl.Id.ValueString())),
 	}
@@ -251,7 +251,7 @@ func Test_CKMdl_Accept_IfVersionDiffers(t *testing.T) {
 
 func Test_CKMdl_Accept_KeyId(t *testing.T) {
 	dg := diag.Diagnostics{}
-	mdl := ConfidentialKeyModel{}
+	mdl := KeyModel{}
 	mdl.Id = types.StringUnknown()
 	mdl.KeyVersion = types.StringUnknown()
 
@@ -270,7 +270,7 @@ func Test_CKMdl_Accept_KeyId(t *testing.T) {
 }
 
 func Test_CKMdl_ConvertToUpdateKeyParamFallsBackToDefaultVaultName(t *testing.T) {
-	mdl := ConfidentialKeyModel{
+	mdl := KeyModel{
 		DestinationKey: core.AzKeyVaultObjectCoordinateModel{
 			Name: types.StringValue("keyName"),
 		},
@@ -283,7 +283,7 @@ func Test_CKMdl_ConvertToUpdateKeyParamFallsBackToDefaultVaultName(t *testing.T)
 }
 
 func Test_CKMdl_ConvertToUpdateKeyParamUsesExplicit(t *testing.T) {
-	mdl := ConfidentialKeyModel{
+	mdl := KeyModel{
 		DestinationKey: core.AzKeyVaultObjectCoordinateModel{
 			VaultName: types.StringValue("vaultName"),
 			Name:      types.StringValue("keyName"),
@@ -297,7 +297,7 @@ func Test_CKMdl_ConvertToUpdateKeyParamUsesExplicit(t *testing.T) {
 }
 
 func Test_CAzVKR_DoRead_IfNotInitialized(t *testing.T) {
-	mdl := ConfidentialKeyModel{}
+	mdl := KeyModel{}
 	mdl.Id = types.StringUnknown()
 
 	ks := AzKeyVaultKeyResourceSpecializer{}
@@ -307,7 +307,7 @@ func Test_CAzVKR_DoRead_IfNotInitialized(t *testing.T) {
 }
 
 func Test_CAzVKR_DoRead_IfIdIsMalformed(t *testing.T) {
-	mdl := ConfidentialKeyModel{}
+	mdl := KeyModel{}
 	mdl.Id = types.StringValue("this is not a valid id")
 
 	ks := AzKeyVaultKeyResourceSpecializer{}
@@ -444,8 +444,8 @@ func Test_CAzVKR_DoRead(t *testing.T) {
 	keysClient.AssertExpectations(t)
 }
 
-func givenTypicalKeyModel() ConfidentialKeyModel {
-	mdl := ConfidentialKeyModel{}
+func givenTypicalKeyModel() KeyModel {
+	mdl := KeyModel{}
 	mdl.Id = types.StringValue("https://unit-test-vault/keys/keyName/keyVersion")
 	return mdl
 }
@@ -573,7 +573,7 @@ func Test_CAzVKR_DoCreate(t *testing.T) {
 }
 
 func Test_CAzVKR_DoUpdate_IfResourceIdIsNotValid(t *testing.T) {
-	mdl := ConfidentialKeyModel{}
+	mdl := KeyModel{}
 	mdl.Id = types.StringValue("this is not a valid identifier")
 
 	r := AzKeyVaultKeyResourceSpecializer{}
@@ -589,7 +589,7 @@ func Test_CAzVKR_DoUpdate_ImplicitMove(t *testing.T) {
 	r := AzKeyVaultKeyResourceSpecializer{}
 	r.factory = &factory
 
-	planData := ConfidentialKeyModel{
+	planData := KeyModel{
 		DestinationKey: core.AzKeyVaultObjectCoordinateModel{
 			Name: types.StringValue("keyName"),
 		},
@@ -680,7 +680,7 @@ func Test_CAzVKR_DoUpdate(t *testing.T) {
 }
 
 func Test_CAzVKR_DoDelete_IfIdIsNotKnown(t *testing.T) {
-	mdl := ConfidentialKeyModel{}
+	mdl := KeyModel{}
 	mdl.Id = types.StringUnknown()
 
 	ks := AzKeyVaultKeyResourceSpecializer{}
@@ -691,7 +691,7 @@ func Test_CAzVKR_DoDelete_IfIdIsNotKnown(t *testing.T) {
 }
 
 func Test_CAzVKR_DoDelete_IfIdIsMalformed(t *testing.T) {
-	mdl := ConfidentialKeyModel{}
+	mdl := KeyModel{}
 	mdl.Id = types.StringValue("this is not a valid identifier")
 
 	ks := AzKeyVaultKeyResourceSpecializer{}

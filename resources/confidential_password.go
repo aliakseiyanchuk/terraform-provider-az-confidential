@@ -82,6 +82,8 @@ func (d *ConfidentialPasswordDataSource) Schema(_ context.Context, _ datasource.
 	}
 }
 
+const PasswordObjectType = "general/password"
+
 func (d *ConfidentialPasswordDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data ConfidentialPasswordModel
 
@@ -106,11 +108,11 @@ func (d *ConfidentialPasswordDataSource) Read(ctx context.Context, req datasourc
 		return
 	}
 
-	if rawMsg.Header.Type != "password" {
+	if rawMsg.Header.Type != PasswordObjectType {
 		resp.Diagnostics.AddError("Mismatching confidential object type", fmt.Sprintf("Expected `password`, received `%s`", rawMsg.Header.Type))
 	}
 
-	d.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, rawMsg.Header.Uuid, rawMsg.Header.Labels, "password", nil, &resp.Diagnostics)
+	d.factory.EnsureCanPlaceLabelledObjectAt(ctx, rawMsg.Header.Uuid, rawMsg.Header.Labels, "password", nil, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		tflog.Error(ctx, "checking possibility to place this object raised an error")
 		return

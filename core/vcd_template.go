@@ -18,9 +18,9 @@ type VersionedConfidentialDataHelperTemplate[T, TAtRest any] struct {
 	ObjectLabels []string
 	ModelName    string
 
-	modelAtRestSupplier MapperWithError[string, TAtRest]
-	valueToRest         Mapper[T, TAtRest]
-	restToValue         Mapper[TAtRest, T]
+	ModelAtRestSupplier MapperWithError[string, TAtRest]
+	ValueToRest         Mapper[T, TAtRest]
+	RestToValue         Mapper[TAtRest, T]
 }
 
 func (vcd *VersionedConfidentialDataHelperTemplate[T, TAtRest]) Value() T {
@@ -48,7 +48,7 @@ func (vcd *VersionedConfidentialDataHelperTemplate[T, TAtRest]) Set(t T, objectT
 }
 
 func (vcd *VersionedConfidentialDataHelperTemplate[T, TAtRest]) Export() ([]byte, error) {
-	modelAtRest := vcd.valueToRest(vcd.KnowValue)
+	modelAtRest := vcd.ValueToRest(vcd.KnowValue)
 
 	serializedObj := ConfidentialDataMarshalledJsonModel[TAtRest]{
 		Header:           vcd.Header,
@@ -101,8 +101,15 @@ func (vcd *VersionedConfidentialDataHelperTemplate[T, TAtRest]) ToEncryptedMessa
 	return rv, encErr
 }
 
+func (vcd *VersionedConfidentialDataHelperTemplate[T, TAtRest]) DefaultValue() T {
+	// A convention is that a template will always have a model that never errs; so the default
+	// value is available.
+	t, _ := vcd.ModelAtRestSupplier(vcd.ModelName)
+	return vcd.RestToValue(t)
+}
+
 func (vcd *VersionedConfidentialDataHelperTemplate[T, TAtRest]) Import(msg json.RawMessage, modelName string) (T, error) {
-	jsonMdl, mdlErr := vcd.modelAtRestSupplier(modelName)
+	jsonMdl, mdlErr := vcd.ModelAtRestSupplier(modelName)
 	if mdlErr != nil {
 		return vcd.KnowValue, mdlErr
 	}
@@ -111,6 +118,6 @@ func (vcd *VersionedConfidentialDataHelperTemplate[T, TAtRest]) Import(msg json.
 		return vcd.KnowValue, jsonErr
 	}
 
-	vcd.KnowValue = vcd.restToValue(jsonMdl)
+	vcd.KnowValue = vcd.RestToValue(jsonMdl)
 	return vcd.KnowValue, nil
 }

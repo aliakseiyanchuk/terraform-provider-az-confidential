@@ -6,6 +6,7 @@ import (
 )
 
 type Consumer[T any] func(T)
+type BiConsumer[T, V any] func(T, V)
 type Supplier[T any] func() T
 type Locator[T any, V any] func(t *T) V
 
@@ -52,6 +53,7 @@ type ObjectExportSupport[T, K any] interface {
 // defined interface.
 type ObjectJsonImportSupport[K any] interface {
 	Import(msg json.RawMessage, modelName string) (K, error)
+	DefaultValue() K
 }
 
 func SameBag[K any](comparator Comparator[K], a, b []K) bool {

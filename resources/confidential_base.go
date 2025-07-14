@@ -32,13 +32,27 @@ type ConfidentialMaterialModel struct {
 
 	WrappingKeyCoordinate *core.WrappingKeyCoordinateModel `tfsdk:"wrapping_key"`
 
-	EncryptedSecret types.String `tfsdk:"content"`
+	EncryptedSecret      types.String `tfsdk:"content"`
+	ConfidentialDataHash types.String `tfsdk:"confidential_data_hash"`
 }
+
+// Hash hashes the value of the confidential data for later reference
+//func (wcmm *ConfidentialMaterialModel) Hash(values ...string) {
+//	h := sha512.New()
+//	for _, v := range values {
+//		h.Write([]byte(v))
+//	}
+//
+//	bytes := h.Sum(nil)
+//	wcmm.ConfidentialDataHash = types.StringValue(hex.EncodeToString(bytes))
+//}
 
 func (wcmmm *ConfidentialMaterialModel) SetContainsValues(s *types.Set) bool {
 	return !s.IsNull() && !s.IsUnknown() && len(s.Elements()) > 0
 }
 
+// TODO: This method must be attached elsewhere in the inheritence hierarcy; as it is meansingful
+// only with the Az Key Vault objects.
 func (wcmm *ConfidentialMaterialModel) GetDestinationCoordinateFromId() (core.AzKeyVaultObjectVersionedCoordinate, error) {
 	rv := core.AzKeyVaultObjectVersionedCoordinate{}
 	err := rv.FromId(wcmm.Id.ValueString())
@@ -112,6 +126,7 @@ func (cm *WrappedAzKeyVaultObjectConfidentialMaterialModel) TagsAsStr() map[stri
 	return rv
 }
 
+// TODO replace with the implementation in core
 func (cm *WrappedAzKeyVaultObjectConfidentialMaterialModel) ConvertAzMap(p map[string]*string, into *basetypes.MapValue) {
 	inputMapIsEmpty := p == nil || len(p) == 0
 	sourceMapIsEmpty := (*into).IsUnknown() || (*into).IsNull()
@@ -129,6 +144,7 @@ func (cm *WrappedAzKeyVaultObjectConfidentialMaterialModel) ConvertAzMap(p map[s
 	*into = ConvertStringPtrMapToTerraform(p)
 }
 
+// TODO replcae with the implemetnation in core
 func ConvertStringPtrMapToTerraform(p map[string]*string) basetypes.MapValue {
 	tfTags := map[string]attr.Value{}
 
@@ -257,6 +273,12 @@ func WrappedConfidentialMaterialModelSchema(moreAttrs map[string]resourceSchema.
 				schemasupport.Base64StringValidator{},
 			},
 		},
+		"confidential_data_hash": resourceSchema.StringAttribute{
+			MarkdownDescription: "Hash of a confidential data elements.",
+			Required:            false,
+			Optional:            true,
+			Computed:            true,
+		},
 	}
 
 	for k, v := range moreAttrs {
@@ -265,6 +287,7 @@ func WrappedConfidentialMaterialModelSchema(moreAttrs map[string]resourceSchema.
 
 	return baseSchema
 }
+
 func WrappedConfidentialMaterialModelDatasourceSchema(moreAttrs map[string]datasourceSchema.Attribute) map[string]datasourceSchema.Attribute {
 	baseSchema := map[string]datasourceSchema.Attribute{
 		"id": resourceSchema.StringAttribute{

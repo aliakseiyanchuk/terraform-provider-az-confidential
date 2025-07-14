@@ -14,7 +14,7 @@ import (
 )
 
 func Test_CSM_ContentTypeAsPtr(t *testing.T) {
-	mdl := ConfidentialSecretModel{}
+	mdl := SecretModel{}
 
 	assert.Nil(t, mdl.ContentTypeAsPtr())
 
@@ -24,7 +24,7 @@ func Test_CSM_ContentTypeAsPtr(t *testing.T) {
 }
 
 func Test_CSM_GetDestinationSecretCoordinate(t *testing.T) {
-	mdl := ConfidentialSecretModel{
+	mdl := SecretModel{
 		DestinationSecret: core.AzKeyVaultObjectCoordinateModel{
 			Name: types.StringValue("unit-test-secret"),
 		},
@@ -43,7 +43,7 @@ func Test_CSM_GetDestinationSecretCoordinate(t *testing.T) {
 }
 
 func Test_CSM_Accept(t *testing.T) {
-	mdl := ConfidentialSecretModel{}
+	mdl := SecretModel{}
 
 	secret := azsecrets.Secret{
 		Attributes: &azsecrets.SecretAttributes{
@@ -97,7 +97,7 @@ func Test_CAzVSR_Schema(t *testing.T) {
 
 func Test_CAzVSR_DoUpdate_IfResourceIdIsMalformed(t *testing.T) {
 	rv := AzKeyVaultSecretResourceSpecializer{}
-	data := ConfidentialSecretModel{}
+	data := SecretModel{}
 	data.Id = types.StringValue("MalformedString")
 
 	_, dg := rv.DoUpdate(context.Background(), &data)
@@ -107,7 +107,7 @@ func Test_CAzVSR_DoUpdate_IfResourceIdIsMalformed(t *testing.T) {
 
 func Test_CAzVSR_DoUpdate_IfClientCannotConnect(t *testing.T) {
 
-	data := ConfidentialSecretModel{}
+	data := SecretModel{}
 	data.Id = types.StringValue("https://cfg-vault.vaults.unittests/secrets/secretName/secretVesion")
 
 	factory := AZClientsFactoryMock{}
@@ -126,7 +126,7 @@ func Test_CAzVSR_DoUpdate_IfClientCannotConnect(t *testing.T) {
 
 func Test_CAzVSR_DoUpdate_IfReturnedClientIsNil(t *testing.T) {
 
-	data := ConfidentialSecretModel{}
+	data := SecretModel{}
 	data.Id = types.StringValue("https://cfg-vault.vaults.unittests/secrets/secretName/secretVesion")
 
 	factory := AZClientsFactoryMock{}
@@ -145,7 +145,7 @@ func Test_CAzVSR_DoUpdate_IfReturnedClientIsNil(t *testing.T) {
 
 func Test_CAzVSR_DoUpdate_IfUpdatingPropertiesWillFail(t *testing.T) {
 
-	data := ConfidentialSecretModel{}
+	data := SecretModel{}
 	data.Id = types.StringValue("https://cfg-vault.vaults.unittests/secrets/secretName/secretVersion")
 
 	clMock := SecretClientMock{}
@@ -168,7 +168,7 @@ func Test_CAzVSR_DoUpdate_IfUpdatingPropertiesWillFail(t *testing.T) {
 
 func Test_CAzVSR_DoUpdate_Succeeds(t *testing.T) {
 
-	data := ConfidentialSecretModel{}
+	data := SecretModel{}
 	data.Id = types.StringValue("https://cfg-vault.vaults.unittests/secrets/secretName/secretVersion")
 
 	clMock := SecretClientMock{}
@@ -195,7 +195,7 @@ func Test_CAzVSR_DoUpdate_ImplicitMove(t *testing.T) {
 	r := AzKeyVaultSecretResourceSpecializer{}
 	r.factory = &factory
 
-	planData := ConfidentialSecretModel{
+	planData := SecretModel{
 		DestinationSecret: core.AzKeyVaultObjectCoordinateModel{
 			Name: types.StringValue("secretName"),
 		},
@@ -211,7 +211,7 @@ func Test_CAzVSR_DoUpdate_ImplicitMove(t *testing.T) {
 
 func Test_CAzVSR_DoRead_WillExitIfSecretVersionIsNotKnown(t *testing.T) {
 	c := AzKeyVaultSecretResourceSpecializer{}
-	mdl := ConfidentialSecretModel{}
+	mdl := SecretModel{}
 	mdl.Id = types.StringUnknown()
 
 	_, resourceExistsCheck, dg := c.DoRead(context.Background(), &mdl)
@@ -221,7 +221,7 @@ func Test_CAzVSR_DoRead_WillExitIfSecretVersionIsNotKnown(t *testing.T) {
 
 func Test_CAzVSR_DoRead_WillExitErrIfIdIsMalformed(t *testing.T) {
 	c := AzKeyVaultSecretResourceSpecializer{}
-	mdl := ConfidentialSecretModel{
+	mdl := SecretModel{
 		SecretVersion: types.StringValue("abc"),
 	}
 	mdl.Id = types.StringValue("https://malformed-id/")
@@ -347,8 +347,8 @@ func Test_CAzVSR_DoRead(t *testing.T) {
 	factoryMock.AssertExpectations(t)
 }
 
-func GivenTypicalConfidentialSecretModel() ConfidentialSecretModel {
-	mdl := ConfidentialSecretModel{
+func GivenTypicalConfidentialSecretModel() SecretModel {
+	mdl := SecretModel{
 		ContentType:   types.StringValue("application/json"),
 		SecretVersion: types.StringValue("secretVersion"),
 	}
@@ -358,7 +358,7 @@ func GivenTypicalConfidentialSecretModel() ConfidentialSecretModel {
 }
 
 func Test_CAzVSR_DoDelete_IfIdIsUnknown(t *testing.T) {
-	mdl := ConfidentialSecretModel{}
+	mdl := SecretModel{}
 	mdl.Id = types.StringUnknown()
 
 	c := AzKeyVaultSecretResourceSpecializer{}
@@ -370,7 +370,7 @@ func Test_CAzVSR_DoDelete_IfIdIsUnknown(t *testing.T) {
 }
 
 func Test_CAzVSR_DoDelete_IfIdIsMalformed(t *testing.T) {
-	mdl := ConfidentialSecretModel{}
+	mdl := SecretModel{}
 	mdl.Id = types.StringValue("this is not an id")
 
 	c := AzKeyVaultSecretResourceSpecializer{}

@@ -64,7 +64,20 @@ func (vcd *VersionedKeyVaultCertificateDataHelper) CreateConfidentialCertificate
 		CertificateDataPassword: certPassword,
 	}
 
+	vcd.ObjectType = objType
+	vcd.ObjectLabels = labels
+
 	vcd.KnowValue = &rv
+	return vcd.KnowValue
+}
+
+func (vcd *VersionedKeyVaultCertificateDataHelper) FromConfidentialCertificateData(
+	confData ConfidentialCertificateData, objType string, labels []string) ConfidentialCertificateData {
+
+	vcd.ObjectType = objType
+	vcd.ObjectLabels = labels
+
+	vcd.KnowValue = confData
 	return vcd.KnowValue
 }
 
@@ -72,7 +85,7 @@ func NewVersionedKeyVaultCertificateConfidentialDataHelper() *VersionedKeyVaultC
 	rv := &VersionedKeyVaultCertificateDataHelper{}
 	rv.KnowValue = &ConfidentialCertConfidentialDataStruct{}
 	rv.ModelName = "core/certificate/v01"
-	rv.modelAtRestSupplier = func(modelName string) (ConfidentialCertConfidentialDataJsonModel, error) {
+	rv.ModelAtRestSupplier = func(modelName string) (ConfidentialCertConfidentialDataJsonModel, error) {
 		var err error
 		if modelName != "core/certificate/v01" {
 			err = fmt.Errorf("unknown model name %s", modelName)
@@ -80,12 +93,12 @@ func NewVersionedKeyVaultCertificateConfidentialDataHelper() *VersionedKeyVaultC
 
 		return ConfidentialCertConfidentialDataJsonModel{}, err
 	}
-	rv.valueToRest = func(data ConfidentialCertificateData) ConfidentialCertConfidentialDataJsonModel {
+	rv.ValueToRest = func(data ConfidentialCertificateData) ConfidentialCertConfidentialDataJsonModel {
 		rvMdl := ConfidentialCertConfidentialDataJsonModel{}
 		rvMdl.From(data)
 		return rvMdl
 	}
-	rv.restToValue = func(model ConfidentialCertConfidentialDataJsonModel) ConfidentialCertificateData {
+	rv.RestToValue = func(model ConfidentialCertConfidentialDataJsonModel) ConfidentialCertificateData {
 		rvData := &ConfidentialCertConfidentialDataStruct{}
 		model.Into(rvData)
 		return rvData

@@ -71,7 +71,7 @@ func Test_EnsureCanPlace_Errs_IfTrackerReturnsError(t *testing.T) {
 	ctx := context.Background()
 	dg := diag.Diagnostics{}
 
-	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, "obj-uuid", nil, "anything", nil, &dg)
+	factory.EnsureCanPlaceLabelledObjectAt(ctx, "obj-uuid", nil, "anything", nil, &dg)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "unit test track check error", dg[0].Detail())
 	assert.True(t, hashTracker.AssertExpectations(t))
@@ -90,7 +90,7 @@ func Test_EnsureCanPlace_Errs_IfTrackerReturnsObjectIsAlreadyTracked(t *testing.
 
 	dg := diag.Diagnostics{}
 
-	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, "obj-uuid", nil, "secret", nil, &dg)
+	factory.EnsureCanPlaceLabelledObjectAt(ctx, "obj-uuid", nil, "secret", nil, &dg)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "Potential attempt to copy confidential data detected: someone is trying to create a secret from ciphertext that was previously used", dg[0].Detail())
 	assert.True(t, hashTracker.AssertExpectations(t))
@@ -122,9 +122,9 @@ func Test_EnsureCanPlace_Errs_OnMismatchedTargetCoorLabel(t *testing.T) {
 
 	dg := diag.Diagnostics{}
 
-	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, "obj-uuid", []string{expCoordinate.GetLabel()}, "secret", &reqCoordinate, &dg)
+	factory.EnsureCanPlaceLabelledObjectAt(ctx, "obj-uuid", []string{expCoordinate.GetLabel()}, "secret", &reqCoordinate, &dg)
 	assert.True(t, dg.HasError())
-	assert.Equal(t, "The constraints embedded in the plaintext for this secret disallow unwrapped into vault vault-a/obj-b", dg[0].Detail())
+	assert.Equal(t, "The constraints embedded in the plaintext for this secret disallow placement with requested parameters", dg[0].Detail())
 	assert.True(t, hashTracker.AssertExpectations(t))
 }
 
@@ -154,7 +154,7 @@ func Test_EnsureCanPlace_Ok_OnCoordinateLabelMatch(t *testing.T) {
 
 	dg := diag.Diagnostics{}
 
-	factory.EnsureCanPlaceKeyVaultObjectAt(ctx, "obj-uuid", []string{expCoordinate.GetLabel()}, "anything", &reqCoordinate, &dg)
+	factory.EnsureCanPlaceLabelledObjectAt(ctx, "obj-uuid", []string{expCoordinate.GetLabel()}, "anything", &reqCoordinate, &dg)
 	assert.False(t, dg.HasError())
 
 	hashTracker.AssertExpectations(t)
@@ -180,7 +180,7 @@ func Test_EnsureCanPlace_Ok_OnProviderLabelsMatch(t *testing.T) {
 
 	dg := diag.Diagnostics{}
 
-	factory.EnsureCanPlaceKeyVaultObjectAt(ctx,
+	factory.EnsureCanPlaceLabelledObjectAt(ctx,
 		"obj-uuid",
 		[]string{"test", "crazy-test", "foo-testing"},
 		"unspecified resource",
@@ -207,7 +207,7 @@ func Test_EnsureCanPlace_Errs_OnLabelMismatchForDataSource(t *testing.T) {
 		ctx := context.Background()
 
 		dg := diag.Diagnostics{}
-		factory.EnsureCanPlaceKeyVaultObjectAt(ctx,
+		factory.EnsureCanPlaceLabelledObjectAt(ctx,
 			"obj-uuid",
 			[]string{"actual-testing"},
 			"unspecified-resource",

@@ -1,7 +1,9 @@
 package acceptance
 
 import (
-	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/cmdgroups/general"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 	_ "github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/stretchr/testify/assert"
@@ -9,17 +11,22 @@ import (
 )
 
 func generatePasswordDataSource(t *testing.T) string {
-	kwp := tfgen.ContentWrappingParams{
-		RSAPublicKeyFile: wrappingKey,
-		Labels:           "acceptance-testing",
-		NoLabels:         false,
+	rsaKey, keyErr := core.LoadPublicKey(wrappingKey)
+	if keyErr != nil {
+		assert.Fail(t, keyErr.Error())
+		return ""
 	}
 
-	if vErr := kwp.Validate(); vErr != nil {
-		assert.Fail(t, vErr.Error())
+	kwp := model.ContentWrappingParams{
+		Labels:             []string{"acceptance-testing"},
+		LoadedRsaPublicKey: rsaKey,
 	}
 
-	if rv, tfErr := tfgen.OutputDatasourcePasswordTerraformCode(kwp, "this is a very secret string"); tfErr != nil {
+	mdl := model.BaseTerraformCodeModel{
+		TFBlockName: "password",
+	}
+
+	if rv, tfErr := general.OutputDatasourcePasswordTerraformCode(mdl, &kwp, "this is a very secret string"); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {

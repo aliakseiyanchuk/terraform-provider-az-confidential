@@ -3,7 +3,8 @@ package acceptance
 import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core/testkeymaterial"
-	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/cmdgroups/keyvault"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 	_ "github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/stretchr/testify/assert"
@@ -11,34 +12,36 @@ import (
 )
 
 func generatePFXCertificateResource(t *testing.T) string {
-	kwp := tfgen.ContentWrappingParams{
-		RSAPublicKeyFile: wrappingKey,
-		Labels:           "acceptance-testing",
-		NoLabels:         false,
+	rsaKey, keyErr := core.LoadPublicKey(wrappingKey)
+	if keyErr != nil {
+		assert.Fail(t, keyErr.Error())
+		return ""
+	}
 
-		DestinationCoordinate: tfgen.AzKeyVaultObjectCoordinateTFCode{
-			AzKeyVaultObjectCoordinate: core.AzKeyVaultObjectCoordinate{
-				Name: "acceptance-test-pem-cert-pkcs12",
-			},
+	kwp := model.ContentWrappingParams{
+		Labels:             []string{"acceptance-testing"},
+		LoadedRsaPublicKey: rsaKey,
+	}
+
+	mdl := keyvault.TerraformCodeModel{
+		BaseTerraformCodeModel: model.BaseTerraformCodeModel{
+			TFBlockName:           "cert",
+			CiphertextLabels:      kwp.GetLabels(),
+			WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 		},
 
-		TFBlockName: "cert",
+		TagsModel: model.TagsModel{
+			IncludeTags: false,
+		},
 	}
 
-	if vErr := kwp.Validate(); vErr != nil {
-		assert.Fail(t, vErr.Error())
+	confData := core.ConfidentialCertConfidentialDataStruct{
+		CertificateData:         testkeymaterial.EphemeralCertPFX12,
+		CertificateDataFormat:   keyvault.CertFormatPem,
+		CertificateDataPassword: "",
 	}
 
-	tags := map[string]string{
-		"a":           "tag_a",
-		"environment": "tf_acceptance_test",
-	}
-
-	if rv, tfErr := tfgen.OutputConfidentialCertificateTerraformCode(kwp,
-		testkeymaterial.EphemeralCertPFX12, // this is a PKCS12 bag certificate
-		tfgen.CERT_FORMAT_PKCS12,           // the certificate format is PKCS12
-		"s1cr3t",                           // password is not required
-		tags); tfErr != nil {
+	if rv, tfErr := keyvault.OutputCertificateTerraformCode(mdl, kwp, &confData); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {

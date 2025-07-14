@@ -30,7 +30,7 @@ func NewVersionedStringConfidentialDataHelper() *VersionedStringConfidentialData
 	rv.KnowValue = &StringConfidentialDataJsonModel{}
 	rv.ModelName = "core/string/v1"
 
-	rv.modelAtRestSupplier = func(modelName string) (StringConfidentialDataJsonModel, error) {
+	rv.ModelAtRestSupplier = func(modelName string) (StringConfidentialDataJsonModel, error) {
 		if modelName != "core/string/v1" {
 			return StringConfidentialDataJsonModel{}, fmt.Errorf("model name %s is not supported", modelName)
 		}
@@ -38,13 +38,13 @@ func NewVersionedStringConfidentialDataHelper() *VersionedStringConfidentialData
 		return StringConfidentialDataJsonModel{}, nil
 	}
 
-	rv.valueToRest = func(data ConfidentialStringData) StringConfidentialDataJsonModel {
+	rv.ValueToRest = func(data ConfidentialStringData) StringConfidentialDataJsonModel {
 		rvMdl := StringConfidentialDataJsonModel{}
 		rvMdl.From(data)
 		return rvMdl
 	}
 
-	rv.restToValue = func(model StringConfidentialDataJsonModel) ConfidentialStringData {
+	rv.RestToValue = func(model StringConfidentialDataJsonModel) ConfidentialStringData {
 		rvData := &StringConfidentialDataJsonModel{}
 		model.Into(rvData)
 		return rvData

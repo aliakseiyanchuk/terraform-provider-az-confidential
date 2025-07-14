@@ -57,7 +57,7 @@ func NewVersionedBinaryConfidentialDataHelper() *VersionedBinaryConfidentialData
 	rv := &VersionedBinaryConfidentialDataHelper{}
 	rv.ModelName = "core/binary/v1"
 	rv.KnowValue = &BinaryConfidentialDataStruct{}
-	rv.modelAtRestSupplier = func(modelRef string) (BinaryConfidentialDataJsonModel, error) {
+	rv.ModelAtRestSupplier = func(modelRef string) (BinaryConfidentialDataJsonModel, error) {
 		var err error
 		if modelRef != "core/binary/v1" {
 			err = fmt.Errorf("model reference %s is not correct", modelRef)
@@ -65,12 +65,12 @@ func NewVersionedBinaryConfidentialDataHelper() *VersionedBinaryConfidentialData
 		return BinaryConfidentialDataJsonModel{}, err
 	}
 
-	rv.valueToRest = func(data ConfidentialBinaryData) BinaryConfidentialDataJsonModel {
+	rv.ValueToRest = func(data ConfidentialBinaryData) BinaryConfidentialDataJsonModel {
 		rvMdl := BinaryConfidentialDataJsonModel{}
 		rvMdl.From(data)
 		return rvMdl
 	}
-	rv.restToValue = func(model BinaryConfidentialDataJsonModel) ConfidentialBinaryData {
+	rv.RestToValue = func(model BinaryConfidentialDataJsonModel) ConfidentialBinaryData {
 		rvData := &BinaryConfidentialDataStruct{}
 		model.Into(rvData)
 		return rvData

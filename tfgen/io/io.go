@@ -1,4 +1,4 @@
-package tfgen
+package io
 
 import (
 	"bufio"
@@ -11,15 +11,18 @@ import (
 	"strings"
 )
 
-type InputReader func(prompt, fn string, base64Decode bool, multiline bool) ([]byte, error)
-
 func ReadInput(prompt, fn string, base64Decode bool, multiline bool) ([]byte, error) {
 	var outputBytes []byte
 	if len(fn) > 0 {
-		if file, err := os.ReadFile(fn); err != nil {
-			return nil, err
+		// Before reading the file, ensure it doesn't exist.
+		if _, statErr := os.Stat(fn); statErr == nil {
+			if file, err := os.ReadFile(fn); err != nil {
+				return nil, err
+			} else {
+				outputBytes = file
+			}
 		} else {
-			outputBytes = file
+			fmt.Printf("File %s does not exist in file system", fn)
 		}
 	}
 
@@ -34,7 +37,7 @@ func ReadInput(prompt, fn string, base64Decode bool, multiline bool) ([]byte, er
 	}
 
 	if outputBytes == nil {
-		return nil, errors.New("no input file found")
+		return nil, errors.New("no input found")
 	} else if base64Decode {
 		dst := make([]byte, base64.StdEncoding.DecodedLen(len(outputBytes)))
 		n, b64Err := base64.StdEncoding.Decode(dst, outputBytes)

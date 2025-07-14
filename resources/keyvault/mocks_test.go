@@ -124,8 +124,8 @@ func (m *AZClientsFactoryMock) GetMergedWrappingKeyCoordinate(ctx context.Contex
 	return rv.Get(0).(core.WrappingKeyCoordinate)
 }
 
-func (m *AZClientsFactoryMock) EnsureCanPlaceKeyVaultObjectAt(ctx context.Context, uuid string, labels []string, objectType string, targetCoord *core.AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics) {
-	m.Mock.Called(ctx, uuid, labels, objectType, targetCoord, diagnostics)
+func (m *AZClientsFactoryMock) EnsureCanPlaceLabelledObjectAt(ctx context.Context, uuid string, labels []string, tfResourceType string, targetCoord core.LabelledObject, diagnostics *diag.Diagnostics) {
+	m.Mock.Called(ctx, uuid, labels, tfResourceType, targetCoord, diagnostics)
 }
 
 func (m *AZClientsFactoryMock) GetDestinationVaultObjectCoordinate(coordinate core.AzKeyVaultObjectCoordinateModel, objType string) core.AzKeyVaultObjectCoordinate {
@@ -151,6 +151,16 @@ func (m *AZClientsFactoryMock) GetDecrypterFor(ctx context.Context, coord core.W
 func (m *AZClientsFactoryMock) IsObjectTrackingEnabled() bool {
 	rv := m.Mock.Called()
 	return rv.Get(0).(bool)
+}
+
+func (m *AZClientsFactoryMock) GetApimSubscriptionClient(subscriptionId string) (core.ApimSubscriptionClientAbstraction, error) {
+	rv := m.Mock.Called(subscriptionId)
+	return rv.Get(0).(core.ApimSubscriptionClientAbstraction), rv.Error(1)
+}
+
+func (m *AZClientsFactoryMock) GetApimNamedValueClient(subscriptionId string) (core.ApimNamedValueClientAbstraction, error) {
+	rv := m.Mock.Called(subscriptionId)
+	return rv.Get(0).(core.ApimNamedValueClientAbstraction), rv.Error(1)
 }
 
 func MockedAzObjectNotFoundError() error {

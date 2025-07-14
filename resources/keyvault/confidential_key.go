@@ -29,7 +29,7 @@ import (
 	"math/big"
 )
 
-type ConfidentialKeyModel struct {
+type KeyModel struct {
 	resources.WrappedAzKeyVaultObjectConfidentialMaterialModel
 
 	HSM            types.Bool                           `tfsdk:"hsm"`
@@ -42,7 +42,7 @@ type ConfidentialKeyModel struct {
 	PublicKeyOpenSSH types.String `tfsdk:"public_key_openssh"`
 }
 
-func (cm *ConfidentialKeyModel) GetKeyOperations(ctx context.Context) []*azkeys.KeyOperation {
+func (cm *KeyModel) GetKeyOperations(ctx context.Context) []*azkeys.KeyOperation {
 	var rv []*azkeys.KeyOperation
 
 	if !cm.KeyOperations.IsNull() && !cm.KeyOperations.IsUnknown() {
@@ -63,7 +63,7 @@ func (cm *ConfidentialKeyModel) GetKeyOperations(ctx context.Context) []*azkeys.
 	return rv
 }
 
-func (cm *ConfidentialKeyModel) ConvertToImportKeyParam(ctx context.Context) azkeys.ImportKeyParameters {
+func (cm *KeyModel) ConvertToImportKeyParam(ctx context.Context) azkeys.ImportKeyParameters {
 	keyAttributes := azkeys.KeyAttributes{
 		Enabled:   cm.Enabled.ValueBoolPointer(),
 		Expires:   cm.NotAfterDateAtPtr(),
@@ -82,7 +82,7 @@ func (cm *ConfidentialKeyModel) ConvertToImportKeyParam(ctx context.Context) azk
 	return params
 }
 
-func (cm *ConfidentialKeyModel) ConvertToUpdateKeyParam(ctx context.Context) azkeys.UpdateKeyParameters {
+func (cm *KeyModel) ConvertToUpdateKeyParam(ctx context.Context) azkeys.UpdateKeyParameters {
 	keyAttributes := azkeys.KeyAttributes{
 		Enabled:   cm.Enabled.ValueBoolPointer(),
 		Expires:   cm.NotAfterDateAtPtr(),
@@ -98,7 +98,7 @@ func (cm *ConfidentialKeyModel) ConvertToUpdateKeyParam(ctx context.Context) azk
 	return params
 }
 
-func (cm *ConfidentialKeyModel) GetDestinationKeyCoordinate(defaultVaultName string) core.AzKeyVaultObjectCoordinate {
+func (cm *KeyModel) GetDestinationKeyCoordinate(defaultVaultName string) core.AzKeyVaultObjectCoordinate {
 	vaultName := defaultVaultName
 	if len(cm.DestinationKey.VaultName.ValueString()) > 0 {
 		vaultName = cm.DestinationKey.VaultName.ValueString()
@@ -112,7 +112,7 @@ func (cm *ConfidentialKeyModel) GetDestinationKeyCoordinate(defaultVaultName str
 	}
 }
 
-func (cm *ConfidentialKeyModel) Accept(key azkeys.KeyBundle, diagnostics *diag.Diagnostics) {
+func (cm *KeyModel) Accept(key azkeys.KeyBundle, diagnostics *diag.Diagnostics) {
 	if key.Key == nil {
 		diagnostics.AddWarning("Superfluous key conversion", "Received null key to convert into existing state")
 		return
@@ -167,7 +167,7 @@ func (cm *ConfidentialKeyModel) Accept(key azkeys.KeyBundle, diagnostics *diag.D
 	cm.acceptPublicKey(key, diagnostics)
 }
 
-func (cm *ConfidentialKeyModel) acceptPublicKey(key azkeys.KeyBundle, diagnostics *diag.Diagnostics) {
+func (cm *KeyModel) acceptPublicKey(key azkeys.KeyBundle, diagnostics *diag.Diagnostics) {
 	if key.Key.Kty == nil {
 		return
 	}
@@ -206,7 +206,7 @@ func (cm *ConfidentialKeyModel) acceptPublicKey(key azkeys.KeyBundle, diagnostic
 	}
 }
 
-func (cm *ConfidentialKeyModel) assignPublicKeysAttrs(pubKey interface{}, dg *diag.Diagnostics) {
+func (cm *KeyModel) assignPublicKeysAttrs(pubKey interface{}, dg *diag.Diagnostics) {
 	if pubKeyBytes, err := x509.MarshalPKIXPublicKey(pubKey); err == nil {
 		pubKeyPemBlock := &pem.Block{
 			Type:  "PUBLIC KEY",
@@ -239,41 +239,41 @@ func (a *AzKeyVaultKeyResourceSpecializer) SetFactory(factory core.AZClientsFact
 	a.factory = factory
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) NewTerraformModel() ConfidentialKeyModel {
-	return ConfidentialKeyModel{}
+func (a *AzKeyVaultKeyResourceSpecializer) NewTerraformModel() KeyModel {
+	return KeyModel{}
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) AssignIdTo(azObj azkeys.KeyBundle, tfModel *ConfidentialKeyModel) {
+func (a *AzKeyVaultKeyResourceSpecializer) AssignIdTo(azObj azkeys.KeyBundle, tfModel *KeyModel) {
 	kid := azObj.Key.KID
 	if kid != nil {
 		tfModel.Id = types.StringValue(string(*kid))
 	}
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) ConvertToTerraform(azObj azkeys.KeyBundle, tfModel *ConfidentialKeyModel) diag.Diagnostics {
+func (a *AzKeyVaultKeyResourceSpecializer) ConvertToTerraform(azObj azkeys.KeyBundle, tfModel *KeyModel) diag.Diagnostics {
 	dg := diag.Diagnostics{}
 	tfModel.Accept(azObj, &dg)
 	return dg
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) GetConfidentialMaterialFrom(mdl ConfidentialKeyModel) resources.ConfidentialMaterialModel {
+func (a *AzKeyVaultKeyResourceSpecializer) GetConfidentialMaterialFrom(mdl KeyModel) resources.ConfidentialMaterialModel {
 	return mdl.ConfidentialMaterialModel
 }
 
 func (a *AzKeyVaultKeyResourceSpecializer) GetSupportedConfidentialMaterialTypes() []string {
-	return []string{"key", "symmetric-key"}
+	return []string{KeyObjectType}
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *ConfidentialKeyModel) diag.Diagnostics {
+func (a *AzKeyVaultKeyResourceSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *KeyModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 
 	destKeyCoordinate := a.factory.GetDestinationVaultObjectCoordinate(tfModel.DestinationKey, "keys")
 
-	a.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, uuid, labels, "key", &destKeyCoordinate, &rv)
+	a.factory.EnsureCanPlaceLabelledObjectAt(ctx, uuid, labels, "key", &destKeyCoordinate, &rv)
 	return rv
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) DoRead(ctx context.Context, data *ConfidentialKeyModel) (azkeys.KeyBundle, resources.ResourceExistenceCheck, diag.Diagnostics) {
+func (a *AzKeyVaultKeyResourceSpecializer) DoRead(ctx context.Context, data *KeyModel) (azkeys.KeyBundle, resources.ResourceExistenceCheck, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
 
 	// The key version was never created; nothing needs to be read here.
@@ -327,7 +327,7 @@ func (a *AzKeyVaultKeyResourceSpecializer) DoRead(ctx context.Context, data *Con
 	return keyState.KeyBundle, resources.ResourceExists, rv
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialKeyModel, confidentialData core.ConfidentialBinaryData) (azkeys.KeyBundle, diag.Diagnostics) {
+func (a *AzKeyVaultKeyResourceSpecializer) DoCreate(ctx context.Context, data *KeyModel, confidentialData core.ConfidentialBinaryData) (azkeys.KeyBundle, diag.Diagnostics) {
 	rvDiag := diag.Diagnostics{}
 
 	//gunzip, gunzipErr := core.GZipDecompress(confidentialData.GetBinaryData())
@@ -367,7 +367,7 @@ func (a *AzKeyVaultKeyResourceSpecializer) DoCreate(ctx context.Context, data *C
 	return setResp.KeyBundle, rvDiag
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) DoUpdate(ctx context.Context, data *ConfidentialKeyModel) (azkeys.KeyBundle, diag.Diagnostics) {
+func (a *AzKeyVaultKeyResourceSpecializer) DoUpdate(ctx context.Context, data *KeyModel) (azkeys.KeyBundle, diag.Diagnostics) {
 	tflog.Info(ctx, fmt.Sprintf("Available object Id: %s", data.Id.ValueString()))
 
 	rv := diag.Diagnostics{}
@@ -410,7 +410,7 @@ func (a *AzKeyVaultKeyResourceSpecializer) DoUpdate(ctx context.Context, data *C
 	return updateResponse.KeyBundle, rv
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) DoDelete(ctx context.Context, data *ConfidentialKeyModel) diag.Diagnostics {
+func (a *AzKeyVaultKeyResourceSpecializer) DoDelete(ctx context.Context, data *KeyModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 
 	if data.Id.IsUnknown() {
@@ -462,6 +462,8 @@ func (a *AzKeyVaultKeyResourceSpecializer) DoDelete(ctx context.Context, data *C
 func (a *AzKeyVaultKeyResourceSpecializer) GetJsonDataImporter() core.ObjectJsonImportSupport[core.ConfidentialBinaryData] {
 	return core.NewVersionedBinaryConfidentialDataHelper()
 }
+
+const KeyObjectType = "kv/key"
 
 func NewConfidentialAzVaultKeyResource() resource.Resource {
 	specificAttrs := map[string]schema.Attribute{
@@ -543,9 +545,12 @@ func NewConfidentialAzVaultKeyResource() resource.Resource {
 		Attributes: resources.WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(specificAttrs),
 	}
 
-	return &resources.ConfidentialGenericResource[ConfidentialKeyModel, int, core.ConfidentialBinaryData, azkeys.KeyBundle]{
-		Specializer:    &AzKeyVaultKeyResourceSpecializer{},
-		ResourceType:   "key",
+	kvKeySpecializer := &AzKeyVaultKeyResourceSpecializer{}
+
+	return &resources.ConfidentialGenericResource[KeyModel, int, core.ConfidentialBinaryData, azkeys.KeyBundle]{
+		Specializer:    kvKeySpecializer,
+		ImmutableRU:    kvKeySpecializer,
+		ResourceName:   "key",
 		ResourceSchema: resourceSchema,
 	}
 }

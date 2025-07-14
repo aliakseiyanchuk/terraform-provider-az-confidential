@@ -13,7 +13,7 @@ import (
 func Test_CAzVCR_DoRead_IfCertWasNeverCreated(t *testing.T) {
 	ks := AzKeyVaultCertificateResourceSpecializer{}
 
-	data := ConfidentialCertificateModel{}
+	data := CertificateModel{}
 	data.Id = types.StringUnknown()
 
 	_, v, dg := ks.DoRead(context.Background(), &data)
@@ -24,7 +24,7 @@ func Test_CAzVCR_DoRead_IfCertWasNeverCreated(t *testing.T) {
 func Test_CAzVCR_DoRead_IfCertIdIsMalformed(t *testing.T) {
 	ks := AzKeyVaultCertificateResourceSpecializer{}
 
-	data := ConfidentialCertificateModel{}
+	data := CertificateModel{}
 	data.Id = types.StringValue("this is not a valid id")
 
 	_, v, dg := ks.DoRead(context.Background(), &data)
@@ -33,8 +33,8 @@ func Test_CAzVCR_DoRead_IfCertIdIsMalformed(t *testing.T) {
 	assert.Equal(t, resources.ResourceCheckError, v)
 }
 
-func GivenTypicalConfidentialCertificateModel() ConfidentialCertificateModel {
-	mdl := ConfidentialCertificateModel{}
+func GivenTypicalConfidentialCertificateModel() CertificateModel {
+	mdl := CertificateModel{}
 
 	mdl.Id = types.StringValue("https://unit-test-vault/certificates/certName/certVersion")
 	return mdl
@@ -163,7 +163,7 @@ func Test_CAzVCR_DoRead(t *testing.T) {
 func Test_CAzVCR_DoCreate_NoPayload(t *testing.T) {
 	ks := AzKeyVaultCertificateResourceSpecializer{}
 
-	data := ConfidentialCertificateModel{}
+	data := CertificateModel{}
 	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
 
 	var emptyBytes []byte
@@ -173,8 +173,8 @@ func Test_CAzVCR_DoCreate_NoPayload(t *testing.T) {
 	assert.True(t, dg.HasError())
 }
 
-func GivenTypicalInitialCertModel() ConfidentialCertificateModel {
-	mdl := ConfidentialCertificateModel{
+func GivenTypicalInitialCertModel() CertificateModel {
+	mdl := CertificateModel{
 		DestinationCert: core.AzKeyVaultObjectCoordinateModel{
 			Name:      types.StringValue("certName"),
 			VaultName: types.StringValue("unit-test-vault"),
@@ -194,7 +194,7 @@ func Test_CAzVCR_DoCreate_IfCertificateClientCannotConnect(t *testing.T) {
 		factory: &factory,
 	}
 
-	data := ConfidentialCertificateModel{}
+	data := CertificateModel{}
 	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
 	confData := helper.CreateConfidentialCertificateData(testkeymaterial.EphemeralCertificatePEM, "application/x-pem-file", "", "certificate", nil)
 
@@ -215,7 +215,7 @@ func Test_CAzVCR_DoCreate_IfCertificateClientIsNil(t *testing.T) {
 		factory: &factory,
 	}
 
-	data := ConfidentialCertificateModel{}
+	data := CertificateModel{}
 	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
 	confData := helper.CreateConfidentialCertificateData(testkeymaterial.EphemeralCertificatePEM, "application/x-pem-file", "", "certificate", nil)
 
@@ -238,7 +238,7 @@ func Test_CAzVCR_DoCreate_IfCertificateImportFails(t *testing.T) {
 		factory: &factory,
 	}
 
-	data := ConfidentialCertificateModel{}
+	data := CertificateModel{}
 	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
 	confData := helper.CreateConfidentialCertificateData(testkeymaterial.EphemeralCertificatePEM, "application/x-pem-file", "", "certificate", nil)
 
@@ -275,7 +275,7 @@ func Test_CAzVCR_DoCreate(t *testing.T) {
 }
 
 func Test_CAzVCR_DoUpdate_WhenIdIsMalformed(t *testing.T) {
-	mdl := ConfidentialCertificateModel{}
+	mdl := CertificateModel{}
 	mdl.Id = types.StringValue("this is not a valid identifier")
 
 	ks := AzKeyVaultCertificateResourceSpecializer{}
@@ -291,7 +291,7 @@ func Test_CAzVCR_DoUpdate_ImplicitMove(t *testing.T) {
 	r := AzKeyVaultCertificateResourceSpecializer{}
 	r.factory = &factory
 
-	planData := ConfidentialCertificateModel{
+	planData := CertificateModel{
 		DestinationCert: core.AzKeyVaultObjectCoordinateModel{
 			Name: types.StringValue("certName"),
 		},
@@ -305,8 +305,8 @@ func Test_CAzVCR_DoUpdate_ImplicitMove(t *testing.T) {
 	factory.AssertExpectations(t)
 }
 
-func givenExistingCertificateModel() ConfidentialCertificateModel {
-	planData := ConfidentialCertificateModel{
+func givenExistingCertificateModel() CertificateModel {
+	planData := CertificateModel{
 		DestinationCert: core.AzKeyVaultObjectCoordinateModel{
 			Name: types.StringValue("certName"),
 		},
@@ -392,7 +392,7 @@ func Test_CAzVCR_DoUpdate(t *testing.T) {
 }
 
 func Test_CAzVCR_DoDelete_WhenIdIsMalformed(t *testing.T) {
-	mdl := ConfidentialCertificateModel{}
+	mdl := CertificateModel{}
 	mdl.Id = types.StringValue("this is not a valid identifier")
 
 	ks := AzKeyVaultCertificateResourceSpecializer{}

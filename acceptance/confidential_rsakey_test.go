@@ -3,7 +3,8 @@ package acceptance
 import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core/testkeymaterial"
-	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/cmdgroups/keyvault"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 	_ "github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/lestrrat-go/jwx/v3/jwk"
@@ -12,27 +13,33 @@ import (
 )
 
 func generatePEMEncodedRsaKeyResource(t *testing.T) string {
-	kwp := tfgen.ContentWrappingParams{
-		RSAPublicKeyFile: wrappingKey,
-		Labels:           "acceptance-testing",
-		NoLabels:         false,
+	rsaPubKey, pubKeyErr := core.LoadPublicKey(wrappingKey)
+	if pubKeyErr != nil {
+		assert.Fail(t, pubKeyErr.Error())
+		return ""
+	}
 
-		DestinationCoordinate: tfgen.AzKeyVaultObjectCoordinateTFCode{
-			AzKeyVaultObjectCoordinate: core.AzKeyVaultObjectCoordinate{
-				Name: "acceptance-test-rsa-key",
+	kwp := model.ContentWrappingParams{
+		Labels:             []string{"acceptance-testing"},
+		LoadedRsaPublicKey: rsaPubKey,
+	}
+
+	keyModel := keyvault.KeyResourceTerraformModel{
+		TerraformCodeModel: keyvault.TerraformCodeModel{
+			BaseTerraformCodeModel: model.BaseTerraformCodeModel{
+				TFBlockName:           "key",
+				CiphertextLabels:      []string{"acceptance-testing"},
+				WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
+			},
+
+			TagsModel: model.TagsModel{
+				IncludeTags: true,
+				Tags: map[string]string{
+					"a":           "tag_a",
+					"environment": "tf_acceptance_test",
+				},
 			},
 		},
-
-		TFBlockName: "rsa_key",
-	}
-
-	if vErr := kwp.Validate(); vErr != nil {
-		assert.Fail(t, vErr.Error())
-	}
-
-	tags := map[string]string{
-		"a":           "tag_a",
-		"environment": "tf_acceptance_test",
 	}
 
 	rsaKey, rsaErr := core.PrivateKeyFromData(testkeymaterial.EphemeralRsaKeyText)
@@ -44,9 +51,10 @@ func generatePEMEncodedRsaKeyResource(t *testing.T) string {
 		assert.Fail(t, "Imported key is not RSA; the subsequent test should fail")
 	}
 
-	if rv, tfErr := tfgen.OutputKeyTerraformCode(kwp,
+	if rv, tfErr := keyvault.OutputKeyTerraformCode(keyModel,
+		kwp,
 		jwwKey,
-		tags); tfErr != nil {
+	); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {

@@ -1,4 +1,4 @@
-package tfgen
+package io
 
 import (
 	"errors"

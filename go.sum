@@ -10,6 +10,12 @@ github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.4.0 h1:mXlQ+2C8A4KpXTIIYY
 github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.4.0/go.mod h1:K//Ck7MUa+r9jpV69WLeWnnju5WJx5120AFsEzvumII=
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.1 h1:FPKJS1T+clwv+OLGt13a8UjqeRuh0O4SJ3lUriThc+4=
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.1/go.mod h1:j2chePtV91HrC22tGoRX3sGY42uF13WzmmV80/OdVAA=
+github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement v1.1.1 h1:jCkNVNpsEevyic4bmjgVjzVA4tMGSJpXNGirf+S+mDI=
+github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement v1.1.1/go.mod h1:a0Ug1l73Il7EhrCJEEt2dGjlNjvphppZq5KqJdgnwuw=
+github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/internal v1.1.2 h1:mLY+pNLjCUeKhgnAJWAKhEUQM+RJQo2H1fuGSw1Ky1E=
+github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/internal v1.1.2/go.mod h1:FbdwsQ2EzwvXxOPcMFYO8ogEc9uMMIj3YkmCdXdAFmk=
+github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources v1.1.1 h1:7CBQ+Ei8SP2c6ydQTGCCrS35bDxgTMfoP2miAwK++OU=
+github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources v1.1.1/go.mod h1:c/wcGeGx5FUPbM/JltUYHZcKmigwyVLJlDq+4HdtXaw=
 github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azcertificates v1.3.1 h1:HUJQzFYTv7t3V1dxPms52eEgl0l9xCNqutDrY45Lvmw=
 github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azcertificates v1.3.1/go.mod h1:ig/8nSkzmfxm5QGeIy5JYIEj8JEFy5JxvY3OB1YNRC4=
 github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys v1.3.1 h1:Wgf5rZba3YZqeTNJPtvqZoBu1sBN/L4sry+u2U3Y75w=

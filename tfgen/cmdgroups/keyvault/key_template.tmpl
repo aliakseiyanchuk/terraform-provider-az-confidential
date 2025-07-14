@@ -47,28 +47,28 @@ resource "az-confidential_key" "{{ .TFBlockName }}" {
       }
 
   destination_key = {
-      {{- if .DestinationCoordinate.DefinesVaultName }}
-        vault_name = {{ .DestinationCoordinate.GetVaultNameExpr}}
+      {{- if .DestinationCoordinate.VaultName.IsSpecified }}
+        vault_name = {{ .DestinationCoordinate.VaultName.TerraformExpression }}
       {{- else }}
         # Vault name will be inferred from the key vault where the wrapping key is stored.
         # If this is not what you want, specify the destination vault explicitly
       {{- end }}
-        name = {{ .DestinationCoordinate.GetObjectNameExpr }}
+        name = {{ .DestinationCoordinate.ObjectName.TerraformExpression }}
   }
 
-  {{- if .DefinesWrappingCoordinate }}
+  {{- if not .WrappingKeyCoordinate.IsEmpty }}
       wrapping_key = {
-        {{- if .WrappingKeyCoordinate.DefiesVaultName }}
-            vault_name = {{ .WrappingKeyCoordinate.VaultNameExpr }}
+        {{- if .WrappingKeyCoordinate.VaultName.IsSpecified }}
+            vault_name = {{ .WrappingKeyCoordinate.VaultName.TerraformExpression }}
         {{- end }}
-        {{- if .WrappingKeyCoordinate.DefiesKeyName }}
-            name = {{ .WrappingKeyCoordinate.KeyNameExpr }}
+        {{- if .WrappingKeyCoordinate.KeyName.IsSpecified }}
+            name = {{ .WrappingKeyCoordinate.KeyName.TerraformExpression }}
         {{- end }}
-        {{- if .WrappingKeyCoordinate.KeyVersion }}
-            version = {{ .WrappingKeyCoordinate.KeyVersionExpr }}
+        {{- if .WrappingKeyCoordinate.KeyVersion.IsSpecified }}
+            version = {{ .WrappingKeyCoordinate.KeyVersion.TerraformExpression }}
         {{- end }}
-        {{- if .WrappingKeyCoordinate.Algorithm }}
-            version = "{{ .WrappingKeyCoordinate.Algorithm }}"
+        {{- if .WrappingKeyCoordinate.Algorithm.IsSpecified }}
+            version = "{{ .WrappingKeyCoordinate.Algorithm.TerraformExpression }}"
         {{- end }}
       }
   {{- end }}

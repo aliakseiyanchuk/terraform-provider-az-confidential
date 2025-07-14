@@ -2,24 +2,12 @@
 # Minimal terraform code for your example:
 # ----------------------------------------------------------------------------
 
-resource "az-confidential_certificate" "{{ .TFBlockName }}" {
+resource "az-confidential_apim_named_value" "{{ .TFBlockName }}" {
   content = "{{ .EncryptedContent }}"
 
-  # This certificate is enabled for operation. Optionally, there is an option
-  # to temporarily disable it.
-  enabled = true
-
-  # The certificate version cannot be used before this date
-  # Needs to be formatted yyyy-mm-ddTHH:MM:SS'Z'
-  # not_before_date = "{{ .NotBeforeExample }}"
-
-  # The certificate version cannot be used after this date
-  # Needs to be formatted yyyy-mm-dd'T'HH:MM:SS'Z'
-  # not_after_date = "{{ .NotAfterExample }}"
-
-    tags = {
+    tags = [
       {{- if .HasTags }}
-      {{- range $key, $value := .TerraformValueTags }}
+      {{- range $value := .TerraformValueTags }}
       {{ $key }} = {{ $value }}
       {{- end }}
       {{- else }}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azcertificates"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
@@ -39,11 +40,52 @@ type ObjectHashTracker interface {
 type CachedAzClientsSupplier struct {
 	Credential azcore.TokenCredential
 
-	secretClients      map[string]*azsecrets.Client
-	keysClients        map[string]*azkeys.Client
-	certificateClients map[string]*azcertificates.Client
+	apimSubscriptionClients map[string]*armapimanagement.SubscriptionClient
+	apimNamedValueClients   map[string]core.ApimNamedValueClientAbstraction
+	secretClients           map[string]*azsecrets.Client
+	keysClients             map[string]*azkeys.Client
+	certificateClients      map[string]*azcertificates.Client
 
 	keysCache map[string]core.WrappingKeyCoordinate
+}
+
+func (css *CachedAzClientsSupplier) GetApimNamedValueClient(subscriptionId string) (core.ApimNamedValueClientAbstraction, error) {
+	if css.apimNamedValueClients == nil {
+		css.apimNamedValueClients = map[string]core.ApimNamedValueClientAbstraction{}
+	}
+
+	if client, ok := css.apimNamedValueClients[subscriptionId]; ok {
+		return client, nil
+	}
+
+	client, err := armapimanagement.NewNamedValueClient(subscriptionId, css.Credential, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	wrappedClient := ApimNamedValueClientAbstractionWrapper{
+		client: client,
+	}
+
+	css.apimNamedValueClients[subscriptionId] = &wrappedClient
+	return &wrappedClient, nil
+}
+
+func (css *CachedAzClientsSupplier) GetApimSubscriptionClient(subscriptionId string) (core.ApimSubscriptionClientAbstraction, error) {
+	if css.apimSubscriptionClients == nil {
+		css.apimSubscriptionClients = map[string]*armapimanagement.SubscriptionClient{}
+	}
+
+	if client, ok := css.apimSubscriptionClients[subscriptionId]; ok {
+		return client, nil
+	}
+
+	client, err := armapimanagement.NewSubscriptionClient(subscriptionId, css.Credential, nil)
+	if err != nil {
+		return nil, err
+	}
+	css.apimSubscriptionClients[subscriptionId] = client
+	return client, nil
 }
 
 // GetSecretsClient return (potentially cached) secrets client to connect to the specified
@@ -241,7 +283,7 @@ func (f *AZClientsFactoryImpl) TrackObjectId(ctx context.Context, id string) err
 
 var _ core.AZClientsFactory = &AZClientsFactoryImpl{}
 
-func (f *AZClientsFactoryImpl) EnsureCanPlaceKeyVaultObjectAt(ctx context.Context, uuid string, labels []string, tfResourceType string, targetCoord *core.AzKeyVaultObjectCoordinate, diagnostics *diag.Diagnostics) {
+func (f *AZClientsFactoryImpl) EnsureCanPlaceLabelledObjectAt(ctx context.Context, uuid string, labels []string, tfResourceType string, targetCoord core.LabelledObject, diagnostics *diag.Diagnostics) {
 	if objIsTracked, trackerCheckErr := f.IsObjectIdTracked(ctx, uuid); trackerCheckErr != nil {
 		diagnostics.AddError("cannot check tracking status of this secret", trackerCheckErr.Error())
 	} else if objIsTracked {
@@ -253,7 +295,7 @@ func (f *AZClientsFactoryImpl) EnsureCanPlaceKeyVaultObjectAt(ctx context.Contex
 
 	if f.LabelMatchRequirement == TargetCoordinate && targetCoord != nil {
 		if !slices.Contains(labels, targetCoord.GetLabel()) {
-			diagnostics.AddError("mismatched placement", fmt.Sprintf("The constraints embedded in the plaintext for this %s disallow unwrapped into vault %s/%s", tfResourceType, targetCoord.VaultName, targetCoord.Name))
+			diagnostics.AddError("mismatched placement", fmt.Sprintf("The constraints embedded in the plaintext for this %s disallow placement with requested parameters", tfResourceType))
 		}
 	} else if f.LabelMatchRequirement == ProviderLabels || (f.LabelMatchRequirement == TargetCoordinate && targetCoord == nil) {
 		// This situation with nil target coordinate will only when unwrapping the password,

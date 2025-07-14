@@ -2,7 +2,8 @@ package acceptance
 
 import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
-	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/cmdgroups/keyvault"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 	_ "github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/stretchr/testify/assert"
@@ -10,25 +11,31 @@ import (
 )
 
 func generateSecretResourceEmptyTags(t *testing.T) string {
-	kwp := tfgen.ContentWrappingParams{
-		RSAPublicKeyFile: wrappingKey,
-		Labels:           "acceptance-testing",
-		NoLabels:         false,
+	rsaKey, keyErr := core.LoadPublicKey(wrappingKey)
+	if keyErr != nil {
+		assert.Fail(t, keyErr.Error())
+		return ""
+	}
 
-		DestinationCoordinate: tfgen.AzKeyVaultObjectCoordinateTFCode{
-			AzKeyVaultObjectCoordinate: core.AzKeyVaultObjectCoordinate{
-				Name: "acceptance-test-secret-empty-tags",
-			},
+	kwp := model.ContentWrappingParams{
+		Labels:             []string{"acceptance-testing"},
+		LoadedRsaPublicKey: rsaKey,
+	}
+
+	secretModel := keyvault.TerraformCodeModel{
+		BaseTerraformCodeModel: model.BaseTerraformCodeModel{
+			TFBlockName:           "secret",
+			CiphertextLabels:      []string{"acceptance-testing"},
+			WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 		},
 
-		TFBlockName: "secret",
+		TagsModel: model.TagsModel{
+			IncludeTags: true,
+			Tags:        map[string]string{},
+		},
 	}
 
-	if vErr := kwp.Validate(); vErr != nil {
-		assert.Fail(t, vErr.Error())
-	}
-
-	if rv, tfErr := tfgen.OutputSecretTerraformCode(kwp, "this is a very secret string", true, nil); tfErr != nil {
+	if rv, tfErr := keyvault.OutputSecretTerraformCode(secretModel, &kwp, "this is a very secret string"); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {

@@ -17,7 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
-type ConfidentialSecretModel struct {
+type SecretModel struct {
 	resources.WrappedAzKeyVaultObjectConfidentialMaterialModel
 
 	ContentType       types.String                         `tfsdk:"content_type"`
@@ -26,7 +26,7 @@ type ConfidentialSecretModel struct {
 	SecretVersion types.String `tfsdk:"secret_version"`
 }
 
-func (cm *ConfidentialSecretModel) ConvertToSetSecretParam(data *ConfidentialSecretModel) azsecrets.SetSecretParameters {
+func (cm *SecretModel) ConvertToSetSecretParam(data *SecretModel) azsecrets.SetSecretParameters {
 	secretAttributes := azsecrets.SecretAttributes{
 		Enabled:   data.Enabled.ValueBoolPointer(),
 		Expires:   data.NotAfterDateAtPtr(),
@@ -42,7 +42,7 @@ func (cm *ConfidentialSecretModel) ConvertToSetSecretParam(data *ConfidentialSec
 	return params
 }
 
-func (cm *ConfidentialSecretModel) ConvertToUpdateSecretPropertiesParam(data *ConfidentialSecretModel) azsecrets.UpdateSecretPropertiesParameters {
+func (cm *SecretModel) ConvertToUpdateSecretPropertiesParam(data *SecretModel) azsecrets.UpdateSecretPropertiesParameters {
 	secretAttributes := azsecrets.SecretAttributes{
 		Enabled:   data.Enabled.ValueBoolPointer(),
 		Expires:   data.NotAfterDateAtPtr(),
@@ -58,11 +58,11 @@ func (cm *ConfidentialSecretModel) ConvertToUpdateSecretPropertiesParam(data *Co
 	return params
 }
 
-func (cm *ConfidentialSecretModel) ContentTypeAsPtr() *string {
+func (cm *SecretModel) ContentTypeAsPtr() *string {
 	return cm.StringTypeAsPtr(&cm.ContentType)
 }
 
-func (cm *ConfidentialSecretModel) GetDestinationSecretCoordinate(defaultVaultName string) core.AzKeyVaultObjectCoordinate {
+func (cm *SecretModel) GetDestinationSecretCoordinate(defaultVaultName string) core.AzKeyVaultObjectCoordinate {
 	vaultName := defaultVaultName
 	if len(cm.DestinationSecret.VaultName.ValueString()) > 0 {
 		vaultName = cm.DestinationSecret.VaultName.ValueString()
@@ -76,7 +76,7 @@ func (cm *ConfidentialSecretModel) GetDestinationSecretCoordinate(defaultVaultNa
 	}
 }
 
-func (cm *ConfidentialSecretModel) Accept(secret azsecrets.Secret) {
+func (cm *SecretModel) Accept(secret azsecrets.Secret) {
 	cm.Id = types.StringValue(string(*secret.ID))
 
 	cm.ConvertAzString(secret.ContentType, &cm.ContentType)
@@ -100,40 +100,40 @@ func (a *AzKeyVaultSecretResourceSpecializer) SetFactory(factory core.AZClientsF
 	a.factory = factory
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) NewTerraformModel() ConfidentialSecretModel {
-	return ConfidentialSecretModel{}
+func (a *AzKeyVaultSecretResourceSpecializer) NewTerraformModel() SecretModel {
+	return SecretModel{}
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) AssignIdTo(secret azsecrets.Secret, tfModel *ConfidentialSecretModel) {
+func (a *AzKeyVaultSecretResourceSpecializer) AssignIdTo(secret azsecrets.Secret, tfModel *SecretModel) {
 	idVal := secret.ID
 	if idVal != nil {
 		tfModel.Id = types.StringValue(string(*idVal))
 	}
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) ConvertToTerraform(secret azsecrets.Secret, tfModel *ConfidentialSecretModel) diag.Diagnostics {
+func (a *AzKeyVaultSecretResourceSpecializer) ConvertToTerraform(secret azsecrets.Secret, tfModel *SecretModel) diag.Diagnostics {
 	tfModel.Accept(secret)
 	return nil
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) GetConfidentialMaterialFrom(mdl ConfidentialSecretModel) resources.ConfidentialMaterialModel {
+func (a *AzKeyVaultSecretResourceSpecializer) GetConfidentialMaterialFrom(mdl SecretModel) resources.ConfidentialMaterialModel {
 	return mdl.ConfidentialMaterialModel
 }
 
 func (a *AzKeyVaultSecretResourceSpecializer) GetSupportedConfidentialMaterialTypes() []string {
-	return []string{"secret"}
+	return []string{SecretObjectType}
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *ConfidentialSecretModel) diag.Diagnostics {
+func (a *AzKeyVaultSecretResourceSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *SecretModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 
 	destSecretCoordinate := a.factory.GetDestinationVaultObjectCoordinate(tfModel.DestinationSecret, "secrets")
 
-	a.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, uuid, labels, "secret", &destSecretCoordinate, &rv)
+	a.factory.EnsureCanPlaceLabelledObjectAt(ctx, uuid, labels, "secret", &destSecretCoordinate, &rv)
 	return rv
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) DoRead(ctx context.Context, data *ConfidentialSecretModel) (azsecrets.Secret, resources.ResourceExistenceCheck, diag.Diagnostics) {
+func (a *AzKeyVaultSecretResourceSpecializer) DoRead(ctx context.Context, data *SecretModel) (azsecrets.Secret, resources.ResourceExistenceCheck, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
 	// The secret version was never created; nothing needs to be read here.
 	if data.Id.IsUnknown() {
@@ -184,7 +184,7 @@ func (a *AzKeyVaultSecretResourceSpecializer) DoRead(ctx context.Context, data *
 	return secretState.Secret, resources.ResourceExists, rv
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialSecretModel, unwrappedData core.ConfidentialStringData) (azsecrets.Secret, diag.Diagnostics) {
+func (a *AzKeyVaultSecretResourceSpecializer) DoCreate(ctx context.Context, data *SecretModel, unwrappedData core.ConfidentialStringData) (azsecrets.Secret, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
 	destSecretCoordinate := a.factory.GetDestinationVaultObjectCoordinate(data.DestinationSecret, "secrets")
 
@@ -210,7 +210,7 @@ func (a *AzKeyVaultSecretResourceSpecializer) DoCreate(ctx context.Context, data
 	}
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) DoUpdate(ctx context.Context, data *ConfidentialSecretModel) (azsecrets.Secret, diag.Diagnostics) {
+func (a *AzKeyVaultSecretResourceSpecializer) DoUpdate(ctx context.Context, data *SecretModel) (azsecrets.Secret, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
 	destSecretCoordinate, err := data.GetDestinationCoordinateFromId()
 	if err != nil {
@@ -250,7 +250,7 @@ func (a *AzKeyVaultSecretResourceSpecializer) DoUpdate(ctx context.Context, data
 	return secretResp.Secret, rv
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) DoDelete(ctx context.Context, data *ConfidentialSecretModel) diag.Diagnostics {
+func (a *AzKeyVaultSecretResourceSpecializer) DoDelete(ctx context.Context, data *SecretModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 	if data.Id.IsUnknown() {
 		tflog.Warn(ctx, "Deleting resource that doesn't have recorded versioned coordinate.")
@@ -308,6 +308,8 @@ func (a *AzKeyVaultSecretResourceSpecializer) GetJsonDataImporter() core.ObjectJ
 //go:embed confidential_secret.md
 var secretResourceMarkdownDescription string
 
+const SecretObjectType = "kv/secret"
+
 func NewConfidentialAzVaultSecretResource() resource.Resource {
 	modelAttributes := map[string]schema.Attribute{
 		"content_type": schema.StringAttribute{
@@ -354,9 +356,12 @@ func NewConfidentialAzVaultSecretResource() resource.Resource {
 		Attributes: resources.WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(modelAttributes),
 	}
 
-	return &resources.ConfidentialGenericResource[ConfidentialSecretModel, int, core.ConfidentialStringData, azsecrets.Secret]{
-		Specializer:    &AzKeyVaultSecretResourceSpecializer{},
-		ResourceType:   "secret",
+	kvSecretSpecializer := &AzKeyVaultSecretResourceSpecializer{}
+
+	return &resources.ConfidentialGenericResource[SecretModel, int, core.ConfidentialStringData, azsecrets.Secret]{
+		Specializer:    kvSecretSpecializer,
+		ImmutableRU:    kvSecretSpecializer,
+		ResourceName:   "secret",
 		ResourceSchema: resourceSchema,
 	}
 }

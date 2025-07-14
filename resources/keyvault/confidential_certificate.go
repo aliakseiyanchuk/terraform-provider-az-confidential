@@ -19,7 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
-type ConfidentialCertificateModel struct {
+type CertificateModel struct {
 	resources.WrappedAzKeyVaultObjectConfidentialMaterialModel
 	VersionlessId       types.String `tfsdk:"versionless_id"`
 	SecretId            types.String `tfsdk:"secret_id"`
@@ -33,7 +33,7 @@ type ConfidentialCertificateModel struct {
 	CertificateDataBase64 types.String `tfsdk:"certificate_data_base64"`
 }
 
-func (cm *ConfidentialCertificateModel) Accept(cert azcertificates.Certificate) {
+func (cm *CertificateModel) Accept(cert azcertificates.Certificate) {
 	cm.AssignId(cert)
 
 	tfSecretIdVal := types.StringNull()
@@ -64,7 +64,7 @@ func (cm *ConfidentialCertificateModel) Accept(cert azcertificates.Certificate) 
 	cm.CertificateDataBase64 = types.StringValue(base64.StdEncoding.EncodeToString(cert.CER))
 }
 
-func (cm *ConfidentialCertificateModel) AssignId(cert azcertificates.Certificate) {
+func (cm *CertificateModel) AssignId(cert azcertificates.Certificate) {
 	tfIdVal := types.StringNull()
 	tfVersionVal := types.StringNull()
 	tfVersionlessIdVal := types.StringNull()
@@ -90,7 +90,7 @@ func (cm *ConfidentialCertificateModel) AssignId(cert azcertificates.Certificate
 	cm.VersionlessId = tfVersionlessIdVal
 }
 
-func (d *ConfidentialCertificateModel) ConvertToImportCertParam() azcertificates.ImportCertificateParameters {
+func (d *CertificateModel) ConvertToImportCertParam() azcertificates.ImportCertificateParameters {
 	certAttr := azcertificates.CertificateAttributes{
 		NotBefore: d.NotBeforeDateAtPtr(),
 		Expires:   d.NotAfterDateAtPtr(),
@@ -115,7 +115,7 @@ func (d *ConfidentialCertificateModel) ConvertToImportCertParam() azcertificates
 	return rv
 }
 
-func (d *ConfidentialCertificateModel) ConvertToUpdateCertParam() azcertificates.UpdateCertificateParameters {
+func (d *CertificateModel) ConvertToUpdateCertParam() azcertificates.UpdateCertificateParameters {
 	certAttr := azcertificates.CertificateAttributes{
 		NotBefore: d.NotBeforeDateAtPtr(),
 		Expires:   d.NotAfterDateAtPtr(),
@@ -140,33 +140,33 @@ func (a *AzKeyVaultCertificateResourceSpecializer) SetFactory(factory core.AZCli
 	a.factory = factory
 }
 
-func (a *AzKeyVaultCertificateResourceSpecializer) NewTerraformModel() ConfidentialCertificateModel {
-	return ConfidentialCertificateModel{}
+func (a *AzKeyVaultCertificateResourceSpecializer) NewTerraformModel() CertificateModel {
+	return CertificateModel{}
 }
 
-func (a *AzKeyVaultCertificateResourceSpecializer) ConvertToTerraform(azObj azcertificates.Certificate, tfModel *ConfidentialCertificateModel) diag.Diagnostics {
+func (a *AzKeyVaultCertificateResourceSpecializer) ConvertToTerraform(azObj azcertificates.Certificate, tfModel *CertificateModel) diag.Diagnostics {
 	tfModel.Accept(azObj)
 	return diag.Diagnostics{}
 }
 
-func (a *AzKeyVaultCertificateResourceSpecializer) GetConfidentialMaterialFrom(mdl ConfidentialCertificateModel) resources.ConfidentialMaterialModel {
+func (a *AzKeyVaultCertificateResourceSpecializer) GetConfidentialMaterialFrom(mdl CertificateModel) resources.ConfidentialMaterialModel {
 	return mdl.ConfidentialMaterialModel
 }
 
 func (a *AzKeyVaultCertificateResourceSpecializer) GetSupportedConfidentialMaterialTypes() []string {
-	return []string{"certificate"}
+	return []string{CertificateObjectType}
 }
 
-func (a *AzKeyVaultCertificateResourceSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *ConfidentialCertificateModel) diag.Diagnostics {
+func (a *AzKeyVaultCertificateResourceSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *CertificateModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 
 	destKeyCoordinate := a.factory.GetDestinationVaultObjectCoordinate(tfModel.DestinationCert, "certificates")
 
-	a.factory.EnsureCanPlaceKeyVaultObjectAt(ctx, uuid, labels, "certificate", &destKeyCoordinate, &rv)
+	a.factory.EnsureCanPlaceLabelledObjectAt(ctx, uuid, labels, "certificate", &destKeyCoordinate, &rv)
 	return rv
 }
 
-func (a *AzKeyVaultCertificateResourceSpecializer) DoRead(ctx context.Context, data *ConfidentialCertificateModel) (azcertificates.Certificate, resources.ResourceExistenceCheck, diag.Diagnostics) {
+func (a *AzKeyVaultCertificateResourceSpecializer) DoRead(ctx context.Context, data *CertificateModel) (azcertificates.Certificate, resources.ResourceExistenceCheck, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
 	// The key version was never created; nothing needs to be read here.
 	if data.Id.IsUnknown() {
@@ -216,7 +216,7 @@ func (a *AzKeyVaultCertificateResourceSpecializer) DoRead(ctx context.Context, d
 	return certState.Certificate, resources.ResourceExists, rv
 }
 
-func (a *AzKeyVaultCertificateResourceSpecializer) DoCreate(ctx context.Context, data *ConfidentialCertificateModel, confidentialData core.ConfidentialCertificateData) (azcertificates.Certificate, diag.Diagnostics) {
+func (a *AzKeyVaultCertificateResourceSpecializer) DoCreate(ctx context.Context, data *CertificateModel, confidentialData core.ConfidentialCertificateData) (azcertificates.Certificate, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
 	if len(confidentialData.GetCertificateData()) == 0 {
 		rv.AddError("Missing payload", "Unwrapped payload does not contain expected content")
@@ -248,7 +248,7 @@ func (a *AzKeyVaultCertificateResourceSpecializer) DoCreate(ctx context.Context,
 	}
 }
 
-func (a *AzKeyVaultCertificateResourceSpecializer) DoUpdate(ctx context.Context, planData *ConfidentialCertificateModel) (azcertificates.Certificate, diag.Diagnostics) {
+func (a *AzKeyVaultCertificateResourceSpecializer) DoUpdate(ctx context.Context, planData *CertificateModel) (azcertificates.Certificate, diag.Diagnostics) {
 
 	tflog.Info(ctx, fmt.Sprintf("Available object Id: %s", planData.Id.ValueString()))
 
@@ -293,7 +293,7 @@ func (a *AzKeyVaultCertificateResourceSpecializer) DoUpdate(ctx context.Context,
 	}
 }
 
-func (a *AzKeyVaultCertificateResourceSpecializer) DoDelete(ctx context.Context, data *ConfidentialCertificateModel) diag.Diagnostics {
+func (a *AzKeyVaultCertificateResourceSpecializer) DoDelete(ctx context.Context, data *CertificateModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 
 	destCoordinate, err := data.GetDestinationCoordinateFromId()
@@ -339,6 +339,8 @@ func (a *AzKeyVaultCertificateResourceSpecializer) DoDelete(ctx context.Context,
 func (a *AzKeyVaultCertificateResourceSpecializer) GetJsonDataImporter() core.ObjectJsonImportSupport[core.ConfidentialCertificateData] {
 	return core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
 }
+
+const CertificateObjectType = "kv/certificate"
 
 func NewConfidentialAzVaultCertificateResource() resource.Resource {
 	specificAttrs := map[string]schema.Attribute{
@@ -393,9 +395,12 @@ func NewConfidentialAzVaultCertificateResource() resource.Resource {
 		Attributes: resources.WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(specificAttrs),
 	}
 
-	return &resources.ConfidentialGenericResource[ConfidentialCertificateModel, int, core.ConfidentialCertificateData, azcertificates.Certificate]{
-		Specializer:    &AzKeyVaultCertificateResourceSpecializer{},
-		ResourceType:   "certificate",
+	keyVaultCertSpecializer := &AzKeyVaultCertificateResourceSpecializer{}
+
+	return &resources.ConfidentialGenericResource[CertificateModel, int, core.ConfidentialCertificateData, azcertificates.Certificate]{
+		Specializer:    keyVaultCertSpecializer,
+		ImmutableRU:    keyVaultCertSpecializer,
+		ResourceName:   "certificate",
 		ResourceSchema: resourceSchema,
 	}
 }
