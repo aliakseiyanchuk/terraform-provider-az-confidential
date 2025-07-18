@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/schemasupport"
 	tfstringvalidators "github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -14,6 +15,7 @@ import (
 	resourceSchema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -32,8 +34,7 @@ type ConfidentialMaterialModel struct {
 
 	WrappingKeyCoordinate *core.WrappingKeyCoordinateModel `tfsdk:"wrapping_key"`
 
-	EncryptedSecret      types.String `tfsdk:"content"`
-	ConfidentialDataHash types.String `tfsdk:"confidential_data_hash"`
+	EncryptedSecret types.String `tfsdk:"content"`
 }
 
 // Hash hashes the value of the confidential data for later reference
@@ -215,7 +216,7 @@ func WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(oreAttrs map[string]
 		},
 	}
 
-	baseSchema := WrappedConfidentialMaterialModelSchema(azObjectAttrs)
+	baseSchema := WrappedConfidentialMaterialModelSchema(azObjectAttrs, true)
 
 	for k, v := range oreAttrs {
 		baseSchema[k] = v
@@ -224,7 +225,15 @@ func WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(oreAttrs map[string]
 	return baseSchema
 }
 
-func WrappedConfidentialMaterialModelSchema(moreAttrs map[string]resourceSchema.Attribute) map[string]resourceSchema.Attribute {
+func WrappedConfidentialMaterialModelSchema(moreAttrs map[string]resourceSchema.Attribute, requireReplace bool) map[string]resourceSchema.Attribute {
+	var contentPlanModifiers []planmodifier.String = nil
+
+	if requireReplace {
+		contentPlanModifiers = []planmodifier.String{
+			stringplanmodifier.RequiresReplace(),
+		}
+	}
+
 	baseSchema := map[string]resourceSchema.Attribute{
 		"id": resourceSchema.StringAttribute{
 			MarkdownDescription: "Identifier of the decryption operation",
@@ -254,7 +263,9 @@ func WrappedConfidentialMaterialModelSchema(moreAttrs map[string]resourceSchema.
 				},
 				"algorithm": resourceSchema.StringAttribute{
 					Optional:    true,
-					Description: "Algorithm to use for unwrapping secret/content encryption key",
+					Computed:    true,
+					Default:     stringdefault.StaticString(string(azkeys.EncryptionAlgorithmRSAOAEP256)),
+					Description: "Algorithm to use for unwrapping secret/content encryption key; defaults to RSA OAEP 256; a sensible default that doesn't need to be changed",
 				},
 			},
 
@@ -264,21 +275,19 @@ func WrappedConfidentialMaterialModelSchema(moreAttrs map[string]resourceSchema.
 		},
 
 		"content": resourceSchema.StringAttribute{
-			MarkdownDescription: "Encrypted secret value",
+			MarkdownDescription: "Encrypted confidential content to create this resource",
 			Required:            true,
-			PlanModifiers: []planmodifier.String{
-				stringplanmodifier.RequiresReplace(),
-			},
+			PlanModifiers:       contentPlanModifiers,
 			Validators: []validator.String{
 				schemasupport.Base64StringValidator{},
 			},
 		},
-		"confidential_data_hash": resourceSchema.StringAttribute{
-			MarkdownDescription: "Hash of a confidential data elements.",
-			Required:            false,
-			Optional:            true,
-			Computed:            true,
-		},
+		//"confidential_data_hash": resourceSchema.StringAttribute{
+		//	MarkdownDescription: "Hash of a confidential data elements.",
+		//	Required:            false,
+		//	Optional:            true,
+		//	Computed:            true,
+		//},
 	}
 
 	for k, v := range moreAttrs {

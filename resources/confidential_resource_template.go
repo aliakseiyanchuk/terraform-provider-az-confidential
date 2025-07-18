@@ -8,20 +8,41 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"regexp"
 	"slices"
+	"strings"
 )
 
 type ResourceExistenceCheck int
 
 const (
-	ResourceExists ResourceExistenceCheck = iota
+	ResourceCheckNotAttempted ResourceExistenceCheck = iota
+	ResourceExists
 	ResourceNotFound
 	ResourceNotYetCreated
 	ResourceCheckError
 	ResourceConfidentialDataDrift
 )
+
+func (t ResourceExistenceCheck) String() string {
+	switch t {
+	case ResourceCheckNotAttempted:
+		return "check never attempted"
+	case ResourceExists:
+		return "does not exist"
+	case ResourceNotFound:
+		return "not found (deleted outside of Terraform control)"
+	case ResourceNotYetCreated:
+		return "not yet created"
+	case ResourceCheckError:
+		return "checking erred"
+	case ResourceConfidentialDataDrift:
+		return "detected drift in the confidential material"
+	default:
+		return fmt.Sprintf("unkonwn check type %d", t)
+	}
+}
 
 // APIObjectToStateImporter an API object into th state
 type APIObjectToStateImporter[TMdl, AZAPIObject any] func(azObj AZAPIObject, tfModel *TMdl)
@@ -50,6 +71,9 @@ type ImmutableConfidentialResourceRU[TMdl any, TConfData any, AZAPIObject any] i
 type MutableConfidentialResourceRU[TMdl any, TConfData any, AZAPIObject any] interface {
 	DoRead(ctx context.Context, planData *TMdl, lainData TConfData) (AZAPIObject, ResourceExistenceCheck, diag.Diagnostics)
 	DoUpdate(ctx context.Context, planData *TMdl, lainData TConfData) (AZAPIObject, diag.Diagnostics)
+	// SetDriftToConfidentialData changes the confidential data on the plan to trigger the
+	// update.
+	SetDriftToConfidentialData(ctx context.Context, planData *TMdl)
 }
 
 type ConfidentialGenericResource[TMdl, TIdentity any, TConfData any, AZAPIObject any] struct {
@@ -79,8 +103,6 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) S
 	resp.Schema = d.ResourceSchema
 }
 
-const ConfidentialDataDriftMessage = "----------- CONFIDENTIAL DATA DRIFT -----------"
-
 func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	data := d.Specializer.NewTerraformModel()
 
@@ -91,7 +113,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 	}
 
 	var azObj AZAPIObject
-	var resourceExistenceCheck ResourceExistenceCheck
+	var resourceExistenceCheck = ResourceCheckNotAttempted
 	var dg diag.Diagnostics
 
 	if d.ImmutableRU != nil {
@@ -105,6 +127,12 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 		// Read Terraform prior state data into the model
 		resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 		if resp.Diagnostics.HasError() {
+			return
+		}
+
+		confMdl := d.Specializer.GetConfidentialMaterialFrom(data)
+		if IsDriftMessage(confMdl.EncryptedSecret.ValueString()) {
+			tflog.Warn(ctx, "This resource contains drift tag instead of confidential material; update will be performed via Terraform standard flow")
 			return
 		}
 
@@ -125,6 +153,11 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 	}
 
 	resp.Diagnostics.Append(dg...)
+	if dg.HasError() {
+		return
+	}
+
+	tflog.Info(ctx, fmt.Sprintf("Resource existence check on read: %s", resourceExistenceCheck.String()))
 
 	if resourceExistenceCheck == ResourceNotFound {
 		resp.State.RemoveResource(ctx)
@@ -135,13 +168,14 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 		}
 
 		if resourceExistenceCheck == ResourceConfidentialDataDrift {
+			tflog.Warn(ctx, "Read operation detected a drift in the confidential material")
+
 			// If the state of the confidential data has drifted, a check is required as to why. It could be that
 			// a new version of the ciphertext was supplied -- in that case, it is an in-place update
 			// after the replacement of ciphertext. Otherwise, it's a change in Azure that needs to be
 			// corrected back.
 
-			confData := d.Specializer.GetConfidentialMaterialFrom(data)
-			confData.EncryptedSecret = types.StringValue(ConfidentialDataDriftMessage)
+			d.MutableRU.SetDriftToConfidentialData(ctx, &data)
 		}
 
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -220,9 +254,18 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 
 func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) GetRawVersionedConfidentialDataMessage(ctx context.Context, data TMdl, dg *diag.Diagnostics) core.ConfidentialDataMessageJson {
 	rawMsg := core.ConfidentialDataMessageJson{}
-	plainText := d.ExtractConfidentialModelPlainText(ctx, d.Specializer.GetConfidentialMaterialFrom(data), dg)
+	plainTextGzip := d.ExtractConfidentialModelPlainText(ctx, d.Specializer.GetConfidentialMaterialFrom(data), dg)
 	if dg.HasError() {
-		return core.ConfidentialDataMessageJson{}
+		return rawMsg
+	}
+
+	plainText, gzipErr := core.GZipDecompress(plainTextGzip)
+	if gzipErr != nil {
+		dg.AddError(
+			"Plain-text data structure message is not gzip-compressed",
+			fmt.Sprintf("Plain-text data structure must be gzip compressed; attempting to perfrom gunzip returend this error: %s. This is an error on the ciphertext preparation. Please use tfgen tool or provider's function to compute the ciphertext", gzipErr.Error()),
+		)
+		return rawMsg
 	}
 
 	if jsonErr := json.Unmarshal(plainText, &rawMsg); jsonErr != nil {
@@ -230,10 +273,19 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) G
 			"Cannot process plain-text data",
 			fmt.Sprintf("The plain-text data does not conform to the minimal expected data structure requirements: %s", jsonErr.Error()),
 		)
-
-		return core.ConfidentialDataMessageJson{}
 	}
+
 	return rawMsg
+}
+
+func CreateDriftMessage(tkn string) string {
+	return fmt.Sprintf("---- DRIFT IN %s ----", strings.ToUpper(tkn))
+}
+
+var driftMessageExpr = regexp.MustCompile("^---- DRIFT IN .* ----$")
+
+func IsDriftMessage(v string) bool {
+	return driftMessageExpr.MatchString(v)
 }
 
 func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -255,14 +307,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) U
 		// really need to check. Also, a confidential text always triggers deletion, so checks for implicit moves
 		// hardening is not required.
 
-		stateData := d.Specializer.NewTerraformModel()
-		resp.Diagnostics.Append(req.State.Get(ctx, &stateData)...)
-
-		if resp.Diagnostics.HasError() {
-			return
-		}
-
-		rawMsg := d.GetRawVersionedConfidentialDataMessage(ctx, stateData, &resp.Diagnostics)
+		rawMsg := d.GetRawVersionedConfidentialDataMessage(ctx, data, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}

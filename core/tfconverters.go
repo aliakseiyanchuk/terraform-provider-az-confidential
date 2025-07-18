@@ -97,3 +97,11 @@ func TerraformMapFromPtrMap(p map[string]*string) basetypes.MapValue {
 	mapVal, _ := types.MapValue(types.StringType, tfTags)
 	return mapVal
 }
+
+func StringValueOf(v *types.String) string {
+	if v.IsNull() || v.IsUnknown() {
+		return ""
+	} else {
+		return v.ValueString()
+	}
+}

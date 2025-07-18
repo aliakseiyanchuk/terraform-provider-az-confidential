@@ -236,6 +236,10 @@ func (s *SubscriptionSpecializer) DoRead(ctx context.Context, planData *Subscrip
 	return subscriptionState.SubscriptionContract, resources.ResourceExists, rv
 }
 
+func (s *SubscriptionSpecializer) SetDriftToConfidentialData(_ context.Context, planData *SubscriptionModel) {
+	planData.EncryptedSecret = types.StringValue("---- DRIFT IN SUBSCRIPTION KEYS ----")
+}
+
 func (s *SubscriptionSpecializer) DoCreate(ctx context.Context, planData *SubscriptionModel, plainData ConfidentialSubscriptionData) (armapimanagement.SubscriptionContract, diag.Diagnostics) {
 	rvDiag := diag.Diagnostics{}
 
@@ -373,7 +377,7 @@ func NewConfidentialSubscriptionResource() resource.Resource {
 		Description:         "Creates a secret in Azure KeyVault without revealing its value in state",
 		MarkdownDescription: subscriptionResourceMarkdownDescription,
 
-		Attributes: resources.WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(modelAttributes),
+		Attributes: resources.WrappedConfidentialMaterialModelSchema(modelAttributes, false),
 	}
 
 	apimSubscriptionSpecializer := &SubscriptionSpecializer{}

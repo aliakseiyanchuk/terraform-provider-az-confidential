@@ -3,43 +3,71 @@
 # ----------------------------------------------------------------------------
 
 resource "az-confidential_apim_named_value" "{{ .TFBlockName }}" {
-  content = "{{ .EncryptedContent }}"
+   content = {{ .EncryptedContent.TerraformExpression }}
 
+    {{- if .Tags.IncludeTags }}
     tags = [
-      {{- if .HasTags }}
-      {{- range $value := .TerraformValueTags }}
-      {{ $key }} = {{ $value }}
+      {{- if .Tags.HasTags }}
+      {{- range $value := .Tags.TerraformValueTags }}
+      {{ $value }},
       {{- end }}
       {{- else }}
       # Fill the tags as desired
-      # tagName =  "TagValue"
+      # "TagValue"
+      {{- end }}
+    ]
+    {{- end }}
+
+    # Confidential values created from the sensitive ciphertext are best kept secret, meaning that
+    # these will be hidden on the Portal display
+    secret = true
+
+    # A display name of this named value. It doesn't play a role in the actual operation;
+    # whereas it's great to give it a descriptive name.
+    display_name = "confidential named value"
+
+    destination_named_value = {
+        {{- if .DestinationNamedValue.AzSubscriptionId.IsSpecified }}
+        az_subscription_id = {{ .DestinationNamedValue.AzSubscriptionId.TerraformExpression}}
+        {{- else }}
+        # Specify a Azure subscription id where the APIM instance is created
+        az_subscription_id = "...specify the subscription..."
+        {{- end }}
+        {{- if .DestinationNamedValue.ResourceGroupName.IsSpecified }}
+        resource_group = {{ .DestinationNamedValue.ResourceGroupName.TerraformExpression}}
+        {{- else }}
+        # Specify a Azure resource group  id where the APIM instance is created
+        resource_group = "...specify the resource group name..."
+        {{- end }}
+        {{- if .DestinationNamedValue.ServiceName.IsSpecified }}
+        api_management_name = {{ .DestinationNamedValue.ServiceName.TerraformExpression}}
+        {{- else }}
+        # Specify a Azure APIM service name
+        api_management_name = "...specify the APIM service name..."
+        {{- end }}
+        {{- if .DestinationNamedValue.NamedValue.IsSpecified }}
+        name = {{ .DestinationNamedValue.NamedValue.TerraformExpression}}
+        {{- else }}
+        # Specify the name this named value should use; may contain
+        # only letters, digits, periods, dashes and underscores
+        name = "...specify the APIM named value..."
+        {{- end }}
+    }
+
+    {{- if not .WrappingKeyCoordinate.IsEmpty }}
+    wrapping_key = {
+      {{- if .WrappingKeyCoordinate.DefiesVaultName }}
+          vault_name = {{ .WrappingKeyCoordinate.VaultNameExpr }}
+      {{- end }}
+      {{- if .WrappingKeyCoordinate.DefiesKeyName }}
+          name = {{ .WrappingKeyCoordinate.KeyNameExpr }}
+      {{- end }}
+      {{- if .WrappingKeyCoordinate.KeyVersion }}
+          version = {{ .WrappingKeyCoordinate.KeyVersionExpr }}
+      {{- end }}
+      {{- if .WrappingKeyCoordinate.Algorithm }}
+          version = "{{ .WrappingKeyCoordinate.Algorithm }}"
       {{- end }}
     }
-
-    destination_certificate = {
-        {{- if .DestinationCoordinate.DefinesVaultName }}
-        vault_name = "{{ .DestinationCoordinate.VaultName}}"
-        {{- else }}
-        # Vault name will be inferred from the key vault where the wrapping key is stored.
-        # If this is not what you want, specify the destination vault explicitly
-        {{- end }}
-        name = "{{ .DestinationCoordinate.Name }}"
-    }
-
-    {{- if .DefinesWrappingCoordinate }}
-        wrapping_key = {
-          {{- if .WrappingKeyCoordinate.DefiesVaultName }}
-              vault_name = {{ .WrappingKeyCoordinate.VaultNameExpr }}
-          {{- end }}
-          {{- if .WrappingKeyCoordinate.DefiesKeyName }}
-              name = {{ .WrappingKeyCoordinate.KeyNameExpr }}
-          {{- end }}
-          {{- if .WrappingKeyCoordinate.KeyVersion }}
-              version = {{ .WrappingKeyCoordinate.KeyVersionExpr }}
-          {{- end }}
-          {{- if .WrappingKeyCoordinate.Algorithm }}
-              version = "{{ .WrappingKeyCoordinate.Algorithm }}"
-          {{- end }}
-        }
     {{- end }}
 }

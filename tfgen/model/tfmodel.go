@@ -71,6 +71,15 @@ type BaseTerraformCodeModel struct {
 	WrappingKeyCoordinate WrappingKey
 }
 
+func NewBaseTerraformCodeModel(kwp *ContentWrappingParams, blockName string) BaseTerraformCodeModel {
+	return BaseTerraformCodeModel{
+		TFBlockName:           blockName,
+		CiphertextLabels:      kwp.GetLabels(),
+		WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
+		EncryptedContent:      NewStringTerraformFieldExpression(),
+	}
+}
+
 func (p *BaseTerraformCodeModel) HasCiphertextLabels() bool {
 	return len(p.CiphertextLabels) > 0
 }

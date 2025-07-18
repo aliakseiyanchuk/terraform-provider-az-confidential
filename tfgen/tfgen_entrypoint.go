@@ -146,8 +146,8 @@ func MainEntryPoint() {
 	}
 
 	cmdGroup := baseFlags.Args()[0]
-	cmd := baseFlags.Args()[2]
-	cmdArgs := baseFlags.Args()[3:]
+	cmd := baseFlags.Args()[1]
+	cmdArgs := baseFlags.Args()[2:]
 
 	var generator model.SubCommandExecution
 	var generatorInitErr error

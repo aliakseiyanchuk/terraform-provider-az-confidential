@@ -8,7 +8,7 @@ import (
 )
 
 type DestinationApiManagement struct {
-	AzSubscriptionId types.String `tfsdk:"subscription_id"`
+	AzSubscriptionId types.String `tfsdk:"az_subscription_id"`
 	ResourceGroup    types.String `tfsdk:"resource_group"`
 	ServiceName      types.String `tfsdk:"api_management_name"`
 }

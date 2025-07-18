@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"errors"
 	"flag"
+	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	res_apim "github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/apim"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
@@ -13,13 +14,13 @@ import (
 var namedValueTFTemplate string
 
 type TargetCLIParams struct {
-	subscriptionId    string
-	resourceGroupName string
-	serviceName       string
+	SubscriptionId    string
+	ResourceGroupName string
+	ServiceName       string
 }
 
 func (ap *TargetCLIParams) SpecifiesTarget() bool {
-	return len(ap.subscriptionId) > 0 && len(ap.resourceGroupName) > 0 && len(ap.serviceName) > 0
+	return len(ap.SubscriptionId) > 0 && len(ap.ResourceGroupName) > 0 && len(ap.ServiceName) > 0
 }
 
 type NamedValueCLIParams struct {
@@ -49,17 +50,17 @@ func CreateNamedValuedArgParser() (*NamedValueCLIParams, *flag.FlagSet) {
 		false,
 		"Input is base-64 encoded")
 
-	nvCmd.StringVar(&nvParms.subscriptionId,
+	nvCmd.StringVar(&nvParms.SubscriptionId,
 		"az-subscription-id",
 		"",
 		"Subscription Id where target APIM service resides")
 
-	nvCmd.StringVar(&nvParms.resourceGroupName,
+	nvCmd.StringVar(&nvParms.ResourceGroupName,
 		"resource-group-name",
 		"",
 		"Resource group name where target APIM service resides")
 
-	nvCmd.StringVar(&nvParms.serviceName,
+	nvCmd.StringVar(&nvParms.ServiceName,
 		"service-name",
 		"",
 		"APIM service name")
@@ -141,29 +142,25 @@ func MakeNamedValueGenerator(kwp *model.ContentWrappingParams, args []string) (m
 			return nil, errors.New("options -az-subscription-id, -resource-group-name, -service-name, and -named-value must be supplied where ciphertext is labelled with its intended destination")
 		} else {
 			kwp.AddLabel(res_apim.GetDestinationNamedValueLabel(
-				namedValueParams.subscriptionId,
-				namedValueParams.resourceGroupName,
-				namedValueParams.serviceName,
+				namedValueParams.SubscriptionId,
+				namedValueParams.ResourceGroupName,
+				namedValueParams.ServiceName,
 				namedValueParams.namedValueName,
 			))
 		}
 	}
 
 	mdl := NamedValueTerraformCodeModel{
-		BaseTerraformCodeModel: model.BaseTerraformCodeModel{
-			TFBlockName:           "named_value",
-			CiphertextLabels:      kwp.GetLabels(),
-			WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
-		},
+		BaseTerraformCodeModel: model.NewBaseTerraformCodeModel(kwp, "named_value"),
 
 		Tags: model.KeylessTagsModel{
-			IncludeTags: false,
+			IncludeTags: true,
 		},
 
 		DestinationNamedValue: NewNamedValueCoordinateModel(
-			namedValueParams.subscriptionId,
-			namedValueParams.resourceGroupName,
-			namedValueParams.serviceName,
+			namedValueParams.SubscriptionId,
+			namedValueParams.ResourceGroupName,
+			namedValueParams.ServiceName,
 			namedValueParams.namedValueName,
 		),
 	}
@@ -197,8 +194,10 @@ func OutputNamedValueTerraformCode(mdl NamedValueTerraformCodeModel, kwp model.C
 		return s, err
 	}
 
+	fmt.Println(s)
+
 	mdl.EncryptedContent.SetValue(&s)
-	return model.Render("apim/namedValue", namedValueTFTemplate, mdl)
+	return model.Render("apim/namedValue", namedValueTFTemplate, &mdl)
 }
 
 func OutputNamedValueEncryptedContent(kwp model.ContentWrappingParams, secretText string) (string, error) {

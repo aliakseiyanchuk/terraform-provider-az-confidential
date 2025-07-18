@@ -3,7 +3,7 @@
 # ----------------------------------------------------------------------------
 
 resource "az-confidential_key" "{{ .TFBlockName }}" {
-  content = "{{ .EncryptedContent }}"
+  content = {{ .EncryptedContent.TerraformExpression }}
 
   # This secret is enabled for operation. Optionally, there is an option
   # to temporarily disable it.

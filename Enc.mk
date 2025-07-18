@@ -50,3 +50,8 @@ encrypt_cert:
 	${LABELS} \
 	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_OBJECT} \
 	certificate
+
+encrypt_apim_named_value:
+	${TFGEN_EXEC} -pubkey ${PUBKEY} \
+	${LABELS} \
+	apim named_value

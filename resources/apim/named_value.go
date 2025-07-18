@@ -7,13 +7,18 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"regexp"
 )
 
 type NamedValueModel struct {
@@ -32,10 +37,10 @@ type DestinationNamedValueModel struct {
 
 func (dest *DestinationNamedValueModel) GetLabel() string {
 	return fmt.Sprintf("az-c-label:///subscriptions/%s/resourceGroups/%s/providers/Microsoft.ApiManagement/service/%s/namedValues/%s",
-		dest.AzSubscriptionId,
-		dest.ResourceGroup,
-		dest.ServiceName,
-		dest.Name,
+		core.StringValueOf(&dest.AzSubscriptionId),
+		core.StringValueOf(&dest.ResourceGroup),
+		core.StringValueOf(&dest.ServiceName),
+		core.StringValueOf(&dest.Name),
 	)
 }
 
@@ -89,42 +94,50 @@ func (mdl *NamedValueModel) Accept(v armapimanagement.NamedValueContract) {
 
 	core.ConvertStingPrtToTerraform(v.Properties.DisplayName, &mdl.DisplayName)
 	core.ConvertBoolPrtToTerraform(v.Properties.Secret, &mdl.Secret)
-	// TODO: This code may need checking for nulls and effectively empty settings
-	tagSet, _ := core.ConvertToTerraformSet[*string](
-		func(s *string) attr.Value { return types.StringValue(*s) },
-		types.StringType,
-		v.Properties.Tags...,
-	)
 
-	mdl.Tags = tagSet
+	// If tags are set in the contract, we'll save these to state. Otherwise,
+	// the nil value will be set only if the tag value is not currently known,
+	// or the state contains data. This is because an empty tag set is considered
+	// to be the same as an nil tag set.
+	if v.Properties.Tags != nil && len(v.Properties.Tags) > 0 {
+		tagSet, _ := core.ConvertToTerraformSet[*string](
+			func(s *string) attr.Value { return types.StringValue(*s) },
+			types.StringType,
+			v.Properties.Tags...,
+		)
+		mdl.Tags = tagSet
+	} else if mdl.Tags.IsUnknown() || len(v.Properties.Tags) > 0 {
+		mdl.Tags = types.SetNull(types.StringType)
+	}
+
 }
 
-type NamedValueSubscriptionSpecializer struct {
+type NamedValueSpecializer struct {
 	factory core.AZClientsFactory
 }
 
-func (n *NamedValueSubscriptionSpecializer) SetFactory(factory core.AZClientsFactory) {
+func (n *NamedValueSpecializer) SetFactory(factory core.AZClientsFactory) {
 	n.factory = factory
 }
 
-func (n *NamedValueSubscriptionSpecializer) NewTerraformModel() NamedValueModel {
+func (n *NamedValueSpecializer) NewTerraformModel() NamedValueModel {
 	return NamedValueModel{}
 }
 
-func (n *NamedValueSubscriptionSpecializer) ConvertToTerraform(azObj armapimanagement.NamedValueContract, tfModel *NamedValueModel) diag.Diagnostics {
+func (n *NamedValueSpecializer) ConvertToTerraform(azObj armapimanagement.NamedValueContract, tfModel *NamedValueModel) diag.Diagnostics {
 	tfModel.Accept(azObj)
 	return nil
 }
 
-func (n *NamedValueSubscriptionSpecializer) GetConfidentialMaterialFrom(mdl NamedValueModel) resources.ConfidentialMaterialModel {
+func (n *NamedValueSpecializer) GetConfidentialMaterialFrom(mdl NamedValueModel) resources.ConfidentialMaterialModel {
 	return mdl.ConfidentialMaterialModel
 }
 
-func (n *NamedValueSubscriptionSpecializer) GetSupportedConfidentialMaterialTypes() []string {
-	return []string{"api_management/named_value"}
+func (n *NamedValueSpecializer) GetSupportedConfidentialMaterialTypes() []string {
+	return []string{NamedValueObjectType}
 }
 
-func (n *NamedValueSubscriptionSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *NamedValueModel) diag.Diagnostics {
+func (n *NamedValueSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *NamedValueModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 	n.factory.EnsureCanPlaceLabelledObjectAt(ctx,
 		uuid,
@@ -137,11 +150,11 @@ func (n *NamedValueSubscriptionSpecializer) CheckPlacement(ctx context.Context, 
 	return rv
 }
 
-func (n *NamedValueSubscriptionSpecializer) GetJsonDataImporter() core.ObjectJsonImportSupport[core.ConfidentialStringData] {
+func (n *NamedValueSpecializer) GetJsonDataImporter() core.ObjectJsonImportSupport[core.ConfidentialStringData] {
 	return core.NewVersionedStringConfidentialDataHelper()
 }
 
-func (n *NamedValueSubscriptionSpecializer) DoCreate(ctx context.Context, data *NamedValueModel, plainData core.ConfidentialStringData) (armapimanagement.NamedValueContract, diag.Diagnostics) {
+func (n *NamedValueSpecializer) DoCreate(ctx context.Context, data *NamedValueModel, plainData core.ConfidentialStringData) (armapimanagement.NamedValueContract, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
 
 	subscriptionId := data.DestinationNamedValue.AzSubscriptionId.ValueString()
@@ -172,13 +185,13 @@ func (n *NamedValueSubscriptionSpecializer) DoCreate(ctx context.Context, data *
 
 	finalResp, pollErr := poller.PollUntilDone(ctx, nil)
 	if pollErr != nil {
-		rv.AddError("Polling for the completion of the operation was not successful", pollErr.Error())
+		rv.AddError("Polling for the completion of the create operation was not successful", pollErr.Error())
 		return armapimanagement.NamedValueContract{}, rv
 	}
 	return finalResp.NamedValueContract, nil
 }
 
-func (n *NamedValueSubscriptionSpecializer) DoDelete(ctx context.Context, data *NamedValueModel) diag.Diagnostics {
+func (n *NamedValueSpecializer) DoDelete(ctx context.Context, data *NamedValueModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 
 	subscriptionId := data.DestinationNamedValue.AzSubscriptionId.ValueString()
@@ -200,7 +213,7 @@ func (n *NamedValueSubscriptionSpecializer) DoDelete(ctx context.Context, data *
 	)
 
 	if delErr != nil {
-		rv.AddError("Cannot disable named value", fmt.Sprintf("Request to delete named value %s failed: %s",
+		rv.AddError("Cannot delete named value", fmt.Sprintf("Request to delete named value %s failed: %s",
 			data.DestinationNamedValue.Name.ValueString(),
 			delErr.Error(),
 		))
@@ -209,7 +222,7 @@ func (n *NamedValueSubscriptionSpecializer) DoDelete(ctx context.Context, data *
 	return rv
 }
 
-func (n *NamedValueSubscriptionSpecializer) DoRead(ctx context.Context, data *NamedValueModel, plainData core.ConfidentialStringData) (armapimanagement.NamedValueContract, resources.ResourceExistenceCheck, diag.Diagnostics) {
+func (n *NamedValueSpecializer) DoRead(ctx context.Context, data *NamedValueModel, plainData core.ConfidentialStringData) (armapimanagement.NamedValueContract, resources.ResourceExistenceCheck, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
 
 	// The key version was never created; nothing needs to be read here.
@@ -272,14 +285,22 @@ func (n *NamedValueSubscriptionSpecializer) DoRead(ctx context.Context, data *Na
 		return armapimanagement.NamedValueContract{}, resources.ResourceCheckError, rv
 	}
 
+	tflog.Info(ctx, fmt.Sprintf("Detecting drift: want=%s, have=%s", plainData.GetStingData(), *value.Value))
+
 	if value.Value != nil && plainData.GetStingData() == *value.Value {
 		return resp.NamedValueContract, resources.ResourceExists, nil
 	}
 
+	tflog.Warn(ctx, "Detected a drift in the confidential material")
+
 	return resp.NamedValueContract, resources.ResourceConfidentialDataDrift, nil
 }
 
-func (n *NamedValueSubscriptionSpecializer) DoUpdate(ctx context.Context, data *NamedValueModel, plainData core.ConfidentialStringData) (armapimanagement.NamedValueContract, diag.Diagnostics) {
+func (n *NamedValueSpecializer) SetDriftToConfidentialData(_ context.Context, planData *NamedValueModel) {
+	planData.ConfidentialMaterialModel.EncryptedSecret = types.StringValue("---- DRIFT IN NAMED VALUE ----")
+}
+
+func (n *NamedValueSpecializer) DoUpdate(ctx context.Context, data *NamedValueModel, plainData core.ConfidentialStringData) (armapimanagement.NamedValueContract, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
 
 	subscriptionId := data.DestinationNamedValue.AzSubscriptionId.ValueString()
@@ -305,7 +326,7 @@ func (n *NamedValueSubscriptionSpecializer) DoUpdate(ctx context.Context, data *
 	)
 
 	if err != nil {
-		rv.AddError("Attempt to start create operation was not successful", err.Error())
+		rv.AddError("Attempt to start create update operation was not successful", err.Error())
 		return armapimanagement.NamedValueContract{}, rv
 	}
 
@@ -323,14 +344,49 @@ var namedValueResourceMarkdownDescription string
 const NamedValueObjectType = "api management/named value"
 
 func NewNamedValueResource() resource.Resource {
+	displayNameRegexp := regexp.MustCompile("^[a-zA-Z0-9\\.\\-_]+$")
+
 	specificAttrs := map[string]schema.Attribute{
+		"display_name": schema.StringAttribute{
+			Required:    false,
+			Optional:    true,
+			Description: "Display name of this named value",
+			Validators: []validator.String{
+				stringvalidator.RegexMatches(displayNameRegexp, "NamedValue (display name) may contain only letters, digits, periods, dashes and underscores"),
+			},
+		},
+		"secret": schema.BoolAttribute{
+			Optional:    true,
+			Computed:    true,
+			Default:     booldefault.StaticBool(true),
+			Description: "Whether this named value should be masked in the display in Azure portal",
+		},
+		"tags": schema.SetAttribute{
+			Optional:    true,
+			Description: "Tags to place on this named value",
+			ElementType: types.StringType,
+		},
 		"destination_named_value": schema.SingleNestedAttribute{
 			Required:            true,
 			MarkdownDescription: "Destination named value",
 			Attributes: map[string]schema.Attribute{
-				"vault_name": schema.StringAttribute{
-					Optional:    true,
-					Description: "Vault where the secret needs to be stored. If omitted, defaults to the vault containing the wrapping key",
+				"az_subscription_id": schema.StringAttribute{
+					Required:    true,
+					Description: "Azure subscription of the target APIM service",
+					PlanModifiers: []planmodifier.String{
+						stringplanmodifier.RequiresReplace(),
+					},
+				},
+				"resource_group": schema.StringAttribute{
+					Required:    true,
+					Description: "Resource group of the target APIM service",
+					PlanModifiers: []planmodifier.String{
+						stringplanmodifier.RequiresReplace(),
+					},
+				},
+				"api_management_name": schema.StringAttribute{
+					Required:    true,
+					Description: "API Management service name",
 					PlanModifiers: []planmodifier.String{
 						stringplanmodifier.RequiresReplace(),
 					},
@@ -338,7 +394,7 @@ func NewNamedValueResource() resource.Resource {
 				"name": schema.StringAttribute{
 					Optional:    false,
 					Required:    true,
-					Description: "Name of the named value",
+					Description: "Name of the named value to be created",
 					PlanModifiers: []planmodifier.String{
 						stringplanmodifier.RequiresReplace(),
 					},
@@ -351,15 +407,15 @@ func NewNamedValueResource() resource.Resource {
 		Description:         "Creates a named value in API Management without revealing its value in state",
 		MarkdownDescription: namedValueResourceMarkdownDescription,
 
-		Attributes: resources.WrappedAzKeyVaultObjectConfidentialMaterialModelSchema(specificAttrs),
+		Attributes: resources.WrappedConfidentialMaterialModelSchema(specificAttrs, false),
 	}
 
-	namedValueSpecializer := &NamedValueSubscriptionSpecializer{}
+	namedValueSpecializer := &NamedValueSpecializer{}
 
 	return &resources.ConfidentialGenericResource[NamedValueModel, int, core.ConfidentialStringData, armapimanagement.NamedValueContract]{
 		Specializer:    namedValueSpecializer,
 		MutableRU:      namedValueSpecializer,
-		ResourceName:   NamedValueObjectType,
+		ResourceName:   "apim_named_value",
 		ResourceSchema: resourceSchema,
 	}
 }
