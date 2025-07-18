@@ -28,6 +28,14 @@ variable "az_default_wrapping_key_version" {
   type = string
 }
 
+variable "az_apim_group_name" {
+  type = string
+}
+
+variable "az_apim_service_name" {
+  type = string
+}
+
 provider "az-confidential" {
   tenant_id       = var.az_tenant_id
   subscription_id = var.az_subscription_id

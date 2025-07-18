@@ -241,7 +241,7 @@ func OutputKeyTerraformCode(mdl KeyResourceTerraformModel, kwp model.ContentWrap
 		return ciphertext, err
 	}
 
-	mdl.EncryptedContent.SetValue(&ciphertext)
+	mdl.EncryptedContent.SetValue(ciphertext)
 	return model.Render("key", keyTFTemplate, &mdl)
 }
 

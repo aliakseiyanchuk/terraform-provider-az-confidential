@@ -23,8 +23,9 @@ resource "az-confidential_apim_named_value" "{{ .TFBlockName }}" {
     secret = true
 
     # A display name of this named value. It doesn't play a role in the actual operation;
-    # whereas it's great to give it a descriptive name.
-    display_name = "confidential named value"
+    # whereas it's great to give it a descriptive name. If it is not specified, it is
+    # inferred from the name of the destination named value.
+    # display_name = "confidential named value"
 
     destination_named_value = {
         {{- if .DestinationNamedValue.AzSubscriptionId.IsSpecified }}
@@ -55,19 +56,19 @@ resource "az-confidential_apim_named_value" "{{ .TFBlockName }}" {
     }
 
     {{- if not .WrappingKeyCoordinate.IsEmpty }}
-    wrapping_key = {
-      {{- if .WrappingKeyCoordinate.DefiesVaultName }}
-          vault_name = {{ .WrappingKeyCoordinate.VaultNameExpr }}
+      wrapping_key = {
+        {{- if .WrappingKeyCoordinate.VaultName.IsSpecified }}
+            vault_name = {{ .WrappingKeyCoordinate.VaultName.TerraformExpression }}
+        {{- end }}
+        {{- if .WrappingKeyCoordinate.KeyName.IsSpecified }}
+            name = {{ .WrappingKeyCoordinate.KeyName.TerraformExpression }}
+        {{- end }}
+        {{- if .WrappingKeyCoordinate.KeyVersion.IsSpecified }}
+            version = {{ .WrappingKeyCoordinate.KeyVersion.TerraformExpression }}
+        {{- end }}
+        {{- if .WrappingKeyCoordinate.Algorithm.IsSpecified }}
+            algorithm = "{{ .WrappingKeyCoordinate.Algorithm.TerraformExpression }}"
+        {{- end }}
+      }
       {{- end }}
-      {{- if .WrappingKeyCoordinate.DefiesKeyName }}
-          name = {{ .WrappingKeyCoordinate.KeyNameExpr }}
-      {{- end }}
-      {{- if .WrappingKeyCoordinate.KeyVersion }}
-          version = {{ .WrappingKeyCoordinate.KeyVersionExpr }}
-      {{- end }}
-      {{- if .WrappingKeyCoordinate.Algorithm }}
-          version = "{{ .WrappingKeyCoordinate.Algorithm }}"
-      {{- end }}
-    }
-    {{- end }}
 }

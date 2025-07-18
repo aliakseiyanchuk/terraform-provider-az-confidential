@@ -102,7 +102,7 @@ func OutputSecretTerraformCode(mdl TerraformCodeModel, kwp *model.ContentWrappin
 		return s, err
 	}
 
-	mdl.EncryptedContent.SetValue(&s)
+	mdl.EncryptedContent.SetValue(s)
 	return model.Render("secret", secretTFTemplate, &mdl)
 }
 

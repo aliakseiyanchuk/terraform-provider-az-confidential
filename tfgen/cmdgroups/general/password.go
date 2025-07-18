@@ -73,7 +73,7 @@ func OutputDatasourcePasswordTerraformCode(mdl model.BaseTerraformCodeModel, kwp
 		return s, err
 	}
 
-	mdl.EncryptedContent.SetValue(&s)
+	mdl.EncryptedContent.SetValue(s)
 	return model.Render("password", passwordTFTemplate, &mdl)
 }
 

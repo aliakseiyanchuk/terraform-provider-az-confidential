@@ -106,16 +106,16 @@ func buildContentWrappingParams(cliArgs *EntryPointCLIArgs) (*model.ContentWrapp
 	}
 
 	if len(cliArgs.WrappingKeyCoordinate.VaultName) > 0 {
-		rv.WrappingKeyCoordinate.VaultName.SetValue(&cliArgs.WrappingKeyCoordinate.VaultName)
+		rv.WrappingKeyCoordinate.VaultName.SetValue(cliArgs.WrappingKeyCoordinate.VaultName)
 	}
 	if len(cliArgs.WrappingKeyCoordinate.KeyName) > 0 {
-		rv.WrappingKeyCoordinate.KeyName.SetValue(&cliArgs.WrappingKeyCoordinate.KeyName)
+		rv.WrappingKeyCoordinate.KeyName.SetValue(cliArgs.WrappingKeyCoordinate.KeyName)
 	}
 	if len(cliArgs.WrappingKeyCoordinate.KeyVersion) > 0 {
-		rv.WrappingKeyCoordinate.KeyVersion.SetValue(&cliArgs.WrappingKeyCoordinate.KeyVersion)
+		rv.WrappingKeyCoordinate.KeyVersion.SetValue(cliArgs.WrappingKeyCoordinate.KeyVersion)
 	}
 	if len(cliArgs.WrappingKeyCoordinate.Algorithm) > 0 {
-		rv.WrappingKeyCoordinate.Algorithm.SetValue(&cliArgs.WrappingKeyCoordinate.Algorithm)
+		rv.WrappingKeyCoordinate.Algorithm.SetValue(cliArgs.WrappingKeyCoordinate.Algorithm)
 	}
 
 	return rv, nil

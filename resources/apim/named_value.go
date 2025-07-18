@@ -157,6 +157,10 @@ func (n *NamedValueSpecializer) GetJsonDataImporter() core.ObjectJsonImportSuppo
 func (n *NamedValueSpecializer) DoCreate(ctx context.Context, data *NamedValueModel, plainData core.ConfidentialStringData) (armapimanagement.NamedValueContract, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
 
+	if data.DisplayName.IsNull() || data.DisplayName.IsUnknown() {
+		data.DisplayName = types.StringValue(data.DestinationNamedValue.Name.ValueString())
+	}
+
 	subscriptionId := data.DestinationNamedValue.AzSubscriptionId.ValueString()
 	namedValueClient, err := n.factory.GetApimNamedValueClient(subscriptionId)
 	if err != nil {
@@ -350,6 +354,7 @@ func NewNamedValueResource() resource.Resource {
 		"display_name": schema.StringAttribute{
 			Required:    false,
 			Optional:    true,
+			Computed:    true,
 			Description: "Display name of this named value",
 			Validators: []validator.String{
 				stringvalidator.RegexMatches(displayNameRegexp, "NamedValue (display name) may contain only letters, digits, periods, dashes and underscores"),
@@ -397,6 +402,9 @@ func NewNamedValueResource() resource.Resource {
 					Description: "Name of the named value to be created",
 					PlanModifiers: []planmodifier.String{
 						stringplanmodifier.RequiresReplace(),
+					},
+					Validators: []validator.String{
+						stringvalidator.RegexMatches(displayNameRegexp, "NamedValue may contain only letters, digits, periods, dashes and underscores"),
 					},
 				},
 			},

@@ -14,7 +14,7 @@ func NewObjectCoordinateModel(vaultName, objectName string) ObjectCoordinateMode
 	return NewObjectCoordinateModelUsingFn(
 		vaultName,
 		objectName,
-		func(m *model.TerraformFieldExpression[string], str string) { sPtr := &str; m.SetValue(sPtr) },
+		func(m *model.TerraformFieldExpression[string], str string) { m.SetValue(str) },
 	)
 }
 

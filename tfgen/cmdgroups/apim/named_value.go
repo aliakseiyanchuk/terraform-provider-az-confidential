@@ -88,17 +88,17 @@ func NewBaseCoordinateModel(azSubscriptionId, resourceGroupName, serviceName str
 
 	if len(azSubscriptionId) > 0 {
 		s := azSubscriptionId
-		rv.AzSubscriptionId.SetValue(&s)
+		rv.AzSubscriptionId.SetValue(s)
 	}
 
 	if len(resourceGroupName) > 0 {
 		s := resourceGroupName
-		rv.ResourceGroupName.SetValue(&s)
+		rv.ResourceGroupName.SetValue(s)
 	}
 
 	if len(serviceName) > 0 {
 		s := serviceName
-		rv.ServiceName.SetValue(&s)
+		rv.ServiceName.SetValue(s)
 	}
 
 	return rv
@@ -117,7 +117,7 @@ func NewNamedValueCoordinateModel(azSubscriptionId, resourceGroupName, serviceNa
 
 	if len(namedValue) > 0 {
 		s := namedValue
-		rv.NamedValue.SetValue(&s)
+		rv.NamedValue.SetValue(s)
 	}
 
 	return rv
@@ -196,7 +196,7 @@ func OutputNamedValueTerraformCode(mdl NamedValueTerraformCodeModel, kwp model.C
 
 	fmt.Println(s)
 
-	mdl.EncryptedContent.SetValue(&s)
+	mdl.EncryptedContent.SetValue(s)
 	return model.Render("apim/namedValue", namedValueTFTemplate, &mdl)
 }
 

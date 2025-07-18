@@ -194,7 +194,7 @@ func OutputCertificateTerraformCode(mdl TerraformCodeModel, kwp model.ContentWra
 		return ciphertext, err
 	}
 
-	mdl.EncryptedContent.SetValue(&ciphertext)
+	mdl.EncryptedContent.SetValue(ciphertext)
 	return model.Render("cert", certTFTemplate, &mdl)
 }
 
