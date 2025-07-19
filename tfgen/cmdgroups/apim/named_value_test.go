@@ -10,12 +10,10 @@ import (
 )
 
 func givenTypicalNamedValueWrappingParameters(t *testing.T) (NamedValueTerraformCodeModel, model.ContentWrappingParams) {
-	rsaKey, rsaLoadErr := core.LoadPublicKeyFromData(testkeymaterial.EphemeralRsaPublicKey)
-	assert.Nil(t, rsaLoadErr)
 
 	kwp := model.ContentWrappingParams{
 		Labels:                []string{"acceptance-testing"},
-		LoadedRsaPublicKey:    rsaKey,
+		LoadRsaPublicKey:      core.LoadPublicKeyFromDataOnce(testkeymaterial.EphemeralRsaPublicKey),
 		WrappingKeyCoordinate: model.NewWrappingKeyForExpressions("var.vault_name", "var.key_name", "var.key_version"),
 	}
 

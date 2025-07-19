@@ -15,7 +15,6 @@ type DestinationApiManagement struct {
 
 type DestinationSubscriptionCoordinateModel struct {
 	DestinationApiManagement
-	DisplayName       types.String `tfsdk:"display_name"`
 	SubscriptionId    types.String `tfsdk:"apim_subscription_id"`
 	APIIdentifier     types.String `tfsdk:"api_id"`
 	ProductIdentifier types.String `tfsdk:"product_id"`
@@ -49,9 +48,9 @@ func (d *DestinationSubscriptionCoordinateModel) OwnerIdAsPtr() *string {
 
 func (d *DestinationSubscriptionCoordinateModel) GetScope() string {
 	if !d.ProductIdentifier.IsNull() {
-		return d.ProductIdentifier.String()
+		return fmt.Sprintf("/products/%s", d.ProductIdentifier.ValueString())
 	} else if !d.APIIdentifier.IsNull() {
-		return d.APIIdentifier.String()
+		return fmt.Sprintf("/apis/%s", d.APIIdentifier.ValueString())
 	} else {
 		return "/apis"
 	}

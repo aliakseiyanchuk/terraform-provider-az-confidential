@@ -8,13 +8,35 @@ import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"regexp"
 )
+
+func GetDestinationSubscriptionLabel(azSubscriptionId,
+	resourceGroupName, serviceName, subscriptionId, apiScope, productScope, owner string) string {
+	mdl := DestinationSubscriptionCoordinateModel{
+		DestinationApiManagement: DestinationApiManagement{
+			AzSubscriptionId: types.StringValue(azSubscriptionId),
+			ResourceGroup:    types.StringValue(resourceGroupName),
+			ServiceName:      types.StringValue(serviceName),
+		},
+		SubscriptionId:    types.StringValue(subscriptionId),
+		APIIdentifier:     types.StringValue(apiScope),
+		ProductIdentifier: types.StringValue(productScope),
+		UserIdentifier:    types.StringValue(owner),
+	}
+
+	return mdl.GetLabel()
+}
 
 type ConfidentialSubscriptionData interface {
 	GetPrimaryKey() string
@@ -56,7 +78,7 @@ func (vcd *ConfidentialSubscriptionHelper) CreateSubscriptionData(primary, secon
 	return vcd.Set(&rv, objectType, labels)
 }
 
-func NewConfidentialNamedDataHelper() *ConfidentialSubscriptionHelper {
+func NewConfidentialSubscriptionHelper() *ConfidentialSubscriptionHelper {
 	rv := &ConfidentialSubscriptionHelper{}
 	rv.KnowValue = &ConfidentialSubscriptionStruct{}
 	rv.ModelName = "api_management/subscription/v1"
@@ -75,6 +97,15 @@ func NewConfidentialNamedDataHelper() *ConfidentialSubscriptionHelper {
 		return rvMdl
 	}
 
+	rv.RestToValue = func(model ConfidentialSubscriptionStruct) ConfidentialSubscriptionData {
+		rvData := &ConfidentialSubscriptionStruct{
+			PrimaryKey:   model.GetPrimaryKey(),
+			SecondaryKey: model.GetSecondaryKey(),
+		}
+
+		return rvData
+	}
+
 	return rv
 }
 
@@ -83,17 +114,29 @@ type SubscriptionModel struct {
 
 	DestinationSubscription DestinationSubscriptionCoordinateModel `tfsdk:"destination_subscription"`
 	State                   types.String                           `tfsdk:"state"`
+	DisplayName             types.String                           `tfsdk:"display_name"`
 	SubscriptionId          types.String                           `tfsdk:"subscription_id"`
 	AllowTracing            types.Bool                             `tfsdk:"allow_tracing"`
 }
 
 func (sm *SubscriptionModel) ToCreateOrUpdateOptions() armapimanagement.SubscriptionCreateParameters {
-	if sm.State.IsUnknown() || sm.State.IsNull() {
-		sm.State = types.StringValue("submitted")
-	}
 	rv := armapimanagement.SubscriptionCreateParameters{
 		Properties: &armapimanagement.SubscriptionCreateParameterProperties{
-			DisplayName:  to.Ptr(sm.DestinationSubscription.DisplayName.ValueString()),
+			DisplayName:  to.Ptr(sm.DisplayName.ValueString()),
+			Scope:        to.Ptr(sm.DestinationSubscription.GetScope()),
+			State:        to.Ptr(armapimanagement.SubscriptionState(sm.State.ValueString())),
+			AllowTracing: to.Ptr(sm.AllowTracing.ValueBool()),
+			OwnerID:      sm.DestinationSubscription.OwnerIdAsPtr(),
+		},
+	}
+
+	return rv
+}
+
+func (sm *SubscriptionModel) ToUpdateOptions() armapimanagement.SubscriptionUpdateParameters {
+	rv := armapimanagement.SubscriptionUpdateParameters{
+		Properties: &armapimanagement.SubscriptionUpdateParameterProperties{
+			DisplayName:  to.Ptr(sm.DisplayName.ValueString()),
 			Scope:        to.Ptr(sm.DestinationSubscription.GetScope()),
 			State:        to.Ptr(armapimanagement.SubscriptionState(sm.State.ValueString())),
 			AllowTracing: to.Ptr(sm.AllowTracing.ValueBool()),
@@ -109,8 +152,11 @@ func (sm *SubscriptionModel) Accept(r armapimanagement.SubscriptionContract) {
 	if r.Properties != nil {
 		core.ConvertBoolPrtToTerraform(r.Properties.AllowTracing, &sm.AllowTracing)
 		core.ConvertStingPrtToTerraform((*string)(r.Properties.State), &sm.State)
+		core.ConvertStingPrtToTerraform(r.Properties.DisplayName, &sm.DisplayName)
 	} else {
 		sm.State = types.StringNull()
+		sm.DisplayName = types.StringNull()
+		sm.AllowTracing = types.BoolNull()
 	}
 
 }
@@ -136,8 +182,10 @@ func (s *SubscriptionSpecializer) GetConfidentialMaterialFrom(mdl SubscriptionMo
 	return mdl.ConfidentialMaterialModel
 }
 
+const SubscriptionObjectType = "api management/subscription"
+
 func (s *SubscriptionSpecializer) GetSupportedConfidentialMaterialTypes() []string {
-	return []string{"api_management/subscription"}
+	return []string{SubscriptionObjectType}
 }
 
 func (s *SubscriptionSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *SubscriptionModel) diag.Diagnostics {
@@ -154,8 +202,10 @@ func (s *SubscriptionSpecializer) CheckPlacement(ctx context.Context, uuid strin
 }
 
 func (s *SubscriptionSpecializer) GetJsonDataImporter() core.ObjectJsonImportSupport[ConfidentialSubscriptionData] {
-	return NewConfidentialNamedDataHelper()
+	return NewConfidentialSubscriptionHelper()
 }
+
+var idExp = regexp.MustCompile("/subscriptions/(.*)/resourceGroups/(.*)/providers/Microsoft.ApiManagement/service/(.*)/subscriptions/(.*)")
 
 func (s *SubscriptionSpecializer) DoRead(ctx context.Context, planData *SubscriptionModel, plainData ConfidentialSubscriptionData) (armapimanagement.SubscriptionContract, resources.ResourceExistenceCheck, diag.Diagnostics) {
 	rv := diag.Diagnostics{}
@@ -163,35 +213,54 @@ func (s *SubscriptionSpecializer) DoRead(ctx context.Context, planData *Subscrip
 		return armapimanagement.SubscriptionContract{}, resources.ResourceNotYetCreated, nil
 	}
 
-	subscriptionId := planData.DestinationSubscription.SubscriptionId.ValueString()
-	subscriptionClient, err := s.factory.GetApimSubscriptionClient(subscriptionId)
-	if err != nil {
-		rv.AddError("Cannot acquire keys client", fmt.Sprintf("Cannot acquire apim subscription client to subscription %s: %s", subscriptionId, err.Error()))
-		return armapimanagement.SubscriptionContract{}, resources.ResourceCheckError, rv
-	} else if subscriptionClient == nil {
-		rv.AddError("Cannot acquire keys client", "Keys client returned is nil")
+	azSubscriptionId, azErr := s.factory.GetAzSubscription(planData.DestinationSubscription.AzSubscriptionId.ValueString())
+	if azErr != nil {
+		rv.AddError(
+			"Missing Azure subscription Id",
+			"Creating Azure objects requires identifying a subscription; either on the level of the provider, or on the level of the resource")
 		return armapimanagement.SubscriptionContract{}, resources.ResourceCheckError, rv
 	}
 
-	var cc = armapimanagement.SubscriptionClient{}
+	matcher := idExp.FindStringSubmatch(planData.Id.ValueString())
+	if matcher == nil {
+		rv.AddError("Resource identifier is malformed", fmt.Sprintf("The id of this resource (%s) does not match the expected format. This is a bug of the provider. Please report this", planData.Id.ValueString()))
+		return armapimanagement.SubscriptionContract{}, resources.ResourceCheckError, rv
+	}
+	azSubscriptionIdFromId := matcher[1]
+	resourceGroup := matcher[2]
+	apimServiceName := matcher[3]
+	apimSubscriptionIdFromId := matcher[4]
 
-	resourceGroup := planData.DestinationSubscription.ResourceGroup.ValueString()
-	apimServiceName := planData.DestinationSubscription.ServiceName.ValueString()
-	subscriptionId = planData.SubscriptionId.ValueString()
+	if azSubscriptionIdFromId != azSubscriptionId {
+		rv.AddError(
+			"Implicit move",
+			fmt.Sprintf("This APIM subscription is created in Azure subscription %s, whereas the configuration now requires it to be created in Azure subscription %s. Delete and recreate this resource", azSubscriptionIdFromId, azSubscriptionId),
+		)
+		return armapimanagement.SubscriptionContract{}, resources.ResourceCheckError, rv
+	}
+
+	subscriptionClient, err := s.factory.GetApimSubscriptionClient(azSubscriptionIdFromId)
+	if err != nil {
+		rv.AddError("Cannot acquire APIM subscription client", fmt.Sprintf("Cannot acquire apim subscription client to subscription %s: %s", azSubscriptionIdFromId, err.Error()))
+		return armapimanagement.SubscriptionContract{}, resources.ResourceCheckError, rv
+	} else if subscriptionClient == nil {
+		rv.AddError("Cannot acquire APIM subscription client", "Keys client returned is nil")
+		return armapimanagement.SubscriptionContract{}, resources.ResourceCheckError, rv
+	}
 
 	subscriptionState, err := subscriptionClient.Get(
 		ctx,
 		resourceGroup,
 		apimServiceName,
-		subscriptionId,
+		apimSubscriptionIdFromId,
 		nil)
 	if err != nil {
 		if core.IsResourceNotFoundError(err) {
 			if s.factory.IsObjectTrackingEnabled() {
 				rv.AddWarning(
-					"Key removed from key vault",
+					"Subscription removed from API management",
 					fmt.Sprintf("Subscripion %s is no longer availble in APIM service in resource group %s API management service %s. The provider tracks confidential objects; creating this API management subscription again will be rejected as duplicate. If creathing this API management subscription again is intentional, re-encrypt ciphertext.",
-						subscriptionId,
+						apimSubscriptionIdFromId,
 						resourceGroup,
 						apimServiceName,
 					),
@@ -201,7 +270,7 @@ func (s *SubscriptionSpecializer) DoRead(ctx context.Context, planData *Subscrip
 			return armapimanagement.SubscriptionContract{}, resources.ResourceNotFound, rv
 		} else {
 			rv.AddError("Cannot read subscription", fmt.Sprintf("Cannot read subscription %s of service %s in resource group %s: %s",
-				subscriptionId,
+				apimSubscriptionIdFromId,
 				apimServiceName,
 				resourceGroup,
 				err.Error()))
@@ -209,10 +278,10 @@ func (s *SubscriptionSpecializer) DoRead(ctx context.Context, planData *Subscrip
 		}
 	}
 
-	keys, keyReadErr := cc.ListSecrets(ctx, resourceGroup, apimServiceName, subscriptionId, nil)
+	keys, keyReadErr := subscriptionClient.ListSecrets(ctx, resourceGroup, apimServiceName, apimSubscriptionIdFromId, nil)
 	if keyReadErr != nil {
 		rv.AddError("Cannot read subscription keys", fmt.Sprintf("Cannot read subscription keys %s of service %s in resource group %s: %s",
-			subscriptionId,
+			apimSubscriptionIdFromId,
 			apimServiceName,
 			resourceGroup,
 			keyReadErr.Error()))
@@ -221,11 +290,9 @@ func (s *SubscriptionSpecializer) DoRead(ctx context.Context, planData *Subscrip
 
 	// Catch and detect the drift.
 	if plainData.GetPrimaryKey() != *keys.PrimaryKey || plainData.GetSecondaryKey() != *keys.SecondaryKey {
-		//planData.ConfidentialMaterialModel.Hash(*keys.PrimaryKey, *keys.SecondaryKey)
-
-		rv.AddWarning("Subscription keys have drifted",
+		rv.AddWarning("Subscription keys have drifted from the state declared in ciphertext",
 			fmt.Sprintf("API management subscription %s of service %s in resource group %s does not match the state specified in ciphertext",
-				subscriptionId,
+				apimSubscriptionIdFromId,
 				apimServiceName,
 				resourceGroup),
 		)
@@ -237,33 +304,42 @@ func (s *SubscriptionSpecializer) DoRead(ctx context.Context, planData *Subscrip
 }
 
 func (s *SubscriptionSpecializer) SetDriftToConfidentialData(_ context.Context, planData *SubscriptionModel) {
-	planData.EncryptedSecret = types.StringValue("---- DRIFT IN SUBSCRIPTION KEYS ----")
+	planData.EncryptedSecret = types.StringValue(resources.CreateDriftMessage("subscription"))
 }
 
 func (s *SubscriptionSpecializer) DoCreate(ctx context.Context, planData *SubscriptionModel, plainData ConfidentialSubscriptionData) (armapimanagement.SubscriptionContract, diag.Diagnostics) {
 	rvDiag := diag.Diagnostics{}
 
-	subscriptionClient, secErr := s.factory.GetApimSubscriptionClient(planData.DestinationSubscription.AzSubscriptionId.ValueString())
-	if secErr != nil {
-		rvDiag.AddError("APIM subscription client cannot be retrieved", secErr.Error())
-		return armapimanagement.SubscriptionContract{}, rvDiag
-	} else if subscriptionClient == nil {
-		rvDiag.AddError("APIM subscription client cannot be retrieved", "Nil client returned while no error was raised. This is a provider bug. Please report this")
+	azSubscriptionId, azErr := s.factory.GetAzSubscription(planData.DestinationSubscription.AzSubscriptionId.ValueString())
+	if azErr != nil {
+		rvDiag.AddError(
+			"Missing Azure subscription Id",
+			"Creating Azure objects requires identifying a subscription; either on the level of the provider, or on the level of the resource")
 		return armapimanagement.SubscriptionContract{}, rvDiag
 	}
 
-	//var cc armapimanagement.SubscriptionClient
-	//cc.CreateOrUpdate()
-
-	createOpts := planData.ToCreateOrUpdateOptions()
-	createOpts.Properties.PrimaryKey = to.Ptr(plainData.GetPrimaryKey())
-	createOpts.Properties.SecondaryKey = to.Ptr(plainData.GetSecondaryKey())
+	subscriptionClient, secErr := s.factory.GetApimSubscriptionClient(azSubscriptionId)
+	if secErr != nil {
+		rvDiag.AddError("Cannot acquire APIM subscription client", secErr.Error())
+		return armapimanagement.SubscriptionContract{}, rvDiag
+	} else if subscriptionClient == nil {
+		rvDiag.AddError("Cannot acquire APIM subscription client", "Nil client returned while no error was raised. This is a provider bug. Please report this")
+		return armapimanagement.SubscriptionContract{}, rvDiag
+	}
 
 	if !planData.DestinationSubscription.SubscriptionId.IsUnknown() && !planData.DestinationSubscription.SubscriptionId.IsNull() && len(planData.DestinationSubscription.SubscriptionId.ValueString()) > 0 {
 		planData.SubscriptionId = types.StringValue(planData.DestinationSubscription.SubscriptionId.ValueString())
 	} else {
 		planData.SubscriptionId = types.StringValue(uuid.New().String())
 	}
+
+	if planData.DisplayName.IsUnknown() {
+		planData.DisplayName = types.StringValue(planData.SubscriptionId.ValueString())
+	}
+
+	createOpts := planData.ToCreateOrUpdateOptions()
+	createOpts.Properties.PrimaryKey = to.Ptr(plainData.GetPrimaryKey())
+	createOpts.Properties.SecondaryKey = to.Ptr(plainData.GetSecondaryKey())
 
 	resp, createErr := subscriptionClient.CreateOrUpdate(ctx,
 		planData.DestinationSubscription.ResourceGroup.ValueString(),
@@ -282,15 +358,65 @@ func (s *SubscriptionSpecializer) DoCreate(ctx context.Context, planData *Subscr
 
 }
 
-func (s *SubscriptionSpecializer) DoUpdate(ctx context.Context, planData *SubscriptionModel, lainData ConfidentialSubscriptionData) (armapimanagement.SubscriptionContract, diag.Diagnostics) {
-	//TODO implement me
-	panic("implement me")
+func (s *SubscriptionSpecializer) DoUpdate(ctx context.Context, planData *SubscriptionModel, plainData ConfidentialSubscriptionData) (armapimanagement.SubscriptionContract, diag.Diagnostics) {
+	rvDiag := diag.Diagnostics{}
+
+	matcher := idExp.FindStringSubmatch(planData.Id.ValueString())
+	if matcher == nil {
+		rvDiag.AddError("Resource identifier is malformed", fmt.Sprintf("The id of this resource (%s) does not match the expected format. This is a bug of the provider. Please report this", planData.Id.ValueString()))
+		return armapimanagement.SubscriptionContract{}, rvDiag
+	}
+
+	azSubscriptionIdFromId := matcher[1]
+	resourceGroup := matcher[2]
+	apimServiceName := matcher[3]
+	apimSubscriptionIdFromId := matcher[4]
+
+	updateOpts := planData.ToUpdateOptions()
+	updateOpts.Properties.PrimaryKey = to.Ptr(plainData.GetPrimaryKey())
+	updateOpts.Properties.SecondaryKey = to.Ptr(plainData.GetSecondaryKey())
+
+	subscriptionClient, secErr := s.factory.GetApimSubscriptionClient(azSubscriptionIdFromId)
+	if secErr != nil {
+		rvDiag.AddError("APIM subscription client cannot be retrieved", secErr.Error())
+		return armapimanagement.SubscriptionContract{}, rvDiag
+	} else if subscriptionClient == nil {
+		rvDiag.AddError("APIM subscription client cannot be retrieved", "Nil client returned while no error was raised. This is a provider bug. Please report this")
+		return armapimanagement.SubscriptionContract{}, rvDiag
+	}
+
+	resp, updateErr := subscriptionClient.Update(ctx,
+		resourceGroup,
+		apimServiceName,
+		apimSubscriptionIdFromId,
+		"*",
+		updateOpts,
+		nil,
+	)
+
+	if updateErr != nil {
+		rvDiag.AddError("Cannot update subscription", updateErr.Error())
+		return armapimanagement.SubscriptionContract{}, rvDiag
+	} else {
+		return resp.SubscriptionContract, rvDiag
+	}
 }
 
 func (s *SubscriptionSpecializer) DoDelete(ctx context.Context, planData *SubscriptionModel) diag.Diagnostics {
 	rvDiag := diag.Diagnostics{}
 
-	subscriptionClient, secErr := s.factory.GetApimSubscriptionClient(planData.DestinationSubscription.AzSubscriptionId.ValueString())
+	matcher := idExp.FindStringSubmatch(planData.Id.ValueString())
+	if matcher == nil {
+		rvDiag.AddError("Resource identifier is malformed", fmt.Sprintf("The id of this resource (%s) does not match the expected format. This is a bug of the provider. Please report this", planData.Id.ValueString()))
+		return rvDiag
+	}
+
+	azSubscriptionIdFromId := matcher[1]
+	resourceGroup := matcher[2]
+	apimServiceName := matcher[3]
+	apimSubscriptionIdFromId := matcher[4]
+
+	subscriptionClient, secErr := s.factory.GetApimSubscriptionClient(azSubscriptionIdFromId)
 	if secErr != nil {
 		rvDiag.AddError("APIM subscription client cannot be retrieved", secErr.Error())
 		return rvDiag
@@ -300,9 +426,9 @@ func (s *SubscriptionSpecializer) DoDelete(ctx context.Context, planData *Subscr
 	}
 
 	_, err := subscriptionClient.Delete(ctx,
-		planData.DestinationSubscription.ResourceGroup.ValueString(),
-		planData.DestinationSubscription.ServiceName.ValueString(),
-		planData.SubscriptionId.ValueString(),
+		resourceGroup,
+		apimServiceName,
+		apimSubscriptionIdFromId,
 		"*",
 		nil,
 	)
@@ -323,12 +449,51 @@ func (s *SubscriptionSpecializer) DoDelete(ctx context.Context, planData *Subscr
 // TODO: write and embed a readme
 var subscriptionResourceMarkdownDescription string
 
-func NewConfidentialSubscriptionResource() resource.Resource {
+func NewSubscriptionResource() resource.Resource {
 	modelAttributes := map[string]schema.Attribute{
+		"subscription_id": schema.StringAttribute{
+			Computed:    true,
+			Description: "Id of the subscription that actually created. Useful in case where destination_subscription does not set a required Id",
+		},
+		"state": schema.StringAttribute{
+			Computed:    true,
+			Optional:    true,
+			Description: "Required state of the subscription. Defaults to `active` if unspecified",
+			Validators: []validator.String{
+				stringvalidator.OneOf(
+					"active",
+					"cancelled",
+					"expired",
+					"rejected",
+					"submitted",
+					"suspended",
+				),
+			},
+			Default: stringdefault.StaticString("active"),
+		},
+		"display_name": schema.StringAttribute{
+			Optional:    true,
+			Computed:    true,
+			Description: "Display name of this subscription. Defaults to subscription Id if unspecified",
+		},
+		"allow_tracing": schema.BoolAttribute{
+			Optional:    true,
+			Computed:    true,
+			Description: "Whether to allow the tracing of policy execution for this subscription",
+			Default:     booldefault.StaticBool(false),
+		},
 		"destination_subscription": schema.SingleNestedAttribute{
 			Required:            true,
 			MarkdownDescription: "Defines the APIM subscription to be created",
 			Attributes: map[string]schema.Attribute{
+				"az_subscription_id": schema.StringAttribute{
+					Optional:    true,
+					Description: "Id of this subscription where API Management service id deployed. Required if provider is not configured with a default Azure subscription, or the subscription differs from default",
+
+					PlanModifiers: []planmodifier.String{
+						stringplanmodifier.RequiresReplace(),
+					},
+				},
 				"resource_group": schema.StringAttribute{
 					Required:    true,
 					Description: "Resource group where APIM service is created",
@@ -340,6 +505,14 @@ func NewConfidentialSubscriptionResource() resource.Resource {
 				"api_management_name": schema.StringAttribute{
 					Required:    true,
 					Description: "Resource group where APIM service is created",
+
+					PlanModifiers: []planmodifier.String{
+						stringplanmodifier.RequiresReplace(),
+					},
+				},
+				"apim_subscription_id": schema.StringAttribute{
+					Optional:    true,
+					Description: "API management subscription Id to use",
 
 					PlanModifiers: []planmodifier.String{
 						stringplanmodifier.RequiresReplace(),
@@ -374,7 +547,7 @@ func NewConfidentialSubscriptionResource() resource.Resource {
 	}
 
 	resourceSchema := schema.Schema{
-		Description:         "Creates a secret in Azure KeyVault without revealing its value in state",
+		Description:         "Creates a subscription in the Azure API management service with pre-set primary and secondary subscription keys",
 		MarkdownDescription: subscriptionResourceMarkdownDescription,
 
 		Attributes: resources.WrappedConfidentialMaterialModelSchema(modelAttributes, false),
@@ -385,7 +558,7 @@ func NewConfidentialSubscriptionResource() resource.Resource {
 	return &resources.ConfidentialGenericResource[SubscriptionModel, int, ConfidentialSubscriptionData, armapimanagement.SubscriptionContract]{
 		Specializer:    apimSubscriptionSpecializer,
 		MutableRU:      apimSubscriptionSpecializer,
-		ResourceName:   "secret",
+		ResourceName:   "apim_subscription",
 		ResourceSchema: resourceSchema,
 	}
 }

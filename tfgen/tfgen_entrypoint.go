@@ -1,6 +1,7 @@
 package tfgen
 
 import (
+	"crypto/rsa"
 	"flag"
 	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
@@ -11,6 +12,7 @@ import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 	"os"
 	"strings"
+	"sync"
 )
 
 var commandGroups []string
@@ -83,16 +85,6 @@ func CreateCommonCLIArgs() (*EntryPointCLIArgs, *flag.FlagSet) {
 
 func buildContentWrappingParams(cliArgs *EntryPointCLIArgs) (*model.ContentWrappingParams, error) {
 
-	pubKeyData, pubKeyReadErr := io.ReadInput("Please provide public key of the key wrapping key", cliArgs.RSAPublicKeyFile, false, true)
-	if pubKeyReadErr != nil {
-		return nil, fmt.Errorf("cannot read public key: %s", pubKeyReadErr.Error())
-	}
-
-	loadedRSAKey, rsaLoadErr := core.LoadPublicKeyFromData(pubKeyData)
-	if rsaLoadErr != nil {
-		return nil, fmt.Errorf("failed to load public key (-pubkey argument was '%s'): %s", cliArgs.RSAPublicKeyFile, rsaLoadErr)
-	}
-
 	var labels []string
 	if len(cliArgs.Labels) > 0 {
 		labels = strings.Split(cliArgs.Labels, ",")
@@ -101,8 +93,19 @@ func buildContentWrappingParams(cliArgs *EntryPointCLIArgs) (*model.ContentWrapp
 	rv := &model.ContentWrappingParams{
 		WrappingKeyCoordinate: model.NewWrappingKey(),
 		Labels:                labels,
-		LoadedRsaPublicKey:    loadedRSAKey,
-		AddTargetLabel:        cliArgs.TargetDerivedLabelOnly,
+		LoadRsaPublicKey: sync.OnceValues(func() (*rsa.PublicKey, error) {
+			pubKeyData, pubKeyReadErr := io.ReadInput("Please provide public key of the key wrapping key", cliArgs.RSAPublicKeyFile, false, true)
+			if pubKeyReadErr != nil {
+				return nil, fmt.Errorf("cannot read public key: %s", pubKeyReadErr.Error())
+			}
+
+			loadedRSAKey, rsaLoadErr := core.LoadPublicKeyFromData(pubKeyData)
+			if rsaLoadErr != nil {
+				return nil, fmt.Errorf("failed to load public key (-pubkey argument was '%s'): %s", cliArgs.RSAPublicKeyFile, rsaLoadErr)
+			}
+			return loadedRSAKey, nil
+		}),
+		AddTargetLabel: cliArgs.TargetDerivedLabelOnly,
 	}
 
 	if len(cliArgs.WrappingKeyCoordinate.VaultName) > 0 {

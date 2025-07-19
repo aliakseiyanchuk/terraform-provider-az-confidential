@@ -3,6 +3,7 @@ package apim
 import (
 	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
+	"os"
 )
 
 var subcommands = []string{
@@ -14,8 +15,14 @@ var subcommands = []string{
 func EntryPoint(kwp *model.ContentWrappingParams, command string, args []string) (model.SubCommandExecution, error) {
 
 	switch command {
+	case "help":
+		printSubcommandSelectionHelp()
+		os.Exit(2)
+		return nil, nil
 	case "named_value":
 		return MakeNamedValueGenerator(kwp, args)
+	case "subscription":
+		return MakeSubscriptionGenerator(kwp, args)
 	default:
 		return nil, fmt.Errorf("unknown subcommand: %s", command)
 	}

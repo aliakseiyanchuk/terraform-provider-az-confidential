@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -173,11 +174,22 @@ type AZClientsFactoryImpl struct {
 	DisallowResourceSpecifiedWrappingKey bool
 	DefaultWrappingKey                   *core.WrappingKeyCoordinateModel
 	DefaultDestinationVault              string
+	DefaultAzSubscriptionId              string
 
 	ProviderLabels        []string
 	LabelMatchRequirement LabelMatchRequirement
 
 	hashTacker ObjectHashTracker
+}
+
+func (f *AZClientsFactoryImpl) GetAzSubscription(v string) (string, error) {
+	if len(v) > 0 {
+		return v, nil
+	} else if len(f.DefaultAzSubscriptionId) > 0 {
+		return f.DefaultAzSubscriptionId, nil
+	} else {
+		return "", errors.New("input does not supply Azure subscription id, ano no default subscription Id is configured on the provider level")
+	}
 }
 
 func (f *AZClientsFactoryImpl) AzKeyVaultRSADecrypt(ctx context.Context, input []byte, coord core.WrappingKeyCoordinate) ([]byte, error) {
@@ -285,15 +297,7 @@ func (f *AZClientsFactoryImpl) TrackObjectId(ctx context.Context, id string) err
 var _ core.AZClientsFactory = &AZClientsFactoryImpl{}
 
 func (f *AZClientsFactoryImpl) EnsureCanPlaceLabelledObjectAt(ctx context.Context, uuid string, labels []string, tfResourceType string, targetCoord core.LabelledObject, diagnostics *diag.Diagnostics) {
-	if objIsTracked, trackerCheckErr := f.IsObjectIdTracked(ctx, uuid); trackerCheckErr != nil {
-		diagnostics.AddError("cannot check tracking status of this secret", trackerCheckErr.Error())
-	} else if objIsTracked {
-		diagnostics.AddError(
-			fmt.Sprintf("%s is already tracked", uuid),
-			fmt.Sprintf("Potential attempt to copy confidential data detected: someone is trying to create a %s from ciphertext that was previously used", tfResourceType),
-		)
-	}
-
+	// TODO: This needs optimization
 	if f.LabelMatchRequirement == TargetCoordinate && targetCoord != nil {
 		if !slices.Contains(labels, targetCoord.GetLabel()) {
 			diagnostics.AddError("mismatched placement", fmt.Sprintf("The constraints embedded in the plaintext for this %s disallow placement with requested parameters", tfResourceType))
@@ -529,10 +533,11 @@ func (p *AZConnectorProviderImpl) DataSources(ctx context.Context) []func() data
 func (p *AZConnectorProviderImpl) Resources(ctx context.Context) []func() resource.Resource {
 	tflog.Debug(ctx, "AzConfidential: initializing resources")
 	return []func() resource.Resource{
-		keyvault.NewConfidentialAzVaultSecretResource,
-		keyvault.NewConfidentialAzVaultKeyResource,
-		keyvault.NewConfidentialAzVaultCertificateResource,
+		keyvault.NewSecretResource,
+		keyvault.NewKeyResource,
+		keyvault.NewCertificateResource,
 		apim.NewNamedValueResource,
+		apim.NewSubscriptionResource,
 	}
 }
 
@@ -599,6 +604,7 @@ func (p *AZConnectorProviderImpl) Configure(ctx context.Context, req tfprovider.
 
 		DefaultWrappingKey:                   data.DefaultWrappingKeyCoordinate,
 		DisallowResourceSpecifiedWrappingKey: disallowResourceLevelWrappingKey,
+		DefaultAzSubscriptionId:              data.SubscriptionID.ValueString(),
 
 		DefaultDestinationVault: data.DefaultDestinationVaultName.ValueString(),
 		ProviderLabels:          data.GetProviderLabels(ctx),

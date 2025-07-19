@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core/testkeymaterial"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -15,11 +16,9 @@ var basicTags = map[string]string{
 }
 
 func Test_Secret_OutputSecretTerraformCode_Renders(t *testing.T) {
-	_, publicKey := core.GenerateEphemeralKeyPair()
-
 	kwp := model.ContentWrappingParams{
-		Labels:             []string{"acceptance-testing"},
-		LoadedRsaPublicKey: publicKey,
+		Labels:           []string{"acceptance-testing"},
+		LoadRsaPublicKey: core.LoadPublicKeyFromDataOnce(testkeymaterial.EphemeralRsaPublicKey),
 	}
 
 	secretModel := TerraformCodeModel{

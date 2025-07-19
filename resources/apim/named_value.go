@@ -301,7 +301,7 @@ func (n *NamedValueSpecializer) DoRead(ctx context.Context, data *NamedValueMode
 }
 
 func (n *NamedValueSpecializer) SetDriftToConfidentialData(_ context.Context, planData *NamedValueModel) {
-	planData.ConfidentialMaterialModel.EncryptedSecret = types.StringValue("---- DRIFT IN NAMED VALUE ----")
+	planData.ConfidentialMaterialModel.EncryptedSecret = types.StringValue(resources.CreateDriftMessage("named value"))
 }
 
 func (n *NamedValueSpecializer) DoUpdate(ctx context.Context, data *NamedValueModel, plainData core.ConfidentialStringData) (armapimanagement.NamedValueContract, diag.Diagnostics) {

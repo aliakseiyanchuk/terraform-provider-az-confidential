@@ -12,15 +12,10 @@ import (
 )
 
 func generatePFXCertificateResource(t *testing.T) string {
-	rsaKey, keyErr := core.LoadPublicKey(wrappingKey)
-	if keyErr != nil {
-		assert.Fail(t, keyErr.Error())
-		return ""
-	}
 
 	kwp := model.ContentWrappingParams{
-		Labels:             []string{"acceptance-testing"},
-		LoadedRsaPublicKey: rsaKey,
+		Labels:           []string{"acceptance-testing"},
+		LoadRsaPublicKey: core.LoadPublicKeyFromFileOnce(wrappingKey),
 	}
 
 	mdl := keyvault.TerraformCodeModel{

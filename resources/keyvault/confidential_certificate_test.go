@@ -474,5 +474,5 @@ func Test_CAzVCR_DoDelete(t *testing.T) {
 
 func TestNewConfidentialAzVaultCertificateResourceWillReturn(t *testing.T) {
 	// Test that the new az key vault resource would not crash on start-up
-	_ = NewConfidentialAzVaultCertificateResource()
+	_ = NewCertificateResource()
 }

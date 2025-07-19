@@ -775,5 +775,5 @@ func Test_CAzVKR_DoDelete(t *testing.T) {
 
 func TestNewConfidentialAzVaultKeyResource(t *testing.T) {
 	// Testing that bootstrapping the resource would complete.
-	_ = NewConfidentialAzVaultKeyResource()
+	_ = NewKeyResource()
 }

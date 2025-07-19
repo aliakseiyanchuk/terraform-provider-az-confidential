@@ -13,15 +13,10 @@ import (
 )
 
 func generatePEMEncodedRsaKeyResource(t *testing.T) string {
-	rsaPubKey, pubKeyErr := core.LoadPublicKey(wrappingKey)
-	if pubKeyErr != nil {
-		assert.Fail(t, pubKeyErr.Error())
-		return ""
-	}
 
 	kwp := model.ContentWrappingParams{
-		Labels:             []string{"acceptance-testing"},
-		LoadedRsaPublicKey: rsaPubKey,
+		Labels:           []string{"acceptance-testing"},
+		LoadRsaPublicKey: core.LoadPublicKeyFromFileOnce(wrappingKey),
 	}
 
 	keyModel := keyvault.KeyResourceTerraformModel{

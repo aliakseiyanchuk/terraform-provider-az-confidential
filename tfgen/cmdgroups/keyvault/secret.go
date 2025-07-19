@@ -15,7 +15,7 @@ var secretTFTemplate string
 func CreateSecretArgParser() (*KeyVaultGroupCLIParams, *flag.FlagSet) {
 	var secretParams = KeyVaultGroupCLIParams{}
 
-	var secretCmd = flag.NewFlagSet("secret", flag.ContinueOnError)
+	var secretCmd = flag.NewFlagSet("secret", flag.ExitOnError)
 
 	secretCmd.StringVar(&secretParams.inputFile,
 		"secret-file",
@@ -109,7 +109,13 @@ func OutputSecretTerraformCode(mdl TerraformCodeModel, kwp *model.ContentWrappin
 func OutputSecretEncryptedContent(kwp *model.ContentWrappingParams, secretText string) (string, error) {
 	helper := core.NewVersionedStringConfidentialDataHelper()
 	_ = helper.CreateConfidentialStringData(secretText, keyvault.SecretObjectType, kwp.GetLabels())
-	em, err := helper.ToEncryptedMessage(kwp.LoadedRsaPublicKey)
+
+	rsaKey, loadErr := kwp.LoadRsaPublicKey()
+	if loadErr != nil {
+		return "", loadErr
+	}
+
+	em, err := helper.ToEncryptedMessage(rsaKey)
 	if err != nil {
 		return "", err
 	}

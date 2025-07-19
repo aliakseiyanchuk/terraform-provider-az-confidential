@@ -29,7 +29,7 @@ const (
 func CreateCertArgsParser() (*CertTFGenParams, *flag.FlagSet) {
 	var certParams = CertTFGenParams{}
 
-	var certCmd = flag.NewFlagSet("cert", flag.ContinueOnError)
+	var certCmd = flag.NewFlagSet("cert", flag.ExitOnError)
 
 	certCmd.StringVar(&certParams.inputFile,
 		"cert-file",
@@ -208,7 +208,12 @@ func OutputCertificateEncryptedContent(kwp model.ContentWrappingParams, data cor
 		kwp.GetLabels(),
 	)
 
-	em, err := helper.ToEncryptedMessage(kwp.LoadedRsaPublicKey)
+	rsaKey, loadErr := kwp.LoadRsaPublicKey()
+	if loadErr != nil {
+		return "", loadErr
+	}
+
+	em, err := helper.ToEncryptedMessage(rsaKey)
 	if err != nil {
 		return "", err
 	}

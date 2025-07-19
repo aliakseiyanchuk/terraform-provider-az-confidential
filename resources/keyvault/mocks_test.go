@@ -16,6 +16,11 @@ type AZClientsFactoryMock struct {
 	mock.Mock
 }
 
+func (m *AZClientsFactoryMock) GetAzSubscription(v string) (string, error) {
+	args := m.Called(v)
+	return args.String(0), args.Error(1)
+}
+
 func (m *AZClientsFactoryMock) GivenGetSecretClientWillReturnError(vaultAddr, msg string) {
 	m.Mock.
 		On("GetSecretsClient", vaultAddr).

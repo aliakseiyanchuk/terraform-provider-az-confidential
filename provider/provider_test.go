@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -59,50 +58,9 @@ func (m *HashTrackerMock) TrackObjectId(ctx context.Context, id string) error {
 	return args.Error(0)
 }
 
-func Test_EnsureCanPlace_Errs_IfTrackerReturnsError(t *testing.T) {
-	hashTracker := &HashTrackerMock{}
-	hashTracker.On("IsObjectIdTracked", mock.Anything, "obj-uuid").Return(false, errors.New("unit test track check error"))
-
-	factory := &AZClientsFactoryImpl{
-		LabelMatchRequirement: NoMatching,
-		hashTacker:            hashTracker,
-	}
-
-	ctx := context.Background()
-	dg := diag.Diagnostics{}
-
-	factory.EnsureCanPlaceLabelledObjectAt(ctx, "obj-uuid", nil, "anything", nil, &dg)
-	assert.True(t, dg.HasError())
-	assert.Equal(t, "unit test track check error", dg[0].Detail())
-	assert.True(t, hashTracker.AssertExpectations(t))
-}
-
-func Test_EnsureCanPlace_Errs_IfTrackerReturnsObjectIsAlreadyTracked(t *testing.T) {
-	hashTracker := &HashTrackerMock{}
-	hashTracker.On("IsObjectIdTracked", mock.Anything, "obj-uuid").Return(true, nil)
-
-	factory := &AZClientsFactoryImpl{
-		LabelMatchRequirement: NoMatching,
-		hashTacker:            hashTracker,
-	}
-
-	ctx := context.Background()
-
-	dg := diag.Diagnostics{}
-
-	factory.EnsureCanPlaceLabelledObjectAt(ctx, "obj-uuid", nil, "secret", nil, &dg)
-	assert.True(t, dg.HasError())
-	assert.Equal(t, "Potential attempt to copy confidential data detected: someone is trying to create a secret from ciphertext that was previously used", dg[0].Detail())
-	assert.True(t, hashTracker.AssertExpectations(t))
-}
-
 func Test_EnsureCanPlace_Errs_OnMismatchedTargetCoorLabel(t *testing.T) {
-	hashTracker := &HashTrackerMock{}
-	hashTracker.On("IsObjectIdTracked", mock.Anything, "obj-uuid").Return(false, nil)
-
 	factory := &AZClientsFactoryImpl{
 		LabelMatchRequirement: TargetCoordinate,
-		hashTacker:            hashTracker,
 		ProviderLabels:        []string{"unit-testing"},
 	}
 
@@ -125,16 +83,11 @@ func Test_EnsureCanPlace_Errs_OnMismatchedTargetCoorLabel(t *testing.T) {
 	factory.EnsureCanPlaceLabelledObjectAt(ctx, "obj-uuid", []string{expCoordinate.GetLabel()}, "secret", &reqCoordinate, &dg)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "The constraints embedded in the plaintext for this secret disallow placement with requested parameters", dg[0].Detail())
-	assert.True(t, hashTracker.AssertExpectations(t))
 }
 
 func Test_EnsureCanPlace_Ok_OnCoordinateLabelMatch(t *testing.T) {
-	hashTracker := &HashTrackerMock{}
-	hashTracker.On("IsObjectIdTracked", mock.Anything, "obj-uuid").Return(false, nil)
-
 	factory := &AZClientsFactoryImpl{
 		LabelMatchRequirement: TargetCoordinate,
-		hashTacker:            hashTracker,
 		ProviderLabels:        []string{"unit-testing"},
 	}
 
@@ -157,16 +110,11 @@ func Test_EnsureCanPlace_Ok_OnCoordinateLabelMatch(t *testing.T) {
 	factory.EnsureCanPlaceLabelledObjectAt(ctx, "obj-uuid", []string{expCoordinate.GetLabel()}, "anything", &reqCoordinate, &dg)
 	assert.False(t, dg.HasError())
 
-	hashTracker.AssertExpectations(t)
 }
 
 func Test_EnsureCanPlace_Ok_OnProviderLabelsMatch(t *testing.T) {
-	hashTracker := &HashTrackerMock{}
-	hashTracker.On("IsObjectIdTracked", mock.Anything, "obj-uuid").Return(false, nil)
-
 	factory := &AZClientsFactoryImpl{
 		LabelMatchRequirement: ProviderLabels,
-		hashTacker:            hashTracker,
 		ProviderLabels:        []string{"unit-testing", "foo-testing"},
 	}
 
@@ -188,19 +136,14 @@ func Test_EnsureCanPlace_Ok_OnProviderLabelsMatch(t *testing.T) {
 		&dg)
 	assert.False(t, dg.HasError())
 
-	hashTracker.AssertExpectations(t)
 }
 
 func Test_EnsureCanPlace_Errs_OnLabelMismatchForDataSource(t *testing.T) {
-	hashTracker := &HashTrackerMock{}
-	hashTracker.On("IsObjectIdTracked", mock.Anything, "obj-uuid").Return(false, nil)
-
 	modes := []LabelMatchRequirement{TargetCoordinate, ProviderLabels}
 
 	for _, mode := range modes {
 		factory := &AZClientsFactoryImpl{
 			LabelMatchRequirement: mode,
-			hashTacker:            hashTracker,
 			ProviderLabels:        []string{"unit-testing"},
 		}
 
@@ -216,8 +159,6 @@ func Test_EnsureCanPlace_Errs_OnLabelMismatchForDataSource(t *testing.T) {
 		assert.True(t, dg.HasError())
 		assert.Equal(t, "The constraints embedded in the ciphertext of this unspecified-resource disallow unwrapping the ciphertext by this provider", dg[0].Detail())
 	}
-
-	assert.True(t, hashTracker.AssertExpectations(t))
 }
 
 func Test_LabelMatchingRequirement_AsString(t *testing.T) {

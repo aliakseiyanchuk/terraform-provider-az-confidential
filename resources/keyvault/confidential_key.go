@@ -465,7 +465,7 @@ func (a *AzKeyVaultKeyResourceSpecializer) GetJsonDataImporter() core.ObjectJson
 
 const KeyObjectType = "kv/key"
 
-func NewConfidentialAzVaultKeyResource() resource.Resource {
+func NewKeyResource() resource.Resource {
 	specificAttrs := map[string]schema.Attribute{
 		"key_opts": schema.SetAttribute{
 			Description:         "Key operations this key is allowed",

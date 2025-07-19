@@ -310,7 +310,7 @@ var secretResourceMarkdownDescription string
 
 const SecretObjectType = "kv/secret"
 
-func NewConfidentialAzVaultSecretResource() resource.Resource {
+func NewSecretResource() resource.Resource {
 	modelAttributes := map[string]schema.Attribute{
 		"content_type": schema.StringAttribute{
 			Optional:    true,

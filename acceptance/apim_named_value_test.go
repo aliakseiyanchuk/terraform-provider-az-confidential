@@ -25,15 +25,9 @@ func NewStrVal(strVal string) model.TerraformFieldExpression[string] {
 }
 
 func generateApimNamedValueResource(t *testing.T) string {
-	rsaKey, keyErr := core.LoadPublicKey(wrappingKey)
-	if keyErr != nil {
-		assert.Fail(t, keyErr.Error())
-		return ""
-	}
-
 	kwp := model.ContentWrappingParams{
 		Labels:                []string{"acceptance-testing"},
-		LoadedRsaPublicKey:    rsaKey,
+		LoadRsaPublicKey:      core.LoadPublicKeyFromFileOnce(wrappingKey),
 		WrappingKeyCoordinate: model.NewWrappingKey(),
 	}
 

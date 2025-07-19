@@ -55,3 +55,8 @@ encrypt_apim_named_value:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
 	${LABELS} \
 	apim named_value
+
+encrypt_apim_subscription:
+	${TFGEN_EXEC} -pubkey ${PUBKEY} \
+	${LABELS} \
+	apim subscription

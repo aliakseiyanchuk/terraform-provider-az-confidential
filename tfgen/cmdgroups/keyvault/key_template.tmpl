@@ -47,7 +47,7 @@ resource "az-confidential_key" "{{ .TFBlockName }}" {
       }
 
   destination_key = {
-      {{- if .DestinationCoordinate.VaultName.IsSpecified }}
+      {{- if .DestinationCoordinate.VaultName.IsDefined }}
         vault_name = {{ .DestinationCoordinate.VaultName.TerraformExpression }}
       {{- else }}
         # Vault name will be inferred from the key vault where the wrapping key is stored.
@@ -58,16 +58,16 @@ resource "az-confidential_key" "{{ .TFBlockName }}" {
 
   {{- if not .WrappingKeyCoordinate.IsEmpty }}
       wrapping_key = {
-        {{- if .WrappingKeyCoordinate.VaultName.IsSpecified }}
+        {{- if .WrappingKeyCoordinate.VaultName.IsDefined }}
             vault_name = {{ .WrappingKeyCoordinate.VaultName.TerraformExpression }}
         {{- end }}
-        {{- if .WrappingKeyCoordinate.KeyName.IsSpecified }}
+        {{- if .WrappingKeyCoordinate.KeyName.IsDefined }}
             name = {{ .WrappingKeyCoordinate.KeyName.TerraformExpression }}
         {{- end }}
-        {{- if .WrappingKeyCoordinate.KeyVersion.IsSpecified }}
+        {{- if .WrappingKeyCoordinate.KeyVersion.IsDefined }}
             version = {{ .WrappingKeyCoordinate.KeyVersion.TerraformExpression }}
         {{- end }}
-        {{- if .WrappingKeyCoordinate.Algorithm.IsSpecified }}
+        {{- if .WrappingKeyCoordinate.Algorithm.IsDefined }}
             version = "{{ .WrappingKeyCoordinate.Algorithm.TerraformExpression }}"
         {{- end }}
       }

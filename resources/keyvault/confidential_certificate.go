@@ -342,7 +342,7 @@ func (a *AzKeyVaultCertificateResourceSpecializer) GetJsonDataImporter() core.Ob
 
 const CertificateObjectType = "kv/certificate"
 
-func NewConfidentialAzVaultCertificateResource() resource.Resource {
+func NewCertificateResource() resource.Resource {
 	specificAttrs := map[string]schema.Attribute{
 		"versionless_id": schema.StringAttribute{
 			Computed: true,

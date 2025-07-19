@@ -27,7 +27,7 @@ type KeyTFGenParams struct {
 func CreateKeyArgsParser() (*KeyTFGenParams, *flag.FlagSet) {
 	keyParams := &KeyTFGenParams{}
 
-	keyCmd := flag.NewFlagSet("key", flag.ContinueOnError)
+	keyCmd := flag.NewFlagSet("key", flag.ExitOnError)
 
 	keyCmd.StringVar(&keyParams.inputFile,
 		"key-file",
@@ -254,7 +254,12 @@ func OutputKeyEncryptedContent(kwp model.ContentWrappingParams, jwkKey interface
 	helper := core.NewVersionedBinaryConfidentialDataHelper()
 	_ = helper.CreateConfidentialBinaryData(jwkData, keyvault.KeyObjectType, kwp.GetLabels())
 
-	em, err := helper.ToEncryptedMessage(kwp.LoadedRsaPublicKey)
+	rsaKey, loadErr := kwp.LoadRsaPublicKey()
+	if loadErr != nil {
+		return "", loadErr
+	}
+
+	em, err := helper.ToEncryptedMessage(rsaKey)
 	if err != nil {
 		return "", err
 	}

@@ -75,7 +75,7 @@ func Test_CSM_Accept(t *testing.T) {
 }
 
 func Test_CAzVSR_Metadata(t *testing.T) {
-	r := NewConfidentialAzVaultSecretResource()
+	r := NewSecretResource()
 	req := resource.MetadataRequest{
 		ProviderTypeName: "az-confidential",
 	}
@@ -86,7 +86,7 @@ func Test_CAzVSR_Metadata(t *testing.T) {
 }
 
 func Test_CAzVSR_Schema(t *testing.T) {
-	r := NewConfidentialAzVaultSecretResource()
+	r := NewSecretResource()
 	req := resource.SchemaRequest{}
 	resp := resource.SchemaResponse{}
 

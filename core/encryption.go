@@ -24,6 +24,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/youmark/pkcs8"
 )
@@ -324,6 +325,18 @@ func LoadPublicKey(path string) (*rsa.PublicKey, error) {
 	}
 
 	return LoadPublicKeyFromData(pubText)
+}
+
+func LoadPublicKeyFromDataOnce(pubText []byte) func() (*rsa.PublicKey, error) {
+	return sync.OnceValues(func() (*rsa.PublicKey, error) {
+		return LoadPublicKeyFromData(pubText)
+	})
+}
+
+func LoadPublicKeyFromFileOnce(pubFile string) func() (*rsa.PublicKey, error) {
+	return sync.OnceValues(func() (*rsa.PublicKey, error) {
+		return LoadPublicKey(pubFile)
+	})
 }
 
 func LoadPublicKeyFromData(pubText []byte) (*rsa.PublicKey, error) {

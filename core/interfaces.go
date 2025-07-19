@@ -40,6 +40,7 @@ type ApimSubscriptionClientAbstraction interface {
 	Get(ctx context.Context, resourceGroupName string, serviceName string, sid string, options *armapimanagement.SubscriptionClientGetOptions) (armapimanagement.SubscriptionClientGetResponse, error)
 	ListSecrets(ctx context.Context, resourceGroupName string, serviceName string, sid string, options *armapimanagement.SubscriptionClientListSecretsOptions) (armapimanagement.SubscriptionClientListSecretsResponse, error)
 	CreateOrUpdate(ctx context.Context, resourceGroupName string, serviceName string, sid string, parameters armapimanagement.SubscriptionCreateParameters, options *armapimanagement.SubscriptionClientCreateOrUpdateOptions) (armapimanagement.SubscriptionClientCreateOrUpdateResponse, error)
+	Update(ctx context.Context, resourceGroupName string, serviceName string, sid string, ifMatch string, parameters armapimanagement.SubscriptionUpdateParameters, options *armapimanagement.SubscriptionClientUpdateOptions) (armapimanagement.SubscriptionClientUpdateResponse, error)
 	Delete(ctx context.Context, resourceGroupName string, serviceName string, sid string, ifMatch string, options *armapimanagement.SubscriptionClientDeleteOptions) (armapimanagement.SubscriptionClientDeleteResponse, error)
 }
 
@@ -66,6 +67,11 @@ type AZClientsFactory interface {
 	// method will append the default destination vault to the coordinate if a given model does not explicitly
 	// specify this.
 	GetDestinationVaultObjectCoordinate(coordinate AzKeyVaultObjectCoordinateModel, objType string) AzKeyVaultObjectCoordinate
+
+	// GetAzSubscription returns the Azure subscription. The return value is a value of v if it is a non-empty
+	// string, otherwise it is a default Azure subscription configured by this provider. An error is returned
+	// when neither input nor provider default yield a valid subscription.
+	GetAzSubscription(v string) (string, error)
 
 	// EnsureCanPlaceLabelledObjectAt ensures that objected originating from the ciphertext identified by uuid
 	// and ciphertext bearing labels can be placed at the target coordinate. The logic of this method is as follows:

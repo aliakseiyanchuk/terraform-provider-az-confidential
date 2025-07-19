@@ -80,7 +80,13 @@ func OutputDatasourcePasswordTerraformCode(mdl model.BaseTerraformCodeModel, kwp
 func OutputPasswordEncryptedContent(kwp *model.ContentWrappingParams, passwordString string) (string, error) {
 	helper := core.NewVersionedStringConfidentialDataHelper()
 	_ = helper.CreateConfidentialStringData(passwordString, resources.PasswordObjectType, kwp.GetLabels())
-	em, err := helper.ToEncryptedMessage(kwp.LoadedRsaPublicKey)
+
+	rsaKey, loadErr := kwp.LoadRsaPublicKey()
+	if loadErr != nil {
+		return "", loadErr
+	}
+
+	em, err := helper.ToEncryptedMessage(rsaKey)
 	if err != nil {
 		return "", err
 	}

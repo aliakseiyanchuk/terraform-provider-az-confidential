@@ -14,13 +14,13 @@ import (
 var namedValueTFTemplate string
 
 type TargetCLIParams struct {
-	SubscriptionId    string
+	AzSubscriptionId  string
 	ResourceGroupName string
 	ServiceName       string
 }
 
 func (ap *TargetCLIParams) SpecifiesTarget() bool {
-	return len(ap.SubscriptionId) > 0 && len(ap.ResourceGroupName) > 0 && len(ap.ServiceName) > 0
+	return len(ap.AzSubscriptionId) > 0 && len(ap.ResourceGroupName) > 0 && len(ap.ServiceName) > 0
 }
 
 type NamedValueCLIParams struct {
@@ -38,7 +38,7 @@ func (ap *NamedValueCLIParams) SpecifiesTarget() bool {
 func CreateNamedValuedArgParser() (*NamedValueCLIParams, *flag.FlagSet) {
 	var nvParms NamedValueCLIParams
 
-	var nvCmd = flag.NewFlagSet("named-value", flag.ContinueOnError)
+	var nvCmd = flag.NewFlagSet("named-value", flag.ExitOnError)
 
 	nvCmd.StringVar(&nvParms.inputFile,
 		"named-value-file",
@@ -50,7 +50,7 @@ func CreateNamedValuedArgParser() (*NamedValueCLIParams, *flag.FlagSet) {
 		false,
 		"Input is base-64 encoded")
 
-	nvCmd.StringVar(&nvParms.SubscriptionId,
+	nvCmd.StringVar(&nvParms.AzSubscriptionId,
 		"az-subscription-id",
 		"",
 		"Subscription Id where target APIM service resides")
@@ -142,7 +142,7 @@ func MakeNamedValueGenerator(kwp *model.ContentWrappingParams, args []string) (m
 			return nil, errors.New("options -az-subscription-id, -resource-group-name, -service-name, and -named-value must be supplied where ciphertext is labelled with its intended destination")
 		} else {
 			kwp.AddLabel(res_apim.GetDestinationNamedValueLabel(
-				namedValueParams.SubscriptionId,
+				namedValueParams.AzSubscriptionId,
 				namedValueParams.ResourceGroupName,
 				namedValueParams.ServiceName,
 				namedValueParams.namedValueName,
@@ -158,7 +158,7 @@ func MakeNamedValueGenerator(kwp *model.ContentWrappingParams, args []string) (m
 		},
 
 		DestinationNamedValue: NewNamedValueCoordinateModel(
-			namedValueParams.SubscriptionId,
+			namedValueParams.AzSubscriptionId,
 			namedValueParams.ResourceGroupName,
 			namedValueParams.ServiceName,
 			namedValueParams.namedValueName,
@@ -203,7 +203,13 @@ func OutputNamedValueTerraformCode(mdl NamedValueTerraformCodeModel, kwp model.C
 func OutputNamedValueEncryptedContent(kwp model.ContentWrappingParams, secretText string) (string, error) {
 	helper := core.NewVersionedStringConfidentialDataHelper()
 	_ = helper.CreateConfidentialStringData(secretText, res_apim.NamedValueObjectType, kwp.GetLabels())
-	em, err := helper.ToEncryptedMessage(kwp.LoadedRsaPublicKey)
+
+	rsaKey, loadErr := kwp.LoadRsaPublicKey()
+	if loadErr != nil {
+		return "", loadErr
+	}
+
+	em, err := helper.ToEncryptedMessage(rsaKey)
 	if err != nil {
 		return "", err
 	}

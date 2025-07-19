@@ -120,9 +120,8 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 		// Immutable read/update does not require decryption
 		azObj, resourceExistenceCheck, dg = d.ImmutableRU.DoRead(ctx, &data)
 	} else if d.MutableRU != nil {
-		// Mutable read/update requires decryption. This process is simplified compared to create because we don't
-		// really need to check. Also, a confidential text always triggers deletion, so checks for implicit moves
-		// hardening is not required.
+		// Mutable read/update requires decryption of the ciphertext. Because the update presents the possibilty
+		// of the injection, the ciphertext is checked for correctness
 
 		// Read Terraform prior state data into the model
 		resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
@@ -140,6 +139,30 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 		if resp.Diagnostics.HasError() {
 			return
 		}
+
+		if !slices.Contains(d.Specializer.GetSupportedConfidentialMaterialTypes(), rawMsg.Header.Type) {
+			resp.Diagnostics.AddError("Unexpected object type", fmt.Sprintf(
+				"Expected %s, got %s",
+				d.Specializer.GetSupportedConfidentialMaterialTypes(),
+				rawMsg.Header.Type))
+			return
+		}
+
+		placementDiags := d.Specializer.CheckPlacement(ctx, rawMsg.Header.Uuid, rawMsg.Header.Labels, &data)
+		resp.Diagnostics.Append(placementDiags...)
+		if resp.Diagnostics.HasError() {
+			tflog.Error(ctx, "checking possibility to place this object raised an error")
+			return
+		}
+
+		// Object tracking lookup is not performed at this point. In mutable read/update, the practitioner
+		// may have replaced the ciphertext with a new value or the state of the object may have drifted
+		// from what the ciphertext declares. Using identity schema may offer a place to store this information;
+		// however, it is not currently implemented due to Terraform version compatibility considerations.
+		//
+		// A recommended solution to use strict target labeling to counter the risk of copying an update.
+		//
+		// The update operation will track the object to make sure that new creations would not be possible.
 
 		confidentialMaterial := d.RehydrateConfidentialDataFromRawMessage(rawMsg, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
@@ -215,6 +238,24 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		return
 	}
 
+	// Check if this object was already placed somewhere else; in this case, the resource
+	// creation cannot be performed.
+	if d.factory.IsObjectTrackingEnabled() {
+		if objTracked, trackCheckErr := d.factory.IsObjectIdTracked(ctx, rawMsg.Header.Uuid); trackCheckErr != nil {
+			resp.Diagnostics.AddError(
+				"Cannot assert that this ciphertext was never previously used",
+				fmt.Sprintf("Attempt to check whether this ciphertext was previously used to create a resource erred: %s", trackCheckErr.Error()),
+			)
+			return
+		} else if objTracked {
+			resp.Diagnostics.AddError(
+				"Repeated use of ciphertext is detected",
+				fmt.Sprintf("It appears that this ciphertext was previously used to create a resource. Please re-create the ciphertext"),
+			)
+			return
+		}
+	}
+
 	confidentialMaterial := d.RehydrateConfidentialDataFromRawMessage(rawMsg, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -279,10 +320,10 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) G
 }
 
 func CreateDriftMessage(tkn string) string {
-	return fmt.Sprintf("---- DRIFT IN %s ----", strings.ToUpper(tkn))
+	return fmt.Sprintf("---- DRIFT IN %s CONFIDENTIAL DATA ----", strings.ToUpper(tkn))
 }
 
-var driftMessageExpr = regexp.MustCompile("^---- DRIFT IN .* ----$")
+var driftMessageExpr = regexp.MustCompile("^---- DRIFT IN .* CONFIDENTIAL DATA ----$")
 
 func IsDriftMessage(v string) bool {
 	return driftMessageExpr.MatchString(v)
@@ -303,9 +344,8 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) U
 		// Immutable read/update does not require decryption
 		azObj, dg = d.ImmutableRU.DoUpdate(ctx, &data)
 	} else if d.MutableRU != nil {
-		// Mutable read/update requires decryption. This process is simplified compared to create because we don't
-		// really need to check. Also, a confidential text always triggers deletion, so checks for implicit moves
-		// hardening is not required.
+		// Mutable read/update requires decryption. This process is simplified compared to create because
+		// read operation should have done all the necessary checks.
 
 		rawMsg := d.GetRawVersionedConfidentialDataMessage(ctx, data, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
@@ -318,6 +358,26 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) U
 		}
 
 		azObj, dg = d.MutableRU.DoUpdate(ctx, &data, confidentialMaterial)
+
+		// Track the object use
+		if d.factory.IsObjectTrackingEnabled() {
+			objTracked, objTrackErr := d.factory.IsObjectIdTracked(ctx, rawMsg.Header.Uuid)
+			if objTrackErr != nil {
+				resp.Diagnostics.AddError(
+					"Could not verify object tracking status after update",
+					objTrackErr.Error(),
+				)
+			}
+			if !objTracked {
+				if trackErr := d.factory.TrackObjectId(ctx, rawMsg.Header.Uuid); trackErr != nil {
+					resp.Diagnostics.AddError(
+						"Could not track the ciphertext use at update",
+						trackErr.Error(),
+					)
+				}
+			}
+		}
+
 	} else {
 		resp.Diagnostics.AddError("Incomplete resource configuration", "This resource does not define read/update methods")
 		return

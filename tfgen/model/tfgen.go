@@ -5,8 +5,8 @@ import (
 )
 
 type ContentWrappingParams struct {
-	Labels             []string
-	LoadedRsaPublicKey *rsa.PublicKey
+	Labels           []string
+	LoadRsaPublicKey func() (*rsa.PublicKey, error)
 
 	WrappingKeyCoordinate WrappingKey
 	AddTargetLabel        bool

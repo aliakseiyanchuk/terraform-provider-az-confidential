@@ -32,12 +32,10 @@ func Test_Key_OutputSecretTerraformCode_Renders(t *testing.T) {
 }
 
 func givenTypicalKeyWrappingParameters(t *testing.T) (KeyResourceTerraformModel, model.ContentWrappingParams) {
-	rsaKey, rsaLoadErr := core.LoadPublicKeyFromData(testkeymaterial.EphemeralRsaPublicKey)
-	assert.Nil(t, rsaLoadErr)
 
 	kwp := model.ContentWrappingParams{
 		Labels:                []string{"acceptance-testing"},
-		LoadedRsaPublicKey:    rsaKey,
+		LoadRsaPublicKey:      core.LoadPublicKeyFromDataOnce(testkeymaterial.EphemeralRsaPublicKey),
 		WrappingKeyCoordinate: model.NewWrappingKeyForExpressions("var.vault_name", "var.key_name", "var.key_version"),
 	}
 

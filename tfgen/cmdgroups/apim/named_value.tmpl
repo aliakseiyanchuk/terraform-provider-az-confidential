@@ -28,25 +28,25 @@ resource "az-confidential_apim_named_value" "{{ .TFBlockName }}" {
     # display_name = "confidential named value"
 
     destination_named_value = {
-        {{- if .DestinationNamedValue.AzSubscriptionId.IsSpecified }}
+        {{- if .DestinationNamedValue.AzSubscriptionId.IsDefined }}
         az_subscription_id = {{ .DestinationNamedValue.AzSubscriptionId.TerraformExpression}}
         {{- else }}
         # Specify a Azure subscription id where the APIM instance is created
         az_subscription_id = "...specify the subscription..."
         {{- end }}
-        {{- if .DestinationNamedValue.ResourceGroupName.IsSpecified }}
+        {{- if .DestinationNamedValue.ResourceGroupName.IsDefined }}
         resource_group = {{ .DestinationNamedValue.ResourceGroupName.TerraformExpression}}
         {{- else }}
         # Specify a Azure resource group  id where the APIM instance is created
         resource_group = "...specify the resource group name..."
         {{- end }}
-        {{- if .DestinationNamedValue.ServiceName.IsSpecified }}
+        {{- if .DestinationNamedValue.ServiceName.IsDefined }}
         api_management_name = {{ .DestinationNamedValue.ServiceName.TerraformExpression}}
         {{- else }}
         # Specify a Azure APIM service name
         api_management_name = "...specify the APIM service name..."
         {{- end }}
-        {{- if .DestinationNamedValue.NamedValue.IsSpecified }}
+        {{- if .DestinationNamedValue.NamedValue.IsDefined }}
         name = {{ .DestinationNamedValue.NamedValue.TerraformExpression}}
         {{- else }}
         # Specify the name this named value should use; may contain
@@ -57,16 +57,16 @@ resource "az-confidential_apim_named_value" "{{ .TFBlockName }}" {
 
     {{- if not .WrappingKeyCoordinate.IsEmpty }}
       wrapping_key = {
-        {{- if .WrappingKeyCoordinate.VaultName.IsSpecified }}
+        {{- if .WrappingKeyCoordinate.VaultName.IsDefined }}
             vault_name = {{ .WrappingKeyCoordinate.VaultName.TerraformExpression }}
         {{- end }}
-        {{- if .WrappingKeyCoordinate.KeyName.IsSpecified }}
+        {{- if .WrappingKeyCoordinate.KeyName.IsDefined }}
             name = {{ .WrappingKeyCoordinate.KeyName.TerraformExpression }}
         {{- end }}
-        {{- if .WrappingKeyCoordinate.KeyVersion.IsSpecified }}
+        {{- if .WrappingKeyCoordinate.KeyVersion.IsDefined }}
             version = {{ .WrappingKeyCoordinate.KeyVersion.TerraformExpression }}
         {{- end }}
-        {{- if .WrappingKeyCoordinate.Algorithm.IsSpecified }}
+        {{- if .WrappingKeyCoordinate.Algorithm.IsDefined }}
             algorithm = "{{ .WrappingKeyCoordinate.Algorithm.TerraformExpression }}"
         {{- end }}
       }

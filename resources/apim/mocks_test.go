@@ -14,6 +14,107 @@ func MockedAzObjectNotFoundError() error {
 	return errors.New("---------------\nRESPONSE 404: 404 Not Found")
 }
 
+type SubscriptionClientMock struct {
+	mock.Mock
+	core.ApimSubscriptionClientAbstraction
+}
+
+func (sc *SubscriptionClientMock) GivenUpdateErrs(resourceGroupName, serviceName, subId, errMsg string) {
+	var getOps *armapimanagement.SubscriptionClientUpdateOptions = nil
+	sc.On("Update", mock.Anything, resourceGroupName, serviceName, subId, "*", mock.Anything, getOps).
+		Return(armapimanagement.SubscriptionClientUpdateResponse{}, errors.New(errMsg))
+}
+
+func (sc *SubscriptionClientMock) GivenUpdate(resourceGroupName, serviceName, subId string) {
+	var getOps *armapimanagement.SubscriptionClientUpdateOptions = nil
+	sc.On("Update", mock.Anything, resourceGroupName, serviceName, subId, "*", mock.Anything, getOps).
+		Return(armapimanagement.SubscriptionClientUpdateResponse{}, nil)
+}
+
+func (sc *SubscriptionClientMock) GivenCreateOrUpdateErrs(resourceGroupName, serviceName, subId, errMsg string) {
+	var getOps *armapimanagement.SubscriptionClientCreateOrUpdateOptions = nil
+	sc.On("CreateOrUpdate", mock.Anything, resourceGroupName, serviceName, subId, mock.Anything, getOps).
+		Return(armapimanagement.SubscriptionClientCreateOrUpdateResponse{}, errors.New(errMsg))
+}
+
+func (sc *SubscriptionClientMock) GivenCreateOrUpdate(resourceGroupName, serviceName, subId string) {
+	var getOps *armapimanagement.SubscriptionClientCreateOrUpdateOptions = nil
+	sc.On("CreateOrUpdate", mock.Anything, resourceGroupName, serviceName, subId, mock.Anything, getOps).
+		Return(armapimanagement.SubscriptionClientCreateOrUpdateResponse{}, nil)
+}
+
+func (sc *SubscriptionClientMock) GivenListSecretsErrs(resourceGroupName, serviceName, subId, errMsg string) {
+	var getOps *armapimanagement.SubscriptionClientListSecretsOptions = nil
+	sc.On("ListSecrets", mock.Anything, resourceGroupName, serviceName, subId, getOps).
+		Return(armapimanagement.SubscriptionClientListSecretsResponse{}, errors.New(errMsg))
+}
+
+func (sc *SubscriptionClientMock) GivenListSecretsReturns(resourceGroupName, serviceName, subId, pk, sk string) {
+	var getOps *armapimanagement.SubscriptionClientListSecretsOptions = nil
+	sc.On("ListSecrets", mock.Anything, resourceGroupName, serviceName, subId, getOps).
+		Return(armapimanagement.SubscriptionClientListSecretsResponse{
+			SubscriptionKeysContract: armapimanagement.SubscriptionKeysContract{
+				PrimaryKey:   to.Ptr(pk),
+				SecondaryKey: to.Ptr(sk),
+			},
+		}, nil)
+}
+
+func (sc *SubscriptionClientMock) GivenDeleteErrs(resourceGroupName, serviceName, subId, errMsg string) {
+	var deleteOpts *armapimanagement.SubscriptionClientDeleteOptions = nil
+	sc.On("Delete", mock.Anything, resourceGroupName, serviceName, subId, "*", deleteOpts).
+		Return(armapimanagement.SubscriptionClientDeleteResponse{}, errors.New(errMsg))
+}
+
+func (sc *SubscriptionClientMock) GivenDeleteReturns(resourceGroupName, serviceName, subId string) {
+	var deleteOps *armapimanagement.SubscriptionClientDeleteOptions = nil
+	sc.On("Delete", mock.Anything, resourceGroupName, serviceName, subId, "*", deleteOps).
+		Return(armapimanagement.SubscriptionClientDeleteResponse{}, nil)
+}
+
+func (sc *SubscriptionClientMock) GivenGetErrs(resourceGroupName, serviceName, subId, errMsg string) {
+	var getOps *armapimanagement.SubscriptionClientGetOptions = nil
+	sc.On("Get", mock.Anything, resourceGroupName, serviceName, subId, getOps).
+		Return(armapimanagement.SubscriptionClientGetResponse{}, errors.New(errMsg))
+}
+
+func (sc *SubscriptionClientMock) GivenGetReturnsNotFound(resourceGroupName, serviceName, subId string) {
+	var getOps *armapimanagement.SubscriptionClientGetOptions = nil
+	sc.On("Get", mock.Anything, resourceGroupName, serviceName, subId, getOps).
+		Return(armapimanagement.SubscriptionClientGetResponse{}, MockedAzObjectNotFoundError())
+}
+
+func (sc *SubscriptionClientMock) GivenGetReturns(resourceGroupName, serviceName, subId string) {
+	var getOps *armapimanagement.SubscriptionClientGetOptions = nil
+	sc.On("Get", mock.Anything, resourceGroupName, serviceName, subId, getOps).
+		Return(armapimanagement.SubscriptionClientGetResponse{}, nil)
+}
+
+func (sc *SubscriptionClientMock) Get(ctx context.Context, resourceGroupName string, serviceName string, sid string, options *armapimanagement.SubscriptionClientGetOptions) (armapimanagement.SubscriptionClientGetResponse, error) {
+	args := sc.Called(ctx, resourceGroupName, serviceName, sid, options)
+	return args.Get(0).(armapimanagement.SubscriptionClientGetResponse), args.Error(1)
+}
+
+func (sc *SubscriptionClientMock) ListSecrets(ctx context.Context, resourceGroupName string, serviceName string, sid string, options *armapimanagement.SubscriptionClientListSecretsOptions) (armapimanagement.SubscriptionClientListSecretsResponse, error) {
+	args := sc.Called(ctx, resourceGroupName, serviceName, sid, options)
+	return args.Get(0).(armapimanagement.SubscriptionClientListSecretsResponse), args.Error(1)
+}
+
+func (sc *SubscriptionClientMock) CreateOrUpdate(ctx context.Context, resourceGroupName string, serviceName string, sid string, parameters armapimanagement.SubscriptionCreateParameters, options *armapimanagement.SubscriptionClientCreateOrUpdateOptions) (armapimanagement.SubscriptionClientCreateOrUpdateResponse, error) {
+	args := sc.Called(ctx, resourceGroupName, serviceName, sid, parameters, options)
+	return args.Get(0).(armapimanagement.SubscriptionClientCreateOrUpdateResponse), args.Error(1)
+}
+
+func (sc *SubscriptionClientMock) Update(ctx context.Context, resourceGroupName string, serviceName string, sid string, ifMatch string, parameters armapimanagement.SubscriptionUpdateParameters, options *armapimanagement.SubscriptionClientUpdateOptions) (armapimanagement.SubscriptionClientUpdateResponse, error) {
+	args := sc.Called(ctx, resourceGroupName, serviceName, sid, ifMatch, parameters, options)
+	return args.Get(0).(armapimanagement.SubscriptionClientUpdateResponse), args.Error(1)
+}
+
+func (sc *SubscriptionClientMock) Delete(ctx context.Context, resourceGroupName string, serviceName string, sid string, ifMatch string, options *armapimanagement.SubscriptionClientDeleteOptions) (armapimanagement.SubscriptionClientDeleteResponse, error) {
+	args := sc.Called(ctx, resourceGroupName, serviceName, sid, ifMatch, options)
+	return args.Get(0).(armapimanagement.SubscriptionClientDeleteResponse), args.Error(1)
+}
+
 type NamedValuePollerMock[T any] struct {
 	mock.Mock
 	core.PollerAbstraction[T]
@@ -174,12 +275,38 @@ func (m *AZClientsFactoryMock) GivenGetApimNamedValueClient(subId string, cl cor
 		Return(cl, nil)
 }
 
+func (m *AZClientsFactoryMock) GivenGetApimSubscriptionClientErrs(subId, errMsg string) {
+	m.On("GetApimSubscriptionClient", subId).
+		Return(nil, errors.New(errMsg))
+}
+
+func (m *AZClientsFactoryMock) GivenGetApimSubscriptionClientIsNil(subId string) {
+	m.On("GetApimSubscriptionClient", subId).
+		Return(nil, nil)
+}
+
+func (m *AZClientsFactoryMock) GivenGetApimSubscriptionClient(subId string, cl core.ApimSubscriptionClientAbstraction) {
+	m.On("GetApimSubscriptionClient", subId).
+		Return(cl, nil)
+}
+
 func (m *AZClientsFactoryMock) GetApimNamedValueClient(subId string) (core.ApimNamedValueClientAbstraction, error) {
 	args := m.Called(subId)
 
 	var rv core.ApimNamedValueClientAbstraction
 	if args.Get(0) != nil {
 		rv = args.Get(0).(core.ApimNamedValueClientAbstraction)
+	}
+
+	return rv, args.Error(1)
+}
+
+func (m *AZClientsFactoryMock) GetApimSubscriptionClient(subId string) (core.ApimSubscriptionClientAbstraction, error) {
+	args := m.Called(subId)
+
+	var rv core.ApimSubscriptionClientAbstraction
+	if args.Get(0) != nil {
+		rv = args.Get(0).(core.ApimSubscriptionClientAbstraction)
 	}
 
 	return rv, args.Error(1)
@@ -197,4 +324,19 @@ func (m *AZClientsFactoryMock) IsObjectTrackingEnabled() bool {
 
 func (m *AZClientsFactoryMock) GivenIsObjectTrackingEnabled(enableOpt bool) {
 	m.On("IsObjectTrackingEnabled").Return(enableOpt)
+}
+
+func (m *AZClientsFactoryMock) GetAzSubscription(v string) (string, error) {
+	rv := m.Mock.Called(v)
+	return rv.Get(0).(string), rv.Error(1)
+}
+
+func (m *AZClientsFactoryMock) GivenGetAzSubscriptionErrs(inSub, errMsg string) {
+	m.On("GetAzSubscription", inSub).
+		Return(inSub, errors.New(errMsg))
+}
+
+func (m *AZClientsFactoryMock) GivenGetAzSubscription(inSub, rvSub string) {
+	m.On("GetAzSubscription", inSub).
+		Return(rvSub, nil)
 }
