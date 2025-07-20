@@ -4,7 +4,6 @@ import (
 	_ "embed"
 	"errors"
 	"flag"
-	"fmt"
 	res_apim "github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/apim"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 )
@@ -150,7 +149,7 @@ func MakeSubscriptionGenerator(kwp *model.ContentWrappingParams, args []string) 
 		BaseTerraformCodeModel: model.NewBaseTerraformCodeModel(kwp, "subscription"),
 
 		DisplayName:  model.NewStringTerraformFieldExpressionWithValue("confidentialSubscription"),
-		State:        model.NewStringTerraformFieldExpressionWithValue("submitted"),
+		State:        model.NewStringTerraformFieldExpressionWithValue("active"),
 		AllowTracing: model.NewBoolTerraformFieldValueExpression(false),
 
 		DestinationSubscription: NewSubscriptionCoordinateModel(
@@ -205,8 +204,6 @@ func OutputSubscriptionTerraformCode(mdl SubscriptionTerraformCodeModel, kwp mod
 	if err != nil {
 		return s, err
 	}
-
-	fmt.Println(s)
 
 	mdl.EncryptedContent.SetValue(s)
 	return model.Render("apim/subscription", subscriptionTerraformTemplate, &mdl)

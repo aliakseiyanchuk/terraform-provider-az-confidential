@@ -4,7 +4,6 @@ import (
 	_ "embed"
 	"errors"
 	"flag"
-	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	res_apim "github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/apim"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
@@ -193,8 +192,6 @@ func OutputNamedValueTerraformCode(mdl NamedValueTerraformCodeModel, kwp model.C
 	if err != nil {
 		return s, err
 	}
-
-	fmt.Println(s)
 
 	mdl.EncryptedContent.SetValue(s)
 	return model.Render("apim/namedValue", namedValueTFTemplate, &mdl)

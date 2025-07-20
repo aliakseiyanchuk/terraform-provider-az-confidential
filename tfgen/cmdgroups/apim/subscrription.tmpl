@@ -11,7 +11,11 @@
 # ----------------------------------------------------------------------------
 
 resource "az-confidential_apim_subscription" "{{ .TFBlockName }}" {
-   content = {{ .EncryptedContent.TerraformExpression }}
+   content = <<-CIPHERTEXT
+            {{- range $value := fold80 .EncryptedContent.TerraformExpression }}
+            {{ $value }}
+            {{- end }}
+            CIPHERTEXT
 
    {{- if .DisplayName.IsDefined }}
    display_name = {{ .DisplayName.TerraformExpression }}
@@ -40,43 +44,52 @@ resource "az-confidential_apim_subscription" "{{ .TFBlockName }}" {
         {{- if .DestinationSubscription.AzSubscriptionId.IsDefined }}
         az_subscription_id = {{ .DestinationSubscription.AzSubscriptionId.TerraformExpression}}
         {{- else }}
+        #
         # It is possible to specify an Azure subscription id if provider does not have a default one,
-        # of if subscription has to be created in a APIM service in a different subscription.
+        # or if subscription has to be created in a APIM service in a different subscription.
         # az_subscription_id = "...specify the subscription..."
         {{- end }}
         {{- if .DestinationSubscription.ResourceGroupName.IsDefined }}
         resource_group = {{ .DestinationSubscription.ResourceGroupName.TerraformExpression}}
         {{- else }}
+        #
         # Specify a Azure resource group  id where the APIM instance is created
         resource_group = "...specify the resource group name..."
         {{- end }}
         {{- if .DestinationSubscription.ServiceName.IsDefined }}
         api_management_name = {{ .DestinationSubscription.ServiceName.TerraformExpression}}
         {{- else }}
+        #
         # Specify a Azure APIM service name
         api_management_name = "...specify the APIM service name..."
         {{- end }}
         {{- if .DestinationSubscription.SubscriptionId.IsDefined }}
         subscription_id = {{ .DestinationSubscription.SubscriptionId.TerraformExpression}}
+        #
         {{- else }}
-        # Specify the identifier for this subscription
+        #
+        # You can specify the identifier for this subscription; leave empty to
+        # have a subscription Id to be generated (it will be uuid-based).
         # subscription_id = "...specify the APIM subscription id..."
         {{- end }}
         {{- if .DestinationSubscription.ProductId.IsDefined }}
         product_id = {{ .DestinationSubscription.ProductId.TerraformExpression}}
         {{- else }}
-        # Specify the API product
+        #
+        # Specify the API product this subscription refers to
         # product_id = "...specify the APIM product this subscription will be associated with..."
         {{- end }}
         {{- if .DestinationSubscription.ApiId.IsDefined }}
         api_id = {{ .DestinationSubscription.ApiId.TerraformExpression}}
         {{- else }}
+        #
         # Specify the API this subscription will be bound with
         # api_id = "...specify the API this subscription will be associated with..."
         {{- end }}
         {{- if .DestinationSubscription.UserId.IsDefined }}
         user_id = {{ .DestinationSubscription.UserId.TerraformExpression}}
         {{- else }}
+        #
         # Specify the API this subscription will be bound with
         # user_id = "...specify the user Id "
         {{- end }}

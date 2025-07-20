@@ -76,7 +76,9 @@ func NewBaseTerraformCodeModel(kwp *ContentWrappingParams, blockName string) Bas
 		TFBlockName:           blockName,
 		CiphertextLabels:      kwp.GetLabels(),
 		WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
-		EncryptedContent:      NewStringTerraformFieldExpression(),
+		// The Terraform resources should be provided in the Heredoc
+		// style for added readability.
+		EncryptedContent: NewStringTerraformFieldHeredocExpression(),
 	}
 }
 

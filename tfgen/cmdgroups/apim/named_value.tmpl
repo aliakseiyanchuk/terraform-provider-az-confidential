@@ -1,9 +1,20 @@
+# ----------------------------------------------------------------------------
 #
-# Minimal terraform code for your example:
+# Azure API Management Named Value Resource
+#
+# The resource allows importing pre-set named values into an API management
+# service. Although the same can be achieved with Key Vault integration, in
+# some cases this approach will prove more advantageous owing to the lowered
+# churn of Key Vault objects.
+#
 # ----------------------------------------------------------------------------
 
 resource "az-confidential_apim_named_value" "{{ .TFBlockName }}" {
-   content = {{ .EncryptedContent.TerraformExpression }}
+   content = <<-CIPHERTEXT
+            {{- range $value := fold80 .EncryptedContent.TerraformExpression }}
+            {{ $value }}
+            {{- end }}
+            CIPHERTEXT
 
     {{- if .Tags.IncludeTags }}
     tags = [

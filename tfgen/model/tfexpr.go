@@ -81,6 +81,15 @@ func NewStringTerraformFieldExpression() TerraformFieldExpression[string] {
 	return rv
 }
 
+func NewStringTerraformFieldHeredocExpression() TerraformFieldExpression[string] {
+	rv := TerraformFieldExpression[string]{
+		IsNil:     true,
+		isDefined: false,
+		Mapper:    func(s string) string { return s },
+	}
+	return rv
+}
+
 func NewStringTerraformFieldExpressionWithValue(v string) TerraformFieldExpression[string] {
 	rv := NewStringTerraformFieldExpression()
 	rv.SetValue(v)
