@@ -54,7 +54,7 @@ func CreateKeyArgsParser() (*KeyTFGenParams, *flag.FlagSet) {
 		"",
 		"Destination vault name")
 
-	keyCmd.StringVar(&keyParams.vaultName,
+	keyCmd.StringVar(&keyParams.vaultObjectName,
 		"destination-key-name",
 		"",
 		"Destination key name")
