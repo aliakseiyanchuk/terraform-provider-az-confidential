@@ -3,7 +3,11 @@
 # ----------------------------------------------------------------------------
 
 resource "az-confidential_certificate" "{{ .TFBlockName }}" {
-  content = "{{ .EncryptedContent }}"
+  content = <<-CIPHERTEXT
+         {{- range $value := fold80 .EncryptedContent.TerraformExpression }}
+         {{ $value }}
+         {{- end }}
+         CIPHERTEXT
 
   # This certificate is enabled for operation. Optionally, there is an option
   # to temporarily disable it.

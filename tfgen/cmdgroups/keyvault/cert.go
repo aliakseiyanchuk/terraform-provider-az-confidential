@@ -56,7 +56,7 @@ func CreateCertArgsParser() (*CertTFGenParams, *flag.FlagSet) {
 		"",
 		"Destination vault name")
 
-	certCmd.StringVar(&certParams.vaultName,
+	certCmd.StringVar(&certParams.vaultObjectName,
 		"destination-cert-name",
 		"",
 		"Destination certificate name")
@@ -101,6 +101,10 @@ func MakeCertGenerator(kwp *model.ContentWrappingParams, args ...string) (model.
 		NotBeforeExample: model.NotBeforeExample(),
 		NotAfterExample:  model.NotAfterExample(),
 	}
+
+	fmt.Println(mdl.DestinationCoordinate.VaultName.TerraformExpression())
+	fmt.Println(mdl.DestinationCoordinate.VaultName.IsDefined())
+	fmt.Println(mdl.DestinationCoordinate.ObjectName.TerraformExpression())
 
 	return func(kwp model.ContentWrappingParams, inputReader model.InputReader, onlyCiphertext bool) (string, error) {
 		certData, certDataErr := AcquireCertificateData(certParams, inputReader)

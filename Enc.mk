@@ -29,27 +29,27 @@ encrypt_password_openssl_no_label:
 # Encrypt text secret read from the command-line
 encrypt_secret:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_OBJECT} \
 	${LABELS} \
-	secret
+	kv secret \
+	-destination-vault ${OUTPUT_VAULT_NAME} -destination-secret-name ${OUTPUT_VAULT_OBJECT} \
 
 # Encrypt text secret read from the command-line
 encrypt_password:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
 	${LABELS} \
-	password
+	general password
 
 encrypt_key:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
 	${LABELS} \
-	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_OBJECT} \
-	key
+	kv key \
+	-destination-vault ${OUTPUT_VAULT_NAME} -destination-key-name ${OUTPUT_VAULT_OBJECT} \
 
 encrypt_cert:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
 	${LABELS} \
-	-output-vault ${OUTPUT_VAULT_NAME} -output-vault-object ${OUTPUT_VAULT_OBJECT} \
-	certificate
+	kv certificate \
+	-destination-vault ${OUTPUT_VAULT_NAME} -destination-cert-name ${OUTPUT_VAULT_OBJECT} \
 
 encrypt_apim_named_value:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \

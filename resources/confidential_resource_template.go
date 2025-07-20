@@ -96,7 +96,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		return
 	}
 
-	d.Specializer.SetFactory(d.factory)
+	d.Specializer.SetFactory(d.Factory)
 }
 
 func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
@@ -240,8 +240,8 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 
 	// Check if this object was already placed somewhere else; in this case, the resource
 	// creation cannot be performed.
-	if d.factory.IsObjectTrackingEnabled() {
-		if objTracked, trackCheckErr := d.factory.IsObjectIdTracked(ctx, rawMsg.Header.Uuid); trackCheckErr != nil {
+	if d.Factory.IsObjectTrackingEnabled() {
+		if objTracked, trackCheckErr := d.Factory.IsObjectIdTracked(ctx, rawMsg.Header.Uuid); trackCheckErr != nil {
 			resp.Diagnostics.AddError(
 				"Cannot assert that this ciphertext was never previously used",
 				fmt.Sprintf("Attempt to check whether this ciphertext was previously used to create a resource erred: %s", trackCheckErr.Error()),
@@ -273,7 +273,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-	if trackErr := d.factory.TrackObjectId(ctx, rawMsg.Header.Uuid); trackErr != nil {
+	if trackErr := d.Factory.TrackObjectId(ctx, rawMsg.Header.Uuid); trackErr != nil {
 		errMsg := fmt.Sprintf("could not track the object entered into the state: %s", trackErr.Error())
 		tflog.Error(ctx, errMsg)
 		resp.Diagnostics.AddError("Incomplete object tracking", errMsg)
@@ -360,8 +360,8 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) U
 		azObj, dg = d.MutableRU.DoUpdate(ctx, &data, confidentialMaterial)
 
 		// Track the object use
-		if d.factory.IsObjectTrackingEnabled() {
-			objTracked, objTrackErr := d.factory.IsObjectIdTracked(ctx, rawMsg.Header.Uuid)
+		if d.Factory.IsObjectTrackingEnabled() {
+			objTracked, objTrackErr := d.Factory.IsObjectIdTracked(ctx, rawMsg.Header.Uuid)
 			if objTrackErr != nil {
 				resp.Diagnostics.AddError(
 					"Could not verify object tracking status after update",
@@ -369,7 +369,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) U
 				)
 			}
 			if !objTracked {
-				if trackErr := d.factory.TrackObjectId(ctx, rawMsg.Header.Uuid); trackErr != nil {
+				if trackErr := d.Factory.TrackObjectId(ctx, rawMsg.Header.Uuid); trackErr != nil {
 					resp.Diagnostics.AddError(
 						"Could not track the ciphertext use at update",
 						trackErr.Error(),

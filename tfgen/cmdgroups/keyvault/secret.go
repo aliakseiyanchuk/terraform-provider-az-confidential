@@ -27,7 +27,7 @@ func CreateSecretArgParser() (*KeyVaultGroupCLIParams, *flag.FlagSet) {
 		"",
 		"Destination vault name")
 
-	secretCmd.StringVar(&secretParams.vaultName,
+	secretCmd.StringVar(&secretParams.vaultObjectName,
 		"destination-secret-name",
 		"",
 		"Destination secret name")
@@ -66,11 +66,15 @@ func MakeSecretGenerator(kwp *model.ContentWrappingParams, args []string) (model
 			TFBlockName:           "secret",
 			CiphertextLabels:      kwp.GetLabels(),
 			WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
+			//EncryptedContent:      model.NewStringTerraformFieldExpression(),
 		},
 
 		TagsModel: model.TagsModel{
-			IncludeTags: false,
+			IncludeTags: true,
 		},
+
+		NotBeforeExample: model.NotBeforeExample(),
+		NotAfterExample:  model.NotAfterExample(),
 
 		DestinationCoordinate: NewObjectCoordinateModel(secretParams.vaultName, secretParams.vaultObjectName),
 	}

@@ -17,7 +17,7 @@ type TerraformFieldExpression[T any] struct {
 func (expr *TerraformFieldExpression[T]) SetValue(v T) {
 	expr.Value = v
 	expr.IsNil = false
-	expr.isDefined = false
+	expr.isDefined = true
 	expr.Expression = ""
 }
 

@@ -347,17 +347,17 @@ func WrappedConfidentialMaterialModelDatasourceSchema(moreAttrs map[string]datas
 
 // CommonConfidentialResource common methods for all confidential resources
 type CommonConfidentialResource struct {
-	factory core.AZClientsFactory
+	Factory core.AZClientsFactory
 }
 
 func (d *CommonConfidentialResource) ExtractConfidentialModelPlainText(ctx context.Context, mdl ConfidentialMaterialModel, diagnostics *diag.Diagnostics) []byte {
-	if d.factory == nil {
-		diagnostics.AddError("incomplete provider configuration", "provider does no have an initialized Azure objects factory")
+	if d.Factory == nil {
+		diagnostics.AddError("incomplete provider configuration", "provider does no have an initialized Azure objects Factory")
 		return nil
 	}
 
 	// To create a secret, a coordinate of the wrapping key needs to be established and known
-	wrappingKeyCoordinate := d.factory.GetMergedWrappingKeyCoordinate(ctx, mdl.WrappingKeyCoordinate, diagnostics)
+	wrappingKeyCoordinate := d.Factory.GetMergedWrappingKeyCoordinate(ctx, mdl.WrappingKeyCoordinate, diagnostics)
 	if diagnostics.HasError() {
 		tflog.Error(ctx, "Wrapping key coordinate resulted in error diagnostics; this is probably incomplete/inconsistent configuration")
 		return nil
@@ -369,7 +369,7 @@ func (d *CommonConfidentialResource) ExtractConfidentialModelPlainText(ctx conte
 		return nil
 	}
 
-	payloadBytes, pbErr := em.ExtractPlainText(d.factory.GetDecrypterFor(ctx, wrappingKeyCoordinate))
+	payloadBytes, pbErr := em.ExtractPlainText(d.Factory.GetDecrypterFor(ctx, wrappingKeyCoordinate))
 	if pbErr != nil {
 		diagnostics.AddError("Failed to decrypt message", fmt.Sprintf("Encrypted message cannot be decrypted: %s", pbErr.Error()))
 		return nil
@@ -400,7 +400,7 @@ func (d *ConfidentialDatasourceBase) Configure(ctx context.Context, req datasour
 		return
 	}
 
-	d.factory = factory
+	d.Factory = factory
 }
 
 type ConfidentialResourceBase struct {
@@ -425,5 +425,5 @@ func (d *ConfidentialResourceBase) Configure(ctx context.Context, req resource.C
 		return
 	}
 
-	d.factory = factory
+	d.Factory = factory
 }

@@ -12,8 +12,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
-	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/apim"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/general"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/keyvault"
 	"github.com/hashicorp/terraform-plugin-framework-validators/providervalidator"
 	tfsetvalidators "github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
@@ -526,7 +526,7 @@ func (p *AZConnectorProviderImpl) Schema(_ context.Context, _ tfprovider.SchemaR
 func (p *AZConnectorProviderImpl) DataSources(ctx context.Context) []func() datasource.DataSource {
 	tflog.Debug(ctx, "AzConfidential: initializing data sources")
 	return []func() datasource.DataSource{
-		resources.NewConfidentialPasswordDataSource,
+		general.NewConfidentialPasswordDataSource,
 	}
 }
 

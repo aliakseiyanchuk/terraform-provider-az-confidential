@@ -4,7 +4,7 @@ import (
 	_ "embed"
 	"flag"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
-	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/general"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 )
 
@@ -79,7 +79,7 @@ func OutputDatasourcePasswordTerraformCode(mdl model.BaseTerraformCodeModel, kwp
 
 func OutputPasswordEncryptedContent(kwp *model.ContentWrappingParams, passwordString string) (string, error) {
 	helper := core.NewVersionedStringConfidentialDataHelper()
-	_ = helper.CreateConfidentialStringData(passwordString, resources.PasswordObjectType, kwp.GetLabels())
+	_ = helper.CreateConfidentialStringData(passwordString, general.PasswordObjectType, kwp.GetLabels())
 
 	rsaKey, loadErr := kwp.LoadRsaPublicKey()
 	if loadErr != nil {

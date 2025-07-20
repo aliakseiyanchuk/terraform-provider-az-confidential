@@ -85,7 +85,11 @@ func (p *BaseTerraformCodeModel) HasCiphertextLabels() bool {
 }
 
 func Render(templateName, templateStr string, obj interface{}) (string, error) {
-	tmpl, templErr := template.New(templateName).Parse(templateStr)
+	funcMap := template.FuncMap{
+		"fold80": func(s string) []string { return FoldString(s, 80) },
+	}
+
+	tmpl, templErr := template.New(templateName).Funcs(funcMap).Parse(templateStr)
 	if templErr != nil {
 		panic(templErr)
 	}
@@ -104,4 +108,23 @@ func NotBeforeExample() string {
 func NotAfterExample() string {
 	t := time.Now().AddDate(1, 0, 0)
 	return core.FormatTime(&t).ValueString()
+}
+
+func FoldString(v string, width int) []string {
+	strLength := len(v)
+	arrLength := strLength / width
+	if strLength%width != 0 {
+		arrLength++
+	}
+
+	rv := make([]string, arrLength)
+	for i := 0; i*width < strLength; i++ {
+		usableWidth := width
+		if (i+1)*width > strLength {
+			usableWidth = strLength - i*width
+		}
+		rv[i] = v[i*width : i*width+usableWidth]
+	}
+
+	return rv
 }

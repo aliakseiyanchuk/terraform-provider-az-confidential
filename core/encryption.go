@@ -23,6 +23,7 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwk"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -184,8 +185,12 @@ func (em *EncryptedMessage) ToBase64PEM() string {
 	return base64.StdEncoding.EncodeToString(GZipCompress(em.ToPEM()))
 }
 
+var whitespace = regexp.MustCompile("\\s+")
+
 func (em *EncryptedMessage) FromBase64PEM(v string) error {
-	gzipped, err := base64.StdEncoding.DecodeString(v)
+	vWithoutWhitespace := whitespace.ReplaceAllString(v, "")
+
+	gzipped, err := base64.StdEncoding.DecodeString(vWithoutWhitespace)
 	if err != nil {
 		return fmt.Errorf("input must be a valid Base-64 encoded string; this error occured: %s", err.Error())
 	}

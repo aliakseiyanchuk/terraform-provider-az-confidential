@@ -1,4 +1,4 @@
-package resources
+package general
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -16,7 +17,7 @@ import (
 
 // ConfidentialPasswordModel Model for the encrypted password in the configuration that can be unwrapped into the state file.
 type ConfidentialPasswordModel struct {
-	ConfidentialMaterialModel
+	resources.ConfidentialMaterialModel
 	PlaintextPassword       types.String `tfsdk:"plaintext_password"`
 	PlaintextPasswordBase64 types.String `tfsdk:"plaintext_password_b64"`
 	PlaintextPasswordHex    types.String `tfsdk:"plaintext_password_hex"`
@@ -40,7 +41,7 @@ func (cpm *ConfidentialPasswordModel) Accept(uuid string, unwrappedPayload core.
 }
 
 type ConfidentialPasswordDataSource struct {
-	ConfidentialDatasourceBase
+	resources.ConfidentialDatasourceBase
 }
 
 func (d *ConfidentialPasswordDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -71,14 +72,14 @@ func (d *ConfidentialPasswordDataSource) Schema(_ context.Context, _ datasource.
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
 		MarkdownDescription: "Datasource providing password decryption",
-		Attributes:          WrappedConfidentialMaterialModelDatasourceSchema(specificAttr),
+		Attributes:          resources.WrappedConfidentialMaterialModelDatasourceSchema(specificAttr),
 	}
 
 	resp.Schema = schema.Schema{
 		Description:         "Datasource unwrapping a password into state",
 		MarkdownDescription: passwordDataSourceMarkdownDescription,
 
-		Attributes: WrappedConfidentialMaterialModelDatasourceSchema(specificAttr),
+		Attributes: resources.WrappedConfidentialMaterialModelDatasourceSchema(specificAttr),
 	}
 }
 
@@ -93,8 +94,17 @@ func (d *ConfidentialPasswordDataSource) Read(ctx context.Context, req datasourc
 		return
 	}
 
-	plainText := d.ExtractConfidentialModelPlainText(ctx, data.ConfidentialMaterialModel, &resp.Diagnostics)
+	plainTextGzip := d.ExtractConfidentialModelPlainText(ctx, data.ConfidentialMaterialModel, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	plainText, gzipErr := core.GZipDecompress(plainTextGzip)
+	if gzipErr != nil {
+		resp.Diagnostics.AddError(
+			"Plain-text data structure message is not gzip-compressed",
+			fmt.Sprintf("Plain-text data structure must be gzip compressed; attempting to perfrom gunzip returend this error: %s. This is an error on the ciphertext preparation. Please use tfgen tool or provider's function to compute the ciphertext", gzipErr.Error()),
+		)
 		return
 	}
 
@@ -112,14 +122,14 @@ func (d *ConfidentialPasswordDataSource) Read(ctx context.Context, req datasourc
 		resp.Diagnostics.AddError("Mismatching confidential object type", fmt.Sprintf("Expected `password`, received `%s`", rawMsg.Header.Type))
 	}
 
-	d.factory.EnsureCanPlaceLabelledObjectAt(ctx, rawMsg.Header.Uuid, rawMsg.Header.Labels, "password", nil, &resp.Diagnostics)
+	d.Factory.EnsureCanPlaceLabelledObjectAt(ctx, rawMsg.Header.Uuid, rawMsg.Header.Labels, "password", nil, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		tflog.Error(ctx, "checking possibility to place this object raised an error")
 		return
 	}
 
 	helper := core.NewVersionedStringConfidentialDataHelper()
-	confidentialData, importErr := helper.Import(plainText, rawMsg.Header.ModelReference)
+	confidentialData, importErr := helper.Import(rawMsg.ConfidentialData, rawMsg.Header.ModelReference)
 	if importErr != nil {
 		tflog.Error(ctx, "diagnostics contain error after unwrapping the ciphertext; cannot continue")
 		resp.Diagnostics.AddError(
@@ -127,6 +137,10 @@ func (d *ConfidentialPasswordDataSource) Read(ctx context.Context, req datasourc
 			fmt.Sprintf("Plain text could not be parsed for further processing due to this error: %s. Are you specifying correct ciphertext for this datasource?", importErr.Error()),
 		)
 		return
+	}
+
+	if len(confidentialData.GetStingData()) == 0 {
+		resp.Diagnostics.AddWarning("Empty confidential data", "Confidential data that this password encrypts seems to be empty")
 	}
 
 	data.Accept(rawMsg.Header.Uuid, confidentialData)
