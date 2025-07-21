@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"errors"
 	"flag"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	res_apim "github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/apim"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 )
@@ -129,11 +130,11 @@ func MakeSubscriptionGenerator(kwp *model.ContentWrappingParams, args []string) 
 		return nil, parseErr
 	}
 
-	if kwp.AddTargetLabel {
+	if kwp.LockPlacement {
 		if !subscriptionParam.SpecifiesTarget() {
 			return nil, errors.New("at least options -az-subscription-id, -resource-group-name, and -service-name must be supplied where ciphertext is labelled with its intended destination")
 		} else {
-			kwp.AddLabel(res_apim.GetDestinationSubscriptionLabel(
+			kwp.AddPlacementConstraints(core.PlacementConstraint(res_apim.GetDestinationSubscriptionLabel(
 				subscriptionParam.AzSubscriptionId,
 				subscriptionParam.ResourceGroupName,
 				subscriptionParam.ServiceName,
@@ -141,7 +142,7 @@ func MakeSubscriptionGenerator(kwp *model.ContentWrappingParams, args []string) 
 				subscriptionParam.apiScope,
 				subscriptionParam.productScope,
 				subscriptionParam.owner,
-			))
+			)))
 		}
 	}
 
@@ -163,7 +164,7 @@ func MakeSubscriptionGenerator(kwp *model.ContentWrappingParams, args []string) 
 		),
 	}
 
-	return func(kwp model.ContentWrappingParams, inputReader model.InputReader, onlyCiphertext bool) (string, error) {
+	return func(inputReader model.InputReader, onlyCiphertext bool) (string, error) {
 		primaryKey, readErr := inputReader("Enter primary subscription key",
 			subscriptionParam.primaryKeyFile,
 			false,
@@ -199,7 +200,7 @@ func MakeSubscriptionGenerator(kwp *model.ContentWrappingParams, args []string) 
 	}, nil
 }
 
-func OutputSubscriptionTerraformCode(mdl SubscriptionTerraformCodeModel, kwp model.ContentWrappingParams, primary, secondary string) (string, error) {
+func OutputSubscriptionTerraformCode(mdl SubscriptionTerraformCodeModel, kwp *model.ContentWrappingParams, primary, secondary string) (string, error) {
 	s, err := OutputSubscriptionEncryptedContent(kwp, primary, secondary)
 	if err != nil {
 		return s, err
@@ -209,9 +210,11 @@ func OutputSubscriptionTerraformCode(mdl SubscriptionTerraformCodeModel, kwp mod
 	return model.Render("apim/subscription", subscriptionTerraformTemplate, &mdl)
 }
 
-func OutputSubscriptionEncryptedContent(kwp model.ContentWrappingParams, primary, secondary string) (string, error) {
+func OutputSubscriptionEncryptedContent(kwp *model.ContentWrappingParams, primary, secondary string) (string, error) {
+	kwp.ObjectType = res_apim.SubscriptionObjectType
+
 	helper := res_apim.NewConfidentialSubscriptionHelper()
-	_ = helper.CreateSubscriptionData(primary, secondary, res_apim.SubscriptionObjectType, kwp.GetLabels())
+	_ = helper.CreateSubscriptionData(primary, secondary, kwp.VersionedConfidentialMetadata)
 
 	rsaKey, loadErr := kwp.LoadRsaPublicKey()
 	if loadErr != nil {

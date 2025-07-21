@@ -13,7 +13,9 @@ import (
 func TestWillRenderFullSubscriptionModel(t *testing.T) {
 
 	kwp := model.ContentWrappingParams{
-		Labels:                []string{"acceptance-testing"},
+		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
+		},
 		LoadRsaPublicKey:      core.LoadPublicKeyFromDataOnce(testkeymaterial.EphemeralRsaPublicKey),
 		WrappingKeyCoordinate: model.NewWrappingKeyForExpressions("var.vault_name", "var.key_name", "var.key_version"),
 	}
@@ -36,7 +38,7 @@ func TestWillRenderFullSubscriptionModel(t *testing.T) {
 		),
 	}
 
-	v, err := OutputSubscriptionTerraformCode(mdl, kwp, "a", "b")
+	v, err := OutputSubscriptionTerraformCode(mdl, &kwp, "a", "b")
 	assert.Nil(t, err)
 	if err != nil {
 		fmt.Println(errors.Unwrap(err))

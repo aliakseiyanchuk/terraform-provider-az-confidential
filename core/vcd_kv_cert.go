@@ -57,28 +57,26 @@ type VersionedKeyVaultCertificateDataHelper struct {
 }
 
 func (vcd *VersionedKeyVaultCertificateDataHelper) CreateConfidentialCertificateData(
-	certData []byte, certFormat, certPassword, objType string, labels []string) ConfidentialCertificateData {
-	rv := ConfidentialCertConfidentialDataStruct{
+	certData []byte, certFormat, certPassword string, md VersionedConfidentialMetadata) VersionedConfidentialData[ConfidentialCertificateData] {
+
+	confData := &ConfidentialCertConfidentialDataStruct{
 		CertificateData:         certData,
 		CertificateDataFormat:   certFormat,
 		CertificateDataPassword: certPassword,
 	}
 
-	vcd.ObjectType = objType
-	vcd.ObjectLabels = labels
-
-	vcd.KnowValue = &rv
-	return vcd.KnowValue
+	return vcd.FromConfidentialCertificateData(confData, md)
 }
 
 func (vcd *VersionedKeyVaultCertificateDataHelper) FromConfidentialCertificateData(
-	confData ConfidentialCertificateData, objType string, labels []string) ConfidentialCertificateData {
+	confData ConfidentialCertificateData, md VersionedConfidentialMetadata) VersionedConfidentialData[ConfidentialCertificateData] {
 
-	vcd.ObjectType = objType
-	vcd.ObjectLabels = labels
+	p := VersionedConfidentialDataCreateParam[ConfidentialCertificateData]{
+		VersionedConfidentialMetadata: md,
+		Value:                         confData,
+	}
 
-	vcd.KnowValue = confData
-	return vcd.KnowValue
+	return vcd.Set(p)
 }
 
 func NewVersionedKeyVaultCertificateConfidentialDataHelper() *VersionedKeyVaultCertificateDataHelper {

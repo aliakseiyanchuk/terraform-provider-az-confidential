@@ -124,12 +124,12 @@ func (a *AzKeyVaultSecretResourceSpecializer) GetSupportedConfidentialMaterialTy
 	return []string{SecretObjectType}
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *SecretModel) diag.Diagnostics {
+func (a *AzKeyVaultSecretResourceSpecializer) CheckPlacement(ctx context.Context, pc []core.ProviderConstraint, pl []core.PlacementConstraint, tfModel *SecretModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 
 	destSecretCoordinate := a.factory.GetDestinationVaultObjectCoordinate(tfModel.DestinationSecret, "secrets")
 
-	a.factory.EnsureCanPlaceLabelledObjectAt(ctx, uuid, labels, "secret", &destSecretCoordinate, &rv)
+	a.factory.EnsureCanPlaceLabelledObjectAt(ctx, pc, pl, "secret", &destSecretCoordinate, &rv)
 	return rv
 }
 

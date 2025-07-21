@@ -12,7 +12,9 @@ import (
 func givenTypicalNamedValueWrappingParameters(t *testing.T) (NamedValueTerraformCodeModel, model.ContentWrappingParams) {
 
 	kwp := model.ContentWrappingParams{
-		Labels:                []string{"acceptance-testing"},
+		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
+		},
 		LoadRsaPublicKey:      core.LoadPublicKeyFromDataOnce(testkeymaterial.EphemeralRsaPublicKey),
 		WrappingKeyCoordinate: model.NewWrappingKeyForExpressions("var.vault_name", "var.key_name", "var.key_version"),
 	}
@@ -41,7 +43,7 @@ func givenTypicalNamedValueWrappingParameters(t *testing.T) (NamedValueTerraform
 
 func TestNamedValueWillProduceOutput(t *testing.T) {
 	mdl, kwp := givenTypicalNamedValueWrappingParameters(t)
-	tfCode, err := OutputNamedValueTerraformCode(mdl, kwp, "this is a secret named value")
+	tfCode, err := OutputNamedValueTerraformCode(mdl, &kwp, "this is a secret named value")
 
 	fmt.Println(tfCode)
 

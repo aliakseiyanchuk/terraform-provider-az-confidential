@@ -12,8 +12,12 @@ func Test_VersionDataToEncryptedMessageConversionWithAES(t *testing.T) {
 	_, err := rand.Read(buf)
 	assert.Nil(t, err)
 
+	md := VersionedConfidentialMetadata{
+		ObjectType: "example",
+	}
+
 	h := NewVersionedBinaryConfidentialDataHelper()
-	origSecret := h.CreateConfidentialBinaryData(buf, "example", nil)
+	origSecret := h.CreateConfidentialBinaryData(buf, md)
 
 	// Perform forward conversion
 	em, err := h.ToEncryptedMessage(LoadedEphemeralRsaPublicKey)
@@ -31,7 +35,7 @@ func Test_VersionDataToEncryptedMessageConversionWithAES(t *testing.T) {
 	assert.Nil(t, importErr)
 
 	assert.Equal(t, cm.Data.GetBinaryData(), origSecret.Data.GetBinaryData())
-	assert.Equal(t, cm.Header.Labels, origSecret.Header.Labels)
+	assert.Equal(t, cm.Header.ProviderConstraints, origSecret.Header.ProviderConstraints)
 	assert.Equal(t, cm.Header.Uuid, origSecret.Header.Uuid)
 	assert.Equal(t, cm.Header.Type, origSecret.Header.Type)
 	assert.Equal(t, cm.Header.ModelReference, origSecret.Header.ModelReference)
@@ -43,8 +47,12 @@ func Test_VersionDataToEncryptedMessageConversionWithAESWithBase64(t *testing.T)
 	_, err := rand.Read(buf)
 	assert.Nil(t, err)
 
+	md := VersionedConfidentialMetadata{
+		ObjectType: "example",
+	}
+
 	h := NewVersionedBinaryConfidentialDataHelper()
-	origSecret := h.CreateConfidentialBinaryData(buf, "example", nil)
+	origSecret := h.CreateConfidentialBinaryData(buf, md)
 
 	// Perform forward conversion
 	em, err := h.ToEncryptedMessage(LoadedEphemeralRsaPublicKey)
@@ -68,7 +76,7 @@ func Test_VersionDataToEncryptedMessageConversionWithAESWithBase64(t *testing.T)
 	assert.Nil(t, importErr)
 
 	assert.Equal(t, cm.Data.GetBinaryData(), origSecret.Data.GetBinaryData())
-	assert.Equal(t, cm.Header.Labels, origSecret.Header.Labels)
+	assert.Equal(t, cm.Header.ProviderConstraints, origSecret.Header.ProviderConstraints)
 	assert.Equal(t, cm.Header.Uuid, origSecret.Header.Uuid)
 	assert.Equal(t, cm.Header.Type, origSecret.Header.Type)
 	assert.Equal(t, cm.Header.ModelReference, origSecret.Header.ModelReference)

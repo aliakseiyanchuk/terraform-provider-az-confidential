@@ -43,7 +43,6 @@ provider "az-confidential" {
   client_secret   = var.az_client_secret
 
   labels       = ["acceptance-testing"]
-  require_label_match = "provider-labels"
 
   default_destination_vault_name = var.az_default_vault_name
 

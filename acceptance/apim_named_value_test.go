@@ -26,7 +26,9 @@ func NewStrVal(strVal string) model.TerraformFieldExpression[string] {
 
 func generateApimNamedValueResource(t *testing.T) string {
 	kwp := model.ContentWrappingParams{
-		Labels:                []string{"acceptance-testing"},
+		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
+		},
 		LoadRsaPublicKey:      core.LoadPublicKeyFromFileOnce(wrappingKey),
 		WrappingKeyCoordinate: model.NewWrappingKey(),
 	}
@@ -34,9 +36,8 @@ func generateApimNamedValueResource(t *testing.T) string {
 	nvModel := apim.NamedValueTerraformCodeModel{
 		BaseTerraformCodeModel: model.BaseTerraformCodeModel{
 			TFBlockName:           "acc_nv",
-			CiphertextLabels:      kwp.GetLabels(),
 			WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
-			EncryptedContent:      model.NewStringTerraformFieldExpression(),
+			EncryptedContent:      model.NewStringTerraformFieldHeredocExpression(),
 		},
 
 		Tags: model.KeylessTagsModel{
@@ -53,11 +54,11 @@ func generateApimNamedValueResource(t *testing.T) string {
 		},
 	}
 
-	if rv, tfErr := apim.OutputNamedValueTerraformCode(nvModel, kwp, "this is a very sensitive named value"); tfErr != nil {
+	if rv, tfErr := apim.OutputNamedValueTerraformCode(nvModel, &kwp, "this is a very sensitive named value"); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {
-		print(rv)
+		//print(rv)
 		return rv
 	}
 }

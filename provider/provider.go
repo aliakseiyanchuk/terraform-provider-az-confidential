@@ -28,7 +28,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"slices"
 )
 
 type ObjectHashTracker interface {
@@ -176,8 +175,7 @@ type AZClientsFactoryImpl struct {
 	DefaultDestinationVault              string
 	DefaultAzSubscriptionId              string
 
-	ProviderLabels        []string
-	LabelMatchRequirement LabelMatchRequirement
+	ProviderLabels []string
 
 	hashTacker ObjectHashTracker
 }
@@ -296,20 +294,29 @@ func (f *AZClientsFactoryImpl) TrackObjectId(ctx context.Context, id string) err
 
 var _ core.AZClientsFactory = &AZClientsFactoryImpl{}
 
-func (f *AZClientsFactoryImpl) EnsureCanPlaceLabelledObjectAt(ctx context.Context, uuid string, labels []string, tfResourceType string, targetCoord core.LabelledObject, diagnostics *diag.Diagnostics) {
-	// TODO: This needs optimization
-	if f.LabelMatchRequirement == TargetCoordinate && targetCoord != nil {
-		if !slices.Contains(labels, targetCoord.GetLabel()) {
-			diagnostics.AddError("mismatched placement", fmt.Sprintf("The constraints embedded in the plaintext for this %s disallow placement with requested parameters", tfResourceType))
-		}
-	} else if f.LabelMatchRequirement == ProviderLabels || (f.LabelMatchRequirement == TargetCoordinate && targetCoord == nil) {
-		// This situation with nil target coordinate will only when unwrapping the password,
-		//which doesn't have a target Vault object to be associated with.
-		if !core.AnyIsIn(f.ProviderLabels, labels) {
-			diagnostics.AddError("mismatched placement", fmt.Sprintf("The constraints embedded in the ciphertext of this %s disallow unwrapping the ciphertext by this provider", tfResourceType))
+// EnsureCanPlaceLabelledObjectAt verifies whether specific constraints for provider and placement are admissible
+// to place the object at the intended location.
+func (f *AZClientsFactoryImpl) EnsureCanPlaceLabelledObjectAt(_ context.Context, providerConstraints []core.ProviderConstraint, placementConstraints []core.PlacementConstraint, tfResourceType string, targetCoord core.LabelledObject, diagnostics *diag.Diagnostics) {
+	if len(providerConstraints) > 0 {
+		if !core.AnyIsInWithComparator(
+			f.ProviderLabels,
+			providerConstraints, func(a string, b core.ProviderConstraint) bool { return a == string(b) }) {
+			diagnostics.AddError("Mismatched placement", fmt.Sprintf("The constraints embedded into the ciphertext disallow placement of this %s by this provider. More information is not given for security reasons. Re-encrypt the ciphertext with correct provider constraints.", tfResourceType))
 		}
 	}
-	// If no label matching is required, no actions would be performed.
+
+	if len(placementConstraints) > 0 {
+		if targetCoord == nil {
+			diagnostics.AddError("Nil target object", "The ciphertext embeds requirements as to the target objects that can be created using the contained information, however nil target address is calculated. Either the placement constraint is not necessary, or it's a provider bug that needs to be reported to the maintainer.")
+		} else {
+			if !core.ContainsWithComparator(
+				placementConstraints,
+				targetCoord.GetLabel(),
+				func(a core.PlacementConstraint, b string) bool { return string(a) == b }) {
+				diagnostics.AddError("Mismatched placement", fmt.Sprintf("The constraints embedded into the ciphertext disallow placement of this %s into the specified destination. More information is not given for security reasons. Re-encrypt the ciphertext with correct placement constraints.", tfResourceType))
+			}
+		}
+	}
 }
 
 type AZConnectorProviderImpl struct {
@@ -339,7 +346,6 @@ type AZConnectorProviderImplModel struct {
 	DisallowResourceSpecifiedWrappingKey types.Bool                               `tfsdk:"disallow_resource_specified_wrapping_key"`
 	DefaultDestinationVaultName          types.String                             `tfsdk:"default_destination_vault_name"`
 	Labels                               types.Set                                `tfsdk:"labels"`
-	LabelMatch                           types.String                             `tfsdk:"require_label_match"`
 	FileHashTrackerConfig                *FileHashTrackerConfigModel              `tfsdk:"file_hash_tracker"`
 	StorageAccountTracker                *AzStorageAccountTableTrackerConfigModel `tfsdk:"storage_account_tracker"`
 }
@@ -348,18 +354,6 @@ func (pm *AZConnectorProviderImplModel) GetProviderLabels(ctx context.Context) [
 	rv := make([]string, len(pm.Labels.Elements()))
 	pm.Labels.ElementsAs(ctx, &rv, false)
 	return rv
-}
-
-func (pm *AZConnectorProviderImplModel) GetLabelMatchRequirement() LabelMatchRequirement {
-	v := pm.LabelMatch.ValueString()
-
-	if v == TargetCoordinate.AsString() {
-		return TargetCoordinate
-	} else if v == ProviderLabels.AsString() {
-		return ProviderLabels
-	} else {
-		return NoMatching
-	}
 }
 
 func (pm *AZConnectorProviderImplModel) SpecifiesCredentialParameters() bool {
@@ -381,18 +375,6 @@ func (pm *AZConnectorProviderImplModel) GetExplicitCredential() (azcore.TokenCre
 func (p *AZConnectorProviderImpl) Metadata(_ context.Context, _ tfprovider.MetadataRequest, resp *tfprovider.MetadataResponse) {
 	resp.TypeName = "az-confidential"
 	resp.Version = p.version
-}
-
-type LabelMatchRequirement string
-
-const (
-	TargetCoordinate LabelMatchRequirement = "target-coordinate"
-	ProviderLabels   LabelMatchRequirement = "provider-labels"
-	NoMatching       LabelMatchRequirement = "none"
-)
-
-func (lm LabelMatchRequirement) AsString() string {
-	return string(lm)
 }
 
 //go:embed provider_description.md
@@ -438,24 +420,16 @@ func (p *AZConnectorProviderImpl) Schema(_ context.Context, _ tfprovider.SchemaR
 				},
 			},
 			"labels": schema.SetAttribute{
-				MarkdownDescription: "Provider labels",
-				Description:         "Provider labels",
-				Optional:            true,
-				ElementType:         types.StringType,
+				MarkdownDescription: "Labels associated with this provider. These labels are used to ensure that the " +
+					"the encrypted message can be processed. A practical application of provider labelling is to " +
+					"implement environmental or regional separation of various projects. For example, adding " +
+					"`labels = [\"test\", \"acceptance\"]` may be used to designate infrastructure intended for " +
+					"for testing and (user) acceptance that **cannot** contain production objects of any kind.",
+				Optional:    true,
+				ElementType: types.StringType,
 				Validators: []validator.Set{
 					tfsetvalidators.SizeAtLeast(1),
 					// Require at least one element in the labels.
-				},
-			},
-			"require_label_match": schema.StringAttribute{
-				MarkdownDescription: "Match required between unwrapped ciphertext and labels of this provider",
-				Description:         "Match required between unwrapped ciphertext and labels of this provider",
-				Optional:            true,
-				Validators: []validator.String{
-					tfstringvalidators.OneOf(
-						TargetCoordinate.AsString(),
-						ProviderLabels.AsString(),
-						NoMatching.AsString()),
 				},
 			},
 			"file_hash_tracker": schema.SingleNestedAttribute{
@@ -608,7 +582,6 @@ func (p *AZConnectorProviderImpl) Configure(ctx context.Context, req tfprovider.
 
 		DefaultDestinationVault: data.DefaultDestinationVaultName.ValueString(),
 		ProviderLabels:          data.GetProviderLabels(ctx),
-		LabelMatchRequirement:   data.GetLabelMatchRequirement(),
 		hashTacker:              hashTracker,
 	}
 
@@ -617,9 +590,6 @@ func (p *AZConnectorProviderImpl) Configure(ctx context.Context, req tfprovider.
 
 	tflog.Info(ctx, "AzConfidential provider has been configured")
 
-	if factory.LabelMatchRequirement == NoMatching {
-		resp.Diagnostics.AddWarning("Insecure provider configuration", "The provider is currently configured to ignore labelling match of unwrapped ciphertext. This setting is discouraged to be used in production setting")
-	}
 	if factory.hashTacker == nil {
 		resp.Diagnostics.AddWarning("Insecure provider configuration", "The provider is not keeping a track of created confidential objects. This setting is discouraged to be used in production setting")
 	}

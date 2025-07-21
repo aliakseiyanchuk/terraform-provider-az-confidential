@@ -29,5 +29,5 @@ func (v *VersionedConfidentialDataMock) GivenType(strType string) {
 }
 
 func (v *VersionedConfidentialDataMock) GivenLabels(labels []string) {
-	v.On("GetLabels").Return(labels)
+	v.On("GetProviderConstraints").Return(labels)
 }

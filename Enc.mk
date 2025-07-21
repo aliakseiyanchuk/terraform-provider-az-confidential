@@ -8,7 +8,7 @@ OUTPUT_VAULT_NAME?="demo-vault"
 OUTPUT_VAULT_OBJECT="demo"
 PUBKEY?=wrapping_key_pk.pem
 
-LABELS?=-fixed-labels demo,testing
+LABELS?=-provider-constraints demo,testing
 
 encrypt_password_openssl:
 	printf "${PASSWORD}" \

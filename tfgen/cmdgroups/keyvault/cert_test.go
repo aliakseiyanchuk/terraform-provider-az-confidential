@@ -9,10 +9,12 @@ import (
 	"testing"
 )
 
-func givenTypicalCertWrappingParams(t *testing.T) (TerraformCodeModel, model.ContentWrappingParams) {
+func givenTypicalCertWrappingParams() (TerraformCodeModel, model.ContentWrappingParams) {
 
 	kwp := model.ContentWrappingParams{
-		Labels:                []string{"acceptance-testing"},
+		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
+		},
 		LoadRsaPublicKey:      core.LoadPublicKeyFromDataOnce(testkeymaterial.EphemeralRsaPublicKey),
 		WrappingKeyCoordinate: model.NewWrappingKeyForExpressions("var.vault_name", "var.key_name", "var.key_version"),
 	}
@@ -20,7 +22,6 @@ func givenTypicalCertWrappingParams(t *testing.T) (TerraformCodeModel, model.Con
 	mdl := TerraformCodeModel{
 		BaseTerraformCodeModel: model.BaseTerraformCodeModel{
 			TFBlockName:           "cert",
-			CiphertextLabels:      kwp.GetLabels(),
 			WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 		},
 
@@ -36,7 +37,7 @@ func Test_Cert_EncodingPEMCertificate(t *testing.T) {
 	readMock := &io.InputReaderMock{}
 	readMock.GivenReadRequestReturns("Enter certificate data (hit Enter twice to end input)", testkeymaterial.EphemeralCertificatePEM)
 
-	_, cwp := givenTypicalCertWrappingParams(t)
+	_, cwp := givenTypicalCertWrappingParams()
 	fn, err := MakeCertGenerator(&cwp)
 	assert.Nil(t, err)
 
@@ -48,7 +49,7 @@ func Test_Cert_EncodingPEMCertificateWithPasswordProtection(t *testing.T) {
 	readMock.GivenReadRequestReturns("Enter certificate data (hit Enter twice to end input)", testkeymaterial.EphemeralCertificatePEMWithEncryptedKey)
 	readMock.GivenReadRequestReturnsString("Private key requires password", "s1cr3t")
 
-	_, cwp := givenTypicalKeyWrappingParameters(t)
+	_, cwp := givenTypicalKeyWrappingParameters()
 	fn, err := MakeCertGenerator(&cwp)
 	assert.Nil(t, err)
 
@@ -60,7 +61,7 @@ func Test_Cert_EncodingPEMCertificateErrsIfPasswordIsNotValid(t *testing.T) {
 	readMock.GivenReadRequestReturns("Enter certificate data (hit Enter twice to end input)", testkeymaterial.EphemeralCertificatePEMWithEncryptedKey)
 	readMock.GivenReadRequestReturnsString("Private key requires password", "not-a-valid-s1cr3t")
 
-	_, cwp := givenTypicalCertWrappingParams(t)
+	_, cwp := givenTypicalCertWrappingParams()
 	fn, err := MakeCertGenerator(&cwp)
 	assert.Nil(t, err)
 
@@ -77,7 +78,7 @@ func Test_Cert_EncodingDERCertificate(t *testing.T) {
 	readMock.GivenReadRequestReturns("Enter certificate data (hit Enter twice to end input)", testkeymaterial.EphemeralCertPFX12)
 	readMock.GivenReadRequestReturnsString("Enter certificate password", "s1cr3t")
 
-	_, cwp := givenTypicalCertWrappingParams(t)
+	_, cwp := givenTypicalCertWrappingParams()
 	fn, err := MakeCertGenerator(&cwp)
 	assert.Nil(t, err)
 
@@ -89,7 +90,7 @@ func Test_Cert_EncodingDERCertificateWithWrongPassword(t *testing.T) {
 	readMock.GivenReadRequestReturns("Enter certificate data (hit Enter twice to end input)", testkeymaterial.EphemeralCertPFX12)
 	readMock.GivenReadRequestReturnsString("Enter certificate password", "a-wrong-password")
 
-	_, cwp := givenTypicalCertWrappingParams(t)
+	_, cwp := givenTypicalCertWrappingParams()
 	fn, err := MakeCertGenerator(&cwp)
 	assert.Nil(t, err)
 

@@ -2,20 +2,18 @@ package model
 
 import (
 	"crypto/rsa"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 )
 
 type ContentWrappingParams struct {
-	Labels           []string
+	core.VersionedConfidentialMetadata
+
 	LoadRsaPublicKey func() (*rsa.PublicKey, error)
 
 	WrappingKeyCoordinate WrappingKey
-	AddTargetLabel        bool
+	LockPlacement         bool
 }
 
-func (kwp *ContentWrappingParams) AddLabel(label string) {
-	kwp.Labels = append(kwp.Labels, label)
-}
-
-func (kwp *ContentWrappingParams) GetLabels() []string {
-	return kwp.Labels
+func (kwp *ContentWrappingParams) AddPlacementConstraints(label ...core.PlacementConstraint) {
+	kwp.PlacementConstraints = append(kwp.PlacementConstraints, label...)
 }

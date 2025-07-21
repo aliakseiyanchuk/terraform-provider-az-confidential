@@ -60,8 +60,7 @@ func (m *HashTrackerMock) TrackObjectId(ctx context.Context, id string) error {
 
 func Test_EnsureCanPlace_Errs_OnMismatchedTargetCoorLabel(t *testing.T) {
 	factory := &AZClientsFactoryImpl{
-		LabelMatchRequirement: TargetCoordinate,
-		ProviderLabels:        []string{"unit-testing"},
+		ProviderLabels: []string{"unit-testing"},
 	}
 
 	ctx := context.Background()
@@ -80,15 +79,16 @@ func Test_EnsureCanPlace_Errs_OnMismatchedTargetCoorLabel(t *testing.T) {
 
 	dg := diag.Diagnostics{}
 
-	factory.EnsureCanPlaceLabelledObjectAt(ctx, "obj-uuid", []string{expCoordinate.GetLabel()}, "secret", &reqCoordinate, &dg)
+	factory.EnsureCanPlaceLabelledObjectAt(ctx, nil, []core.PlacementConstraint{expCoordinate.GetPlacementConstraint()}, "secret", &reqCoordinate, &dg)
 	assert.True(t, dg.HasError())
-	assert.Equal(t, "The constraints embedded in the plaintext for this secret disallow placement with requested parameters", dg[0].Detail())
+	assert.Equal(t,
+		"The constraints embedded into the ciphertext disallow placement of this secret into the specified destination. More information is not given for security reasons. Re-encrypt the ciphertext with correct placement constraints.",
+		dg[0].Detail())
 }
 
 func Test_EnsureCanPlace_Ok_OnCoordinateLabelMatch(t *testing.T) {
 	factory := &AZClientsFactoryImpl{
-		LabelMatchRequirement: TargetCoordinate,
-		ProviderLabels:        []string{"unit-testing"},
+		ProviderLabels: []string{"unit-testing"},
 	}
 
 	ctx := context.Background()
@@ -107,15 +107,19 @@ func Test_EnsureCanPlace_Ok_OnCoordinateLabelMatch(t *testing.T) {
 
 	dg := diag.Diagnostics{}
 
-	factory.EnsureCanPlaceLabelledObjectAt(ctx, "obj-uuid", []string{expCoordinate.GetLabel()}, "anything", &reqCoordinate, &dg)
+	factory.EnsureCanPlaceLabelledObjectAt(ctx,
+		nil,
+		[]core.PlacementConstraint{expCoordinate.GetPlacementConstraint()},
+		"anything",
+		&reqCoordinate,
+		&dg)
 	assert.False(t, dg.HasError())
 
 }
 
 func Test_EnsureCanPlace_Ok_OnProviderLabelsMatch(t *testing.T) {
 	factory := &AZClientsFactoryImpl{
-		LabelMatchRequirement: ProviderLabels,
-		ProviderLabels:        []string{"unit-testing", "foo-testing"},
+		ProviderLabels: []string{"unit-testing", "foo-testing"},
 	}
 
 	ctx := context.Background()
@@ -129,8 +133,8 @@ func Test_EnsureCanPlace_Ok_OnProviderLabelsMatch(t *testing.T) {
 	dg := diag.Diagnostics{}
 
 	factory.EnsureCanPlaceLabelledObjectAt(ctx,
-		"obj-uuid",
-		[]string{"test", "crazy-test", "foo-testing"},
+		[]core.ProviderConstraint{"test", "crazy-test", "foo-testing"},
+		nil,
 		"unspecified resource",
 		&reqCoordinate,
 		&dg)
@@ -139,32 +143,23 @@ func Test_EnsureCanPlace_Ok_OnProviderLabelsMatch(t *testing.T) {
 }
 
 func Test_EnsureCanPlace_Errs_OnLabelMismatchForDataSource(t *testing.T) {
-	modes := []LabelMatchRequirement{TargetCoordinate, ProviderLabels}
-
-	for _, mode := range modes {
-		factory := &AZClientsFactoryImpl{
-			LabelMatchRequirement: mode,
-			ProviderLabels:        []string{"unit-testing"},
-		}
-
-		ctx := context.Background()
-
-		dg := diag.Diagnostics{}
-		factory.EnsureCanPlaceLabelledObjectAt(ctx,
-			"obj-uuid",
-			[]string{"actual-testing"},
-			"unspecified-resource",
-			nil,
-			&dg)
-		assert.True(t, dg.HasError())
-		assert.Equal(t, "The constraints embedded in the ciphertext of this unspecified-resource disallow unwrapping the ciphertext by this provider", dg[0].Detail())
+	factory := &AZClientsFactoryImpl{
+		ProviderLabels: []string{"unit-testing"},
 	}
-}
 
-func Test_LabelMatchingRequirement_AsString(t *testing.T) {
-	assert.Equal(t, "target-coordinate", TargetCoordinate.AsString())
-	assert.Equal(t, "provider-labels", ProviderLabels.AsString())
-	assert.Equal(t, "none", NoMatching.AsString())
+	ctx := context.Background()
+
+	dg := diag.Diagnostics{}
+	factory.EnsureCanPlaceLabelledObjectAt(ctx,
+		[]core.ProviderConstraint{"actual-testing"},
+		nil,
+		"unspecified-resource",
+		nil,
+		&dg)
+	assert.True(t, dg.HasError())
+	assert.Equal(t,
+		"The constraints embedded into the ciphertext disallow placement of this unspecified-resource by this provider. More information is not given for security reasons. Re-encrypt the ciphertext with correct provider constraints.",
+		dg[0].Detail())
 }
 
 func Test_AZCPIM_GetProviderLabels(t *testing.T) {
@@ -186,19 +181,6 @@ func Test_AZCPIM_GetProviderLabels(t *testing.T) {
 	assert.Equal(t, "label_a", converted[0])
 	assert.Equal(t, "label_b", converted[1])
 	assert.Equal(t, "label_c", converted[2])
-}
-
-func Test_AZCPIM_GetLabelMatchingRequirement(t *testing.T) {
-	mdl := AZConnectorProviderImplModel{
-		LabelMatch: types.StringValue(TargetCoordinate.AsString()),
-	}
-	assert.Equal(t, TargetCoordinate, mdl.GetLabelMatchRequirement())
-
-	mdl.LabelMatch = types.StringValue(ProviderLabels.AsString())
-	assert.Equal(t, ProviderLabels, mdl.GetLabelMatchRequirement())
-
-	mdl.LabelMatch = types.StringValue(NoMatching.AsString())
-	assert.Equal(t, NoMatching, mdl.GetLabelMatchRequirement())
 }
 
 func Test_AZCPIM_SpecifiesCredentialParameters(t *testing.T) {

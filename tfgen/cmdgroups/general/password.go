@@ -41,12 +41,12 @@ func MakePasswordGenerator(kwp *model.ContentWrappingParams, args []string) (mod
 	}
 
 	mdl := model.BaseTerraformCodeModel{
-		TFBlockName:           "password",
-		CiphertextLabels:      kwp.GetLabels(),
-		WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
+		TFBlockName:              "password",
+		EncryptedContentMetadata: kwp.VersionedConfidentialMetadata,
+		WrappingKeyCoordinate:    kwp.WrappingKeyCoordinate,
 	}
 
-	return func(params model.ContentWrappingParams, inputReader model.InputReader, onlyCiphertext bool) (string, error) {
+	return func(inputReader model.InputReader, onlyCiphertext bool) (string, error) {
 		passwordData, readErr := inputReader("Enter password data",
 			passwordParams.inputFile,
 			passwordParams.inputIsBase64,
@@ -78,8 +78,9 @@ func OutputDatasourcePasswordTerraformCode(mdl model.BaseTerraformCodeModel, kwp
 }
 
 func OutputPasswordEncryptedContent(kwp *model.ContentWrappingParams, passwordString string) (string, error) {
+	kwp.ObjectType = general.PasswordObjectType
 	helper := core.NewVersionedStringConfidentialDataHelper()
-	_ = helper.CreateConfidentialStringData(passwordString, general.PasswordObjectType, kwp.GetLabels())
+	_ = helper.CreateConfidentialStringData(passwordString, kwp.VersionedConfidentialMetadata)
 
 	rsaKey, loadErr := kwp.LoadRsaPublicKey()
 	if loadErr != nil {

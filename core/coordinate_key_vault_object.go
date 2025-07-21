@@ -36,3 +36,7 @@ func (c *AzKeyVaultObjectCoordinate) DefinesVaultName() bool {
 func (c *AzKeyVaultObjectCoordinate) GetLabel() string {
 	return fmt.Sprintf("az-c-label://%s/%s@%s;", c.VaultName, c.Name, c.Type)
 }
+
+func (c *AzKeyVaultObjectCoordinate) GetPlacementConstraint() PlacementConstraint {
+	return PlacementConstraint(c.GetLabel())
+}

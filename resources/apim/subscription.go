@@ -69,13 +69,16 @@ type ConfidentialSubscriptionHelper struct {
 	core.VersionedConfidentialDataHelperTemplate[ConfidentialSubscriptionData, ConfidentialSubscriptionStruct]
 }
 
-func (vcd *ConfidentialSubscriptionHelper) CreateSubscriptionData(primary, secondary, objectType string, labels []string) core.VersionedConfidentialData[ConfidentialSubscriptionData] {
-	rv := ConfidentialSubscriptionStruct{
-		PrimaryKey:   primary,
-		SecondaryKey: secondary,
+func (vcd *ConfidentialSubscriptionHelper) CreateSubscriptionData(primary, secondary string, md core.VersionedConfidentialMetadata) core.VersionedConfidentialData[ConfidentialSubscriptionData] {
+	p := core.VersionedConfidentialDataCreateParam[ConfidentialSubscriptionData]{
+		Value: &ConfidentialSubscriptionStruct{
+			PrimaryKey:   primary,
+			SecondaryKey: secondary,
+		},
+		VersionedConfidentialMetadata: md,
 	}
 
-	return vcd.Set(&rv, objectType, labels)
+	return vcd.Set(p)
 }
 
 func NewConfidentialSubscriptionHelper() *ConfidentialSubscriptionHelper {
@@ -188,11 +191,11 @@ func (s *SubscriptionSpecializer) GetSupportedConfidentialMaterialTypes() []stri
 	return []string{SubscriptionObjectType}
 }
 
-func (s *SubscriptionSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *SubscriptionModel) diag.Diagnostics {
+func (s *SubscriptionSpecializer) CheckPlacement(ctx context.Context, pc []core.ProviderConstraint, pl []core.PlacementConstraint, tfModel *SubscriptionModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 	s.factory.EnsureCanPlaceLabelledObjectAt(ctx,
-		uuid,
-		labels,
+		pc,
+		pl,
 		"api management subscription",
 		&tfModel.DestinationSubscription,
 		&rv,

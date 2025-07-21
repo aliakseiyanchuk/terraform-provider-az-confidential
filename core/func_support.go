@@ -39,6 +39,7 @@ func MapSlice[K, V any](mapper Mapper[K, V], inputSlice []K) []V {
 }
 
 type Comparator[K any] = func(a, b K) bool
+type BiComparator[K, V any] = func(a K, b V) bool
 type EquivalenceComparator[K, V any] = func(a K, b V) bool
 
 // ObjectExportSupport support for exporting data to a model-at-rest

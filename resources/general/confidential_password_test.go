@@ -9,10 +9,13 @@ import (
 )
 
 func TestConfidentialPasswordModelAcceptTest(t *testing.T) {
+	md := core.VersionedConfidentialMetadata{
+		ObjectType: PasswordObjectType,
+	}
 	mdl := ConfidentialPasswordModel{}
 
 	helper := core.NewVersionedStringConfidentialDataHelper()
-	bObj := helper.CreateConfidentialStringData("abc", "password", nil)
+	bObj := helper.CreateConfidentialStringData("abc", md)
 
 	mdl.Accept(bObj.Header.Uuid, bObj.Data)
 	assert.Equal(t, bObj.Header.Uuid, mdl.Id.ValueString())

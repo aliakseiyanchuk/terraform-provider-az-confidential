@@ -264,12 +264,12 @@ func (a *AzKeyVaultKeyResourceSpecializer) GetSupportedConfidentialMaterialTypes
 	return []string{KeyObjectType}
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *KeyModel) diag.Diagnostics {
+func (a *AzKeyVaultKeyResourceSpecializer) CheckPlacement(ctx context.Context, pc []core.ProviderConstraint, pl []core.PlacementConstraint, tfModel *KeyModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 
 	destKeyCoordinate := a.factory.GetDestinationVaultObjectCoordinate(tfModel.DestinationKey, "keys")
 
-	a.factory.EnsureCanPlaceLabelledObjectAt(ctx, uuid, labels, "key", &destKeyCoordinate, &rv)
+	a.factory.EnsureCanPlaceLabelledObjectAt(ctx, pc, pl, "key", &destKeyCoordinate, &rv)
 	return rv
 }
 

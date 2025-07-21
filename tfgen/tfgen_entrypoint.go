@@ -21,9 +21,8 @@ type EntryPointCLIArgs struct {
 	WrappingKeyCoordinate core.WrappingKeyCoordinate
 	RSAPublicKeyFile      string
 
-	NoLabels               bool
-	Labels                 string
-	TargetDerivedLabelOnly bool
+	ProviderConstraints string
+	ConstraintTarget    bool
 
 	PrintCiphertextOnly bool
 }
@@ -62,16 +61,18 @@ func CreateCommonCLIArgs() (*EntryPointCLIArgs, *flag.FlagSet) {
 		"RSA public key to encrypt secrets/content encryption keys",
 	)
 
-	baseFlags.StringVar(&rv.Labels,
-		"fixed-labels",
+	baseFlags.StringVar(&rv.ProviderConstraints,
+		"provider-constraints",
 		"",
-		"Fixed labels to associate with the ciphertext. Use comma to separate individual labels",
+		"Require the provider deploying a resource from the ciphertext to be configured with the specified provider label. Use comma to separate individual labels",
 	)
 
-	baseFlags.BoolVar(&rv.TargetDerivedLabelOnly,
-		"target-only-label",
+	baseFlags.BoolVar(&rv.ConstraintTarget,
+		"lock-placement",
 		false,
-		"Label the ciphertext to be expandable only into specified vault and object",
+		"The ciphertext may only be used to create an Azure resource with the configuration "+
+			"specified when the ciphertext is created. For example, when creating a kv key resource, you can specify a specific "+
+			"vault name and key name. Exact option depend on the resource type.",
 	)
 
 	baseFlags.BoolVar(&rv.PrintCiphertextOnly,
@@ -85,14 +86,22 @@ func CreateCommonCLIArgs() (*EntryPointCLIArgs, *flag.FlagSet) {
 
 func buildContentWrappingParams(cliArgs *EntryPointCLIArgs) (*model.ContentWrappingParams, error) {
 
-	var labels []string
-	if len(cliArgs.Labels) > 0 {
-		labels = strings.Split(cliArgs.Labels, ",")
+	var providerConstraints []core.ProviderConstraint
+	if len(cliArgs.ProviderConstraints) > 0 {
+		for _, s := range strings.Split(cliArgs.ProviderConstraints, ",") {
+			providerConstraints = append(providerConstraints, core.ProviderConstraint(s))
+		}
 	}
 
 	rv := &model.ContentWrappingParams{
+		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+			ObjectType:           "",
+			ProviderConstraints:  providerConstraints,
+			PlacementConstraints: nil,
+			CreateLimit:          0,
+			Expiry:               0,
+		},
 		WrappingKeyCoordinate: model.NewWrappingKey(),
-		Labels:                labels,
 		LoadRsaPublicKey: sync.OnceValues(func() (*rsa.PublicKey, error) {
 			pubKeyData, pubKeyReadErr := io.ReadInput("Please provide public key of the key wrapping key", cliArgs.RSAPublicKeyFile, false, true)
 			if pubKeyReadErr != nil {
@@ -105,7 +114,7 @@ func buildContentWrappingParams(cliArgs *EntryPointCLIArgs) (*model.ContentWrapp
 			}
 			return loadedRSAKey, nil
 		}),
-		AddTargetLabel: cliArgs.TargetDerivedLabelOnly,
+		LockPlacement: cliArgs.ConstraintTarget,
 	}
 
 	if len(cliArgs.WrappingKeyCoordinate.VaultName) > 0 {
@@ -175,7 +184,7 @@ func MainEntryPoint() {
 		os.Exit(2)
 	}
 
-	tfCode, err := generator(*kwp, io.ReadInput, cliArgs.PrintCiphertextOnly)
+	tfCode, err := generator(io.ReadInput, cliArgs.PrintCiphertextOnly)
 	if err != nil {
 		// Error message must be printed by the sub-command
 		fmt.Println("Cannot produce template:")

@@ -80,7 +80,7 @@ type AZClientsFactory interface {
 	// - if the provider has to ensure provider-level matching, then at least one ciphertext label must match the one
 	//   assigned to the provider
 	// - where disabled, the check always succeeds.
-	EnsureCanPlaceLabelledObjectAt(ctx context.Context, uuid string, labels []string, tfResourceType string, targetCoord LabelledObject, diagnostics *diag.Diagnostics)
+	EnsureCanPlaceLabelledObjectAt(ctx context.Context, providerConstraint []ProviderConstraint, placementConstraint []PlacementConstraint, tfResourceType string, targetCoord LabelledObject, diagnostics *diag.Diagnostics)
 
 	IsObjectTrackingEnabled() bool
 	IsObjectIdTracked(ctx context.Context, id string) (bool, error)

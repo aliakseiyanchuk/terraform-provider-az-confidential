@@ -1,6 +1,7 @@
 package acceptance
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core/testkeymaterial"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/cmdgroups/keyvault"
@@ -12,18 +13,19 @@ import (
 	"testing"
 )
 
-func generatePEMEncodedECKeyResource(t *testing.T) string {
+func generatePEMEncodedRsaKeyResource(t *testing.T) string {
 
 	kwp := model.ContentWrappingParams{
-		Labels:           []string{"acceptance-testing"},
+		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
+		},
 		LoadRsaPublicKey: core.LoadPublicKeyFromFileOnce(wrappingKey),
 	}
 
 	keyModel := keyvault.KeyResourceTerraformModel{
 		TerraformCodeModel: keyvault.TerraformCodeModel{
 			BaseTerraformCodeModel: model.BaseTerraformCodeModel{
-				TFBlockName:           "key",
-				CiphertextLabels:      []string{"acceptance-testing"},
+				TFBlockName:           "rsa_key",
 				WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 			},
 
@@ -34,39 +36,52 @@ func generatePEMEncodedECKeyResource(t *testing.T) string {
 					"environment": "tf_acceptance_test",
 				},
 			},
+			DestinationCoordinate: keyvault.NewObjectCoordinateModel("", "acceptance-test-rsakey"),
+		},
+
+		KeyOperations: []azkeys.KeyOperation{
+			azkeys.KeyOperationDecrypt,
+			azkeys.KeyOperationEncrypt,
+			azkeys.KeyOperationSign,
+			azkeys.KeyOperationUnwrapKey,
+			azkeys.KeyOperationVerify,
+			azkeys.KeyOperationWrapKey,
 		},
 	}
 
-	ecKey, ecErr := core.PrivateKeyFromData(testkeymaterial.Secp256r1EcPrivateKey)
-	assert.Nil(t, ecErr)
+	rsaKey, rsaErr := core.PrivateKeyFromData(testkeymaterial.EphemeralRsaKeyText)
+	assert.Nil(t, rsaErr)
 
-	jwwKey, jwkKeyErr := jwk.Import(ecKey)
+	jwwKey, jwkKeyErr := jwk.Import(rsaKey)
 	assert.Nil(t, jwkKeyErr)
-	if _, ok := jwwKey.(jwk.ECDSAPrivateKey); !ok {
-		assert.Fail(t, "Imported key is not EC; the subsequent test should fail")
+	if _, ok := jwwKey.(jwk.RSAPrivateKey); !ok {
+		assert.Fail(t, "Imported key is not RSA; the subsequent test should fail")
 	}
 
-	if rv, tfErr := keyvault.OutputKeyTerraformCode(keyModel, kwp, jwwKey); tfErr != nil {
+	if rv, tfErr := keyvault.OutputKeyTerraformCode(keyModel,
+		&kwp,
+		jwwKey,
+	); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {
-		print(rv)
+		//print(rv)
 		return rv
 	}
 }
 
-func TestAccConfidentialECKey(t *testing.T) {
+func TestAccConfidentialRsaKey(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Read testing
 			{
-				Config: providerConfig + generatePEMEncodedECKeyResource(t),
+				Config: providerConfig + generatePEMEncodedRsaKeyResource(t),
 				Check: resource.ComposeTestCheckFunc(
 					// Validate that the secret version is set after creation
-					resource.TestCheckResourceAttrSet("az-confidential_key.ec_key", "key_version"),
-					resource.TestCheckResourceAttrSet("az-confidential_key.ec_key", "public_key_pem"),
-					resource.TestCheckResourceAttr("az-confidential_key.ec_key", "enabled", "true"),
+					resource.TestCheckResourceAttrSet("az-confidential_key.rsa_key", "key_version"),
+					resource.TestCheckResourceAttrSet("az-confidential_key.rsa_key", "public_key_pem"),
+					resource.TestCheckResourceAttr("az-confidential_key.rsa_key", "enabled", "true"),
 				),
 			},
 		},

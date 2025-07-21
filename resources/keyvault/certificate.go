@@ -157,12 +157,12 @@ func (a *AzKeyVaultCertificateResourceSpecializer) GetSupportedConfidentialMater
 	return []string{CertificateObjectType}
 }
 
-func (a *AzKeyVaultCertificateResourceSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *CertificateModel) diag.Diagnostics {
+func (a *AzKeyVaultCertificateResourceSpecializer) CheckPlacement(ctx context.Context, pc []core.ProviderConstraint, pl []core.PlacementConstraint, tfModel *CertificateModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 
 	destKeyCoordinate := a.factory.GetDestinationVaultObjectCoordinate(tfModel.DestinationCert, "certificates")
 
-	a.factory.EnsureCanPlaceLabelledObjectAt(ctx, uuid, labels, "certificate", &destKeyCoordinate, &rv)
+	a.factory.EnsureCanPlaceLabelledObjectAt(ctx, pc, pl, "certificate", &destKeyCoordinate, &rv)
 	return rv
 }
 

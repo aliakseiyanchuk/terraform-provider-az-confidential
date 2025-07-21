@@ -47,7 +47,7 @@ func MakeSecretGenerator(kwp *model.ContentWrappingParams, args []string) (model
 		return nil, parseErr
 	}
 
-	if kwp.AddTargetLabel {
+	if kwp.LockPlacement {
 		if !secretParams.SpecifiesVault() {
 			return nil, errors.New("options -destination-vault and -destination-secret-name must be supplied where ciphertext must be labelled with its intended destination")
 		} else {
@@ -57,15 +57,15 @@ func MakeSecretGenerator(kwp *model.ContentWrappingParams, args []string) (model
 				Type:      "secrets",
 			}
 
-			kwp.AddLabel(coord.GetLabel())
+			kwp.AddPlacementConstraints(coord.GetPlacementConstraint())
 		}
 	}
 
 	mdl := TerraformCodeModel{
 		BaseTerraformCodeModel: model.BaseTerraformCodeModel{
-			TFBlockName:           "secret",
-			CiphertextLabels:      kwp.GetLabels(),
-			WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
+			TFBlockName:              "secret",
+			EncryptedContentMetadata: kwp.VersionedConfidentialMetadata,
+			WrappingKeyCoordinate:    kwp.WrappingKeyCoordinate,
 			//EncryptedContent:      model.NewStringTerraformFieldExpression(),
 		},
 
@@ -79,7 +79,7 @@ func MakeSecretGenerator(kwp *model.ContentWrappingParams, args []string) (model
 		DestinationCoordinate: NewObjectCoordinateModel(secretParams.vaultName, secretParams.vaultObjectName),
 	}
 
-	return func(params model.ContentWrappingParams, inputReader model.InputReader, onlyCiphertext bool) (string, error) {
+	return func(inputReader model.InputReader, onlyCiphertext bool) (string, error) {
 		secretData, readErr := inputReader("Enter secret data",
 			secretParams.inputFile,
 			secretParams.inputIsBase64,
@@ -111,8 +111,10 @@ func OutputSecretTerraformCode(mdl TerraformCodeModel, kwp *model.ContentWrappin
 }
 
 func OutputSecretEncryptedContent(kwp *model.ContentWrappingParams, secretText string) (string, error) {
+	kwp.ObjectType = keyvault.SecretObjectType
+
 	helper := core.NewVersionedStringConfidentialDataHelper()
-	_ = helper.CreateConfidentialStringData(secretText, keyvault.SecretObjectType, kwp.GetLabels())
+	_ = helper.CreateConfidentialStringData(secretText, kwp.VersionedConfidentialMetadata)
 
 	rsaKey, loadErr := kwp.LoadRsaPublicKey()
 	if loadErr != nil {

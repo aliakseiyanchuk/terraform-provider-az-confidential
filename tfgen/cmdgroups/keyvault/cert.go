@@ -71,7 +71,7 @@ func MakeCertGenerator(kwp *model.ContentWrappingParams, args ...string) (model.
 		return nil, parseErr
 	}
 
-	if kwp.AddTargetLabel {
+	if kwp.LockPlacement {
 		if !certParams.SpecifiesVault() {
 			return nil, errors.New("options -destination-vault and -destination-cert-name must be supplied where ciphertext must be labelled with its intended destination")
 		} else {
@@ -81,15 +81,16 @@ func MakeCertGenerator(kwp *model.ContentWrappingParams, args ...string) (model.
 				Type:      "certificates",
 			}
 
-			kwp.AddLabel(coord.GetLabel())
+			pc := core.PlacementConstraint(coord.GetLabel())
+			kwp.AddPlacementConstraints(pc)
 		}
 	}
 
 	mdl := TerraformCodeModel{
 		BaseTerraformCodeModel: model.BaseTerraformCodeModel{
-			TFBlockName:           "cert",
-			CiphertextLabels:      kwp.GetLabels(),
-			WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
+			TFBlockName:              "cert",
+			EncryptedContentMetadata: kwp.VersionedConfidentialMetadata,
+			WrappingKeyCoordinate:    kwp.WrappingKeyCoordinate,
 		},
 
 		TagsModel: model.TagsModel{
@@ -106,7 +107,7 @@ func MakeCertGenerator(kwp *model.ContentWrappingParams, args ...string) (model.
 	fmt.Println(mdl.DestinationCoordinate.VaultName.IsDefined())
 	fmt.Println(mdl.DestinationCoordinate.ObjectName.TerraformExpression())
 
-	return func(kwp model.ContentWrappingParams, inputReader model.InputReader, onlyCiphertext bool) (string, error) {
+	return func(inputReader model.InputReader, onlyCiphertext bool) (string, error) {
 		certData, certDataErr := AcquireCertificateData(certParams, inputReader)
 		if certDataErr != nil {
 			return "", certDataErr
@@ -192,7 +193,7 @@ func AcquireCertificateData(certParams *CertTFGenParams, inputReader model.Input
 	return &confData, nil
 }
 
-func OutputCertificateTerraformCode(mdl TerraformCodeModel, kwp model.ContentWrappingParams, data core.ConfidentialCertificateData) (string, error) {
+func OutputCertificateTerraformCode(mdl TerraformCodeModel, kwp *model.ContentWrappingParams, data core.ConfidentialCertificateData) (string, error) {
 	ciphertext, err := OutputCertificateEncryptedContent(kwp, data)
 	if err != nil {
 		return ciphertext, err
@@ -202,14 +203,15 @@ func OutputCertificateTerraformCode(mdl TerraformCodeModel, kwp model.ContentWra
 	return model.Render("cert", certTFTemplate, &mdl)
 }
 
-func OutputCertificateEncryptedContent(kwp model.ContentWrappingParams, data core.ConfidentialCertificateData) (string, error) {
+func OutputCertificateEncryptedContent(kwp *model.ContentWrappingParams, data core.ConfidentialCertificateData) (string, error) {
+	kwp.ObjectType = keyvault.CertificateObjectType
+
 	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
 	_ = helper.CreateConfidentialCertificateData(
 		data.GetCertificateData(),
 		data.GetCertificateDataFormat(),
 		data.GetCertificateDataPassword(),
-		keyvault.CertificateObjectType,
-		kwp.GetLabels(),
+		kwp.VersionedConfidentialMetadata,
 	)
 
 	rsaKey, loadErr := kwp.LoadRsaPublicKey()

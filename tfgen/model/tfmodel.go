@@ -65,25 +65,22 @@ func (p *KeylessTagsModel) TerraformValueTags() []string {
 type BaseTerraformCodeModel struct {
 	TFBlockName string
 
-	EncryptedContent TerraformFieldExpression[string]
-	CiphertextLabels []string
+	EncryptedContent         TerraformFieldExpression[string]
+	EncryptedContentMetadata core.VersionedConfidentialMetadata
 
 	WrappingKeyCoordinate WrappingKey
 }
 
 func NewBaseTerraformCodeModel(kwp *ContentWrappingParams, blockName string) BaseTerraformCodeModel {
 	return BaseTerraformCodeModel{
-		TFBlockName:           blockName,
-		CiphertextLabels:      kwp.GetLabels(),
-		WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
+		TFBlockName: blockName,
 		// The Terraform resources should be provided in the Heredoc
 		// style for added readability.
-		EncryptedContent: NewStringTerraformFieldHeredocExpression(),
-	}
-}
+		EncryptedContent:         NewStringTerraformFieldHeredocExpression(),
+		EncryptedContentMetadata: kwp.VersionedConfidentialMetadata,
 
-func (p *BaseTerraformCodeModel) HasCiphertextLabels() bool {
-	return len(p.CiphertextLabels) > 0
+		WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
+	}
 }
 
 func Render(templateName, templateStr string, obj interface{}) (string, error) {

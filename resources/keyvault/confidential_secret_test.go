@@ -512,8 +512,11 @@ func Test_CAzVSR_DoCreate_IfSetSecretErrors(t *testing.T) {
 }
 
 func givenVersionedStringConfidentialDataFromString(s, objType string) core.ConfidentialStringData {
+	md := core.VersionedConfidentialMetadata{
+		ObjectType: objType,
+	}
 	helper := core.NewVersionedStringConfidentialDataHelper()
-	return helper.CreateConfidentialStringData(s, objType, nil).Data
+	return helper.CreateConfidentialStringData(s, md).Data
 }
 
 func Test_CAzVSR_DoCreate(t *testing.T) {

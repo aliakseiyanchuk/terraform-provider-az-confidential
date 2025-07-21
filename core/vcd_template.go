@@ -7,16 +7,50 @@ import (
 	"github.com/google/uuid"
 )
 
+type VersionedConfidentialMetadata struct {
+	ObjectType           string
+	ProviderConstraints  []ProviderConstraint
+	PlacementConstraints []PlacementConstraint
+	CreateLimit          int64
+	Expiry               int64
+}
+
+func (p *VersionedConfidentialMetadata) HasProviderConstraints() bool {
+	return len(p.ProviderConstraints) > 0
+}
+
+func (p *VersionedConfidentialMetadata) HasPlacementConstraints() bool {
+	return len(p.PlacementConstraints) > 0
+}
+
+func (p *VersionedConfidentialMetadata) LimitsCreate() bool {
+	return p.CreateLimit > 0
+}
+
+func (p *VersionedConfidentialMetadata) LimitsExpiry() bool {
+	return p.Expiry > 0
+}
+
+func (p *VersionedConfidentialMetadata) IsWeaklyProtected() bool {
+	return !p.HasProviderConstraints() &&
+		!p.HasPlacementConstraints() &&
+		!p.LimitsExpiry() &&
+		!p.LimitsCreate()
+}
+
+type VersionedConfidentialDataCreateParam[T any] struct {
+	VersionedConfidentialMetadata
+	Value T
+}
+
 // VersionedConfidentialDataHelperTemplate a template class that aids constructing the versioned confidential
 // data models. A serializable model carries two fields:
 // - the confidential data itself which can be of any structure, and
 // - a header describing the object type, object labels, and model reference.
 type VersionedConfidentialDataHelperTemplate[T, TAtRest any] struct {
-	KnowValue    T
-	Header       ConfidentialDataJsonHeader
-	ObjectType   string
-	ObjectLabels []string
-	ModelName    string
+	KnowValue T
+	Header    ConfidentialDataJsonHeader
+	ModelName string
 
 	ModelAtRestSupplier MapperWithError[string, TAtRest]
 	ValueToRest         Mapper[T, TAtRest]
@@ -27,16 +61,17 @@ func (vcd *VersionedConfidentialDataHelperTemplate[T, TAtRest]) Value() T {
 	return vcd.KnowValue
 }
 
-func (vcd *VersionedConfidentialDataHelperTemplate[T, TAtRest]) Set(t T, objectType string, labels []string) VersionedConfidentialData[T] {
-	vcd.KnowValue = t
-	vcd.ObjectType = objectType
-	vcd.ObjectLabels = labels
+func (vcd *VersionedConfidentialDataHelperTemplate[T, TAtRest]) Set(p VersionedConfidentialDataCreateParam[T]) VersionedConfidentialData[T] {
+	vcd.KnowValue = p.Value
 
 	vcd.Header = ConfidentialDataJsonHeader{
-		Uuid:           uuid.New().String(),
-		Type:           vcd.ObjectType,
-		Labels:         vcd.ObjectLabels,
-		ModelReference: vcd.ModelName,
+		Uuid:                 uuid.New().String(),
+		Type:                 p.ObjectType,
+		CreateLimit:          p.CreateLimit,
+		Expiry:               p.Expiry,
+		ProviderConstraints:  p.ProviderConstraints,
+		PlacementConstraints: p.PlacementConstraints,
+		ModelReference:       vcd.ModelName,
 	}
 
 	rv := VersionedConfidentialData[T]{

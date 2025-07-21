@@ -14,14 +14,14 @@ import (
 )
 
 func Test_Key_OutputSecretTerraformCode_Renders(t *testing.T) {
-	mdl, kwp := givenTypicalKeyWrappingParameters(t)
+	mdl, kwp := givenTypicalKeyWrappingParameters()
 
 	jwkKey, jwkImportErr := jwk.Import(testkeymaterial.EphemeralRsaKeyText)
 	assert.Nil(t, jwkImportErr)
 
 	v, err := OutputKeyTerraformCode(
 		mdl,
-		kwp,
+		&kwp,
 		jwkKey)
 
 	assert.Nil(t, err)
@@ -31,10 +31,12 @@ func Test_Key_OutputSecretTerraformCode_Renders(t *testing.T) {
 	fmt.Print(v)
 }
 
-func givenTypicalKeyWrappingParameters(t *testing.T) (KeyResourceTerraformModel, model.ContentWrappingParams) {
+func givenTypicalKeyWrappingParameters() (KeyResourceTerraformModel, model.ContentWrappingParams) {
 
 	kwp := model.ContentWrappingParams{
-		Labels:                []string{"acceptance-testing"},
+		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
+		},
 		LoadRsaPublicKey:      core.LoadPublicKeyFromDataOnce(testkeymaterial.EphemeralRsaPublicKey),
 		WrappingKeyCoordinate: model.NewWrappingKeyForExpressions("var.vault_name", "var.key_name", "var.key_version"),
 	}
@@ -43,7 +45,6 @@ func givenTypicalKeyWrappingParameters(t *testing.T) (KeyResourceTerraformModel,
 		TerraformCodeModel: TerraformCodeModel{
 			BaseTerraformCodeModel: model.BaseTerraformCodeModel{
 				TFBlockName:           "key",
-				CiphertextLabels:      []string{"acceptance-testing"},
 				WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 			},
 
@@ -70,7 +71,7 @@ func Test_Key_ConvertSymmetricKey(t *testing.T) {
 	readMock := &io.InputReaderMock{}
 	readMock.GivenReadRequestReturns("Enter key data (hit Enter twice to end input)", sKey)
 
-	_, cwp := givenTypicalKeyWrappingParameters(t)
+	_, cwp := givenTypicalKeyWrappingParameters()
 
 	fn, err := MakeKeyGenerator(&cwp, "-symmetric")
 	assert.Nil(t, err)
@@ -79,7 +80,7 @@ func Test_Key_ConvertSymmetricKey(t *testing.T) {
 }
 
 func assertGeneratorFunctionRendersSuccessfully(t *testing.T, cwp model.ContentWrappingParams, fn model.SubCommandExecution, readerMock *io.InputReaderMock) {
-	tfCode, tfCodeErr := fn(cwp, readerMock.ReadInput, false)
+	tfCode, tfCodeErr := fn(readerMock.ReadInput, false)
 	assert.Nil(t, tfCodeErr)
 	assert.True(t, len(tfCode) > 100)
 
@@ -93,7 +94,7 @@ func assertGeneratorFunctionRendersSuccessfully(t *testing.T, cwp model.ContentW
 }
 
 func assertGeneratorFunctionErrs(t *testing.T, cwp model.ContentWrappingParams, fn model.SubCommandExecution, readerMock *io.InputReaderMock) error {
-	tfCode, tfCodeErr := fn(cwp, readerMock.ReadInput, false)
+	tfCode, tfCodeErr := fn(readerMock.ReadInput, false)
 	assert.NotNil(t, tfCodeErr)
 	assert.Equal(t, 0, len(tfCode))
 
@@ -110,7 +111,7 @@ func Test_Key_ConvertSymmetricKey_ErrsOnUnsupportedLength(t *testing.T) {
 	readMock := &io.InputReaderMock{}
 	readMock.GivenReadRequestReturns("Enter key data (hit Enter twice to end input)", sKey)
 
-	_, cwp := givenTypicalKeyWrappingParameters(t)
+	_, cwp := givenTypicalKeyWrappingParameters()
 
 	fn, err := MakeKeyGenerator(&cwp, "-symmetric")
 	assert.Nil(t, err)
@@ -122,7 +123,7 @@ func Test_Key_ConvertPEMEncodedRSAKey(t *testing.T) {
 	readMock := &io.InputReaderMock{}
 	readMock.GivenReadRequestReturns("Enter key data (hit Enter twice to end input)", testkeymaterial.EphemeralRsaKeyText)
 
-	_, cwp := givenTypicalKeyWrappingParameters(t)
+	_, cwp := givenTypicalKeyWrappingParameters()
 	fn, err := MakeKeyGenerator(&cwp)
 	assert.Nil(t, err)
 
@@ -133,7 +134,7 @@ func Test_Key_ConvertDEREncodedRSAKey(t *testing.T) {
 	readMock := &io.InputReaderMock{}
 	readMock.GivenReadRequestReturns("Enter key data (hit Enter twice to end input)", testkeymaterial.EphemeralRsaKeyDERForm)
 
-	_, cwp := givenTypicalKeyWrappingParameters(t)
+	_, cwp := givenTypicalKeyWrappingParameters()
 	fn, err := MakeKeyGenerator(&cwp)
 	assert.Nil(t, err)
 
@@ -144,7 +145,7 @@ func Test_Key_ConvertPEMEncodedECKey(t *testing.T) {
 	readMock := &io.InputReaderMock{}
 	readMock.GivenReadRequestReturns("Enter key data (hit Enter twice to end input)", testkeymaterial.Prime256v1EcPrivateKey)
 
-	_, cwp := givenTypicalKeyWrappingParameters(t)
+	_, cwp := givenTypicalKeyWrappingParameters()
 	fn, err := MakeKeyGenerator(&cwp)
 	assert.Nil(t, err)
 
@@ -156,7 +157,7 @@ func Test_Key_ConvertPasswordProtectedPEMEncodedRSAKey(t *testing.T) {
 	readMock.GivenReadRequestReturns("Enter key data (hit Enter twice to end input)", testkeymaterial.EphemeralEncryptedRsaKeyText)
 	readMock.GivenReadRequestReturns("Private key requires password", []byte("s1cr3t"))
 
-	_, cwp := givenTypicalKeyWrappingParameters(t)
+	_, cwp := givenTypicalKeyWrappingParameters()
 	fn, err := MakeKeyGenerator(&cwp)
 	assert.Nil(t, err)
 
@@ -168,7 +169,7 @@ func Test_Key_ConvertPasswordProtectedDEREncodedRSAKey(t *testing.T) {
 	readMock.GivenReadRequestReturns("Enter key data (hit Enter twice to end input)", testkeymaterial.EphemeralEncryptedRsaKeyDERForm)
 	readMock.GivenReadRequestReturns("Private key requires password", []byte("s1cr3t"))
 
-	_, cwp := givenTypicalKeyWrappingParameters(t)
+	_, cwp := givenTypicalKeyWrappingParameters()
 	fn, err := MakeKeyGenerator(&cwp)
 	assert.Nil(t, err)
 
@@ -180,7 +181,7 @@ func Test_Key_ConvertPasswordProtectedPEMEncodedRSAKey_IfPasswordIsWrong(t *test
 	readMock.GivenReadRequestReturns("Enter key data (hit Enter twice to end input)", testkeymaterial.EphemeralEncryptedRsaKeyText)
 	readMock.GivenReadRequestReturns("Private key requires password", []byte("wrong-s1cr3t"))
 
-	_, cwp := givenTypicalKeyWrappingParameters(t)
+	_, cwp := givenTypicalKeyWrappingParameters()
 	fn, err := MakeKeyGenerator(&cwp)
 	assert.Nil(t, err)
 

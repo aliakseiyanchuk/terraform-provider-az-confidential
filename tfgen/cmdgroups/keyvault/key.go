@@ -69,7 +69,7 @@ func MakeKeyGenerator(kwp *model.ContentWrappingParams, args ...string) (model.S
 		return nil, parseErr
 	}
 
-	if kwp.AddTargetLabel {
+	if kwp.LockPlacement {
 		if !keyParams.SpecifiesVault() {
 			return nil, errors.New("options -destination-vault and -destination-key-name must be supplied where ciphertext must be labelled with its intended destination")
 		} else {
@@ -79,16 +79,16 @@ func MakeKeyGenerator(kwp *model.ContentWrappingParams, args ...string) (model.S
 				Type:      "keys",
 			}
 
-			kwp.AddLabel(coord.GetLabel())
+			kwp.AddPlacementConstraints(coord.GetPlacementConstraint())
 		}
 	}
 
 	mdl := KeyResourceTerraformModel{
 		TerraformCodeModel: TerraformCodeModel{
 			BaseTerraformCodeModel: model.BaseTerraformCodeModel{
-				TFBlockName:           "key",
-				CiphertextLabels:      kwp.GetLabels(),
-				WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
+				TFBlockName:              "key",
+				EncryptedContentMetadata: kwp.VersionedConfidentialMetadata,
+				WrappingKeyCoordinate:    kwp.WrappingKeyCoordinate,
 			},
 
 			TagsModel: model.TagsModel{
@@ -103,10 +103,35 @@ func MakeKeyGenerator(kwp *model.ContentWrappingParams, args ...string) (model.S
 		KeyOperations: nil,
 	}
 
-	return func(kwp model.ContentWrappingParams, inputReader model.InputReader, onlyCiphertext bool) (string, error) {
+	return func(inputReader model.InputReader, onlyCiphertext bool) (string, error) {
 		jwkKey, acquireErr := AcquireKey(keyParams, inputReader)
 		if acquireErr != nil {
 			return "", acquireErr
+		}
+
+		if _, rsaOk := jwkKey.(jwk.RSAPrivateKey); rsaOk {
+			mdl.KeyOperations = append(mdl.KeyOperations,
+				azkeys.KeyOperationDecrypt,
+				azkeys.KeyOperationEncrypt,
+				azkeys.KeyOperationSign,
+				azkeys.KeyOperationUnwrapKey,
+				azkeys.KeyOperationVerify,
+				azkeys.KeyOperationWrapKey,
+			)
+		} else if _, symOk := jwkKey.(jwk.SymmetricKey); symOk {
+			mdl.KeyOperations = append(mdl.KeyOperations,
+				azkeys.KeyOperationDecrypt,
+				azkeys.KeyOperationEncrypt,
+				azkeys.KeyOperationSign,
+				azkeys.KeyOperationUnwrapKey,
+				azkeys.KeyOperationVerify,
+				azkeys.KeyOperationWrapKey,
+			)
+		} else if _, ecOk := jwkKey.(jwk.ECDSAPrivateKey); ecOk {
+			mdl.KeyOperations = append(mdl.KeyOperations,
+				azkeys.KeyOperationSign,
+				azkeys.KeyOperationVerify,
+			)
 		}
 
 		if onlyCiphertext {
@@ -235,7 +260,7 @@ func (g *KeyResourceTerraformModel) AddDefaultKeyOperationsFor(jwkKey interface{
 	}
 }
 
-func OutputKeyTerraformCode(mdl KeyResourceTerraformModel, kwp model.ContentWrappingParams, jwkKey interface{}) (string, error) {
+func OutputKeyTerraformCode(mdl KeyResourceTerraformModel, kwp *model.ContentWrappingParams, jwkKey interface{}) (string, error) {
 	ciphertext, err := OutputKeyEncryptedContent(kwp, jwkKey)
 	if err != nil {
 		return ciphertext, err
@@ -245,14 +270,15 @@ func OutputKeyTerraformCode(mdl KeyResourceTerraformModel, kwp model.ContentWrap
 	return model.Render("key", keyTFTemplate, &mdl)
 }
 
-func OutputKeyEncryptedContent(kwp model.ContentWrappingParams, jwkKey interface{}) (string, error) {
+func OutputKeyEncryptedContent(kwp *model.ContentWrappingParams, jwkKey interface{}) (string, error) {
 	jwkData, marshalErr := json.Marshal(jwkKey)
 	if marshalErr != nil {
 		return "", marshalErr
 	}
 
+	kwp.ObjectType = keyvault.KeyObjectType
 	helper := core.NewVersionedBinaryConfidentialDataHelper()
-	_ = helper.CreateConfidentialBinaryData(jwkData, keyvault.KeyObjectType, kwp.GetLabels())
+	_ = helper.CreateConfidentialBinaryData(jwkData, kwp.VersionedConfidentialMetadata)
 
 	rsaKey, loadErr := kwp.LoadRsaPublicKey()
 	if loadErr != nil {

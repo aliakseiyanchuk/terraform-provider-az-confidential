@@ -17,14 +17,15 @@ var basicTags = map[string]string{
 
 func Test_Secret_OutputSecretTerraformCode_Renders(t *testing.T) {
 	kwp := model.ContentWrappingParams{
-		Labels:           []string{"acceptance-testing"},
+		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
+		},
 		LoadRsaPublicKey: core.LoadPublicKeyFromDataOnce(testkeymaterial.EphemeralRsaPublicKey),
 	}
 
 	secretModel := TerraformCodeModel{
 		BaseTerraformCodeModel: model.BaseTerraformCodeModel{
 			TFBlockName:           "secret",
-			CiphertextLabels:      []string{"acceptance-testing"},
 			WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 		},
 

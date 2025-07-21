@@ -166,10 +166,14 @@ func Test_CAzVCR_DoCreate_NoPayload(t *testing.T) {
 	data := CertificateModel{}
 	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
 
-	var emptyBytes []byte
-	confData := helper.CreateConfidentialCertificateData(emptyBytes, "something", "", "certificate", nil)
+	md := core.VersionedConfidentialMetadata{
+		ObjectType: CertificateObjectType,
+	}
 
-	_, dg := ks.DoCreate(context.Background(), &data, confData)
+	var emptyBytes []byte
+	confData := helper.CreateConfidentialCertificateData(emptyBytes, "something", "", md)
+
+	_, dg := ks.DoCreate(context.Background(), &data, confData.Data)
 	assert.True(t, dg.HasError())
 }
 
@@ -194,11 +198,15 @@ func Test_CAzVCR_DoCreate_IfCertificateClientCannotConnect(t *testing.T) {
 		factory: &factory,
 	}
 
+	md := core.VersionedConfidentialMetadata{
+		ObjectType: CertificateObjectType,
+	}
+
 	data := CertificateModel{}
 	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
-	confData := helper.CreateConfidentialCertificateData(testkeymaterial.EphemeralCertificatePEM, "application/x-pem-file", "", "certificate", nil)
+	confData := helper.CreateConfidentialCertificateData(testkeymaterial.EphemeralCertificatePEM, "application/x-pem-file", "", md)
 
-	_, dg := ks.DoCreate(context.Background(), &data, confData)
+	_, dg := ks.DoCreate(context.Background(), &data, confData.Data)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "Error acquiring certificates client", dg[0].Summary())
 
@@ -215,11 +223,15 @@ func Test_CAzVCR_DoCreate_IfCertificateClientIsNil(t *testing.T) {
 		factory: &factory,
 	}
 
+	md := core.VersionedConfidentialMetadata{
+		ObjectType: CertificateObjectType,
+	}
+
 	data := CertificateModel{}
 	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
-	confData := helper.CreateConfidentialCertificateData(testkeymaterial.EphemeralCertificatePEM, "application/x-pem-file", "", "certificate", nil)
+	confData := helper.CreateConfidentialCertificateData(testkeymaterial.EphemeralCertificatePEM, "application/x-pem-file", "", md)
 
-	_, dg := ks.DoCreate(context.Background(), &data, confData)
+	_, dg := ks.DoCreate(context.Background(), &data, confData.Data)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "Az certificates vault keys client cannot be retrieved", dg[0].Summary())
 
@@ -238,11 +250,15 @@ func Test_CAzVCR_DoCreate_IfCertificateImportFails(t *testing.T) {
 		factory: &factory,
 	}
 
+	md := core.VersionedConfidentialMetadata{
+		ObjectType: CertificateObjectType,
+	}
+
 	data := CertificateModel{}
 	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
-	confData := helper.CreateConfidentialCertificateData(testkeymaterial.EphemeralCertificatePEM, "application/x-pem-file", "", "certificate", nil)
+	confData := helper.CreateConfidentialCertificateData(testkeymaterial.EphemeralCertificatePEM, "application/x-pem-file", "", md)
 
-	_, dg := ks.DoCreate(context.Background(), &data, confData)
+	_, dg := ks.DoCreate(context.Background(), &data, confData.Data)
 	assert.True(t, dg.HasError())
 	assert.Equal(t, "Certificate import failed", dg[0].Summary())
 
@@ -263,11 +279,15 @@ func Test_CAzVCR_DoCreate(t *testing.T) {
 		factory: &factory,
 	}
 
+	md := core.VersionedConfidentialMetadata{
+		ObjectType: CertificateObjectType,
+	}
+
 	data := GivenTypicalInitialCertModel()
 	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
-	confData := helper.CreateConfidentialCertificateData(testkeymaterial.EphemeralCertificatePEM, "application/x-pem-file", "", "certificate", nil)
+	confData := helper.CreateConfidentialCertificateData(testkeymaterial.EphemeralCertificatePEM, "application/x-pem-file", "", md)
 
-	_, dg := ks.DoCreate(context.Background(), &data, confData)
+	_, dg := ks.DoCreate(context.Background(), &data, confData.Data)
 	assert.False(t, dg.HasError())
 
 	factory.AssertExpectations(t)

@@ -13,27 +13,30 @@ import (
 func generateSecretResourceNoTags(t *testing.T) string {
 
 	kwp := model.ContentWrappingParams{
-		Labels:           []string{"acceptance-testing"},
+		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
+		},
 		LoadRsaPublicKey: core.LoadPublicKeyFromFileOnce(wrappingKey),
 	}
 
 	secretModel := keyvault.TerraformCodeModel{
 		BaseTerraformCodeModel: model.BaseTerraformCodeModel{
 			TFBlockName:           "secret",
-			CiphertextLabels:      []string{"acceptance-testing"},
 			WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 		},
 
 		TagsModel: model.TagsModel{
 			IncludeTags: false,
 		},
+
+		DestinationCoordinate: keyvault.NewObjectCoordinateModel("", "acceptance-test-secret-notags"),
 	}
 
 	if rv, tfErr := keyvault.OutputSecretTerraformCode(secretModel, &kwp, "this is a very secret string"); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {
-		print(rv)
+		//print(rv)
 		return rv
 	}
 }

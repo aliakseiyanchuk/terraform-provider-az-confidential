@@ -57,10 +57,11 @@ type VersionedStringConfidentialDataHelper struct {
 	VersionedConfidentialDataHelperTemplate[ConfidentialStringData, StringConfidentialDataJsonModel]
 }
 
-func (vcd *VersionedStringConfidentialDataHelper) CreateConfidentialStringData(value, objType string, labels []string) VersionedConfidentialData[ConfidentialStringData] {
-	rv := StringConfidentialDataJsonModel{
-		StringData: value,
+func (vcd *VersionedStringConfidentialDataHelper) CreateConfidentialStringData(v string, md VersionedConfidentialMetadata) VersionedConfidentialData[ConfidentialStringData] {
+	p := VersionedConfidentialDataCreateParam[ConfidentialStringData]{
+		VersionedConfidentialMetadata: md,
+		Value:                         &StringConfidentialDataJsonModel{StringData: v},
 	}
 
-	return vcd.Set(&rv, objType, labels)
+	return vcd.Set(p)
 }

@@ -136,16 +136,16 @@ func MakeNamedValueGenerator(kwp *model.ContentWrappingParams, args []string) (m
 		return nil, parseErr
 	}
 
-	if kwp.AddTargetLabel {
+	if kwp.LockPlacement {
 		if !namedValueParams.SpecifiesTarget() {
 			return nil, errors.New("options -az-subscription-id, -resource-group-name, -service-name, and -named-value must be supplied where ciphertext is labelled with its intended destination")
 		} else {
-			kwp.AddLabel(res_apim.GetDestinationNamedValueLabel(
+			kwp.AddPlacementConstraints(core.PlacementConstraint(res_apim.GetDestinationNamedValueLabel(
 				namedValueParams.AzSubscriptionId,
 				namedValueParams.ResourceGroupName,
 				namedValueParams.ServiceName,
 				namedValueParams.namedValueName,
-			))
+			)))
 		}
 	}
 
@@ -164,7 +164,7 @@ func MakeNamedValueGenerator(kwp *model.ContentWrappingParams, args []string) (m
 		),
 	}
 
-	return func(kwp model.ContentWrappingParams, inputReader model.InputReader, onlyCiphertext bool) (string, error) {
+	return func(inputReader model.InputReader, onlyCiphertext bool) (string, error) {
 		namedValue, readErr := inputReader("Enter named value data",
 			namedValueParams.inputFile,
 			namedValueParams.inputFileBase64,
@@ -187,7 +187,7 @@ func MakeNamedValueGenerator(kwp *model.ContentWrappingParams, args []string) (m
 
 }
 
-func OutputNamedValueTerraformCode(mdl NamedValueTerraformCodeModel, kwp model.ContentWrappingParams, namedValueDataAsStr string) (string, error) {
+func OutputNamedValueTerraformCode(mdl NamedValueTerraformCodeModel, kwp *model.ContentWrappingParams, namedValueDataAsStr string) (string, error) {
 	s, err := OutputNamedValueEncryptedContent(kwp, namedValueDataAsStr)
 	if err != nil {
 		return s, err
@@ -197,9 +197,10 @@ func OutputNamedValueTerraformCode(mdl NamedValueTerraformCodeModel, kwp model.C
 	return model.Render("apim/namedValue", namedValueTFTemplate, &mdl)
 }
 
-func OutputNamedValueEncryptedContent(kwp model.ContentWrappingParams, secretText string) (string, error) {
+func OutputNamedValueEncryptedContent(kwp *model.ContentWrappingParams, secretText string) (string, error) {
+	kwp.ObjectType = res_apim.NamedValueObjectType
 	helper := core.NewVersionedStringConfidentialDataHelper()
-	_ = helper.CreateConfidentialStringData(secretText, res_apim.NamedValueObjectType, kwp.GetLabels())
+	_ = helper.CreateConfidentialStringData(secretText, kwp.VersionedConfidentialMetadata)
 
 	rsaKey, loadErr := kwp.LoadRsaPublicKey()
 	if loadErr != nil {

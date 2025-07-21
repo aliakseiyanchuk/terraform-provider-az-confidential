@@ -13,7 +13,9 @@ import (
 func generatePasswordDataSource(t *testing.T) string {
 
 	kwp := model.ContentWrappingParams{
-		Labels:           []string{"acceptance-testing"},
+		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
+		},
 		LoadRsaPublicKey: core.LoadPublicKeyFromFileOnce(wrappingKey),
 	}
 

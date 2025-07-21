@@ -45,12 +45,15 @@ type VersionedBinaryConfidentialDataHelper struct {
 	VersionedConfidentialDataHelperTemplate[ConfidentialBinaryData, BinaryConfidentialDataJsonModel]
 }
 
-func (vcd *VersionedBinaryConfidentialDataHelper) CreateConfidentialBinaryData(value []byte, objType string, labels []string) VersionedConfidentialData[ConfidentialBinaryData] {
-	rv := BinaryConfidentialDataStruct{
-		BinaryData: value,
+func (vcd *VersionedBinaryConfidentialDataHelper) CreateConfidentialBinaryData(value []byte, md VersionedConfidentialMetadata) VersionedConfidentialData[ConfidentialBinaryData] {
+	p := VersionedConfidentialDataCreateParam[ConfidentialBinaryData]{
+		VersionedConfidentialMetadata: md,
+		Value: &BinaryConfidentialDataStruct{
+			BinaryData: value,
+		},
 	}
 
-	return vcd.Set(&rv, objType, labels)
+	return vcd.Set(p)
 }
 
 func NewVersionedBinaryConfidentialDataHelper() *VersionedBinaryConfidentialDataHelper {

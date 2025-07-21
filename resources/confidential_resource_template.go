@@ -56,7 +56,7 @@ type CommonConfidentialResourceSpecialization[TMdl any, TConfData any, AZAPIObje
 	ConvertToTerraform(azObj AZAPIObject, tfModel *TMdl) diag.Diagnostics
 	GetConfidentialMaterialFrom(mdl TMdl) ConfidentialMaterialModel
 	GetSupportedConfidentialMaterialTypes() []string
-	CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *TMdl) diag.Diagnostics
+	CheckPlacement(ctx context.Context, providerConstraints []core.ProviderConstraint, placementConstraints []core.PlacementConstraint, tfModel *TMdl) diag.Diagnostics
 	GetJsonDataImporter() core.ObjectJsonImportSupport[TConfData]
 
 	DoCreate(ctx context.Context, planData *TMdl, plainData TConfData) (AZAPIObject, diag.Diagnostics)
@@ -120,7 +120,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 		// Immutable read/update does not require decryption
 		azObj, resourceExistenceCheck, dg = d.ImmutableRU.DoRead(ctx, &data)
 	} else if d.MutableRU != nil {
-		// Mutable read/update requires decryption of the ciphertext. Because the update presents the possibilty
+		// Mutable read/update requires decryption of the ciphertext. Because the update presents the possibility
 		// of the injection, the ciphertext is checked for correctness
 
 		// Read Terraform prior state data into the model
@@ -148,7 +148,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 			return
 		}
 
-		placementDiags := d.Specializer.CheckPlacement(ctx, rawMsg.Header.Uuid, rawMsg.Header.Labels, &data)
+		placementDiags := d.Specializer.CheckPlacement(ctx, rawMsg.Header.ProviderConstraints, rawMsg.Header.PlacementConstraints, &data)
 		resp.Diagnostics.Append(placementDiags...)
 		if resp.Diagnostics.HasError() {
 			tflog.Error(ctx, "checking possibility to place this object raised an error")
@@ -231,7 +231,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		return
 	}
 
-	placementDiags := d.Specializer.CheckPlacement(ctx, rawMsg.Header.Uuid, rawMsg.Header.Labels, &data)
+	placementDiags := d.Specializer.CheckPlacement(ctx, rawMsg.Header.ProviderConstraints, rawMsg.Header.PlacementConstraints, &data)
 	resp.Diagnostics.Append(placementDiags...)
 	if resp.Diagnostics.HasError() {
 		tflog.Error(ctx, "checking possibility to place this object raised an error")

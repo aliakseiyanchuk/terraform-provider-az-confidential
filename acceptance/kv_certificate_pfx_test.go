@@ -11,32 +11,35 @@ import (
 	"testing"
 )
 
-func generatePEMEncodedCertificateResource(t *testing.T) string {
+func generatePFXCertificateResource(t *testing.T) string {
 
 	kwp := model.ContentWrappingParams{
-		Labels:           []string{"acceptance-testing"},
+		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
+		},
 		LoadRsaPublicKey: core.LoadPublicKeyFromFileOnce(wrappingKey),
 	}
 
 	mdl := keyvault.TerraformCodeModel{
 		BaseTerraformCodeModel: model.BaseTerraformCodeModel{
 			TFBlockName:           "cert",
-			CiphertextLabels:      kwp.GetLabels(),
 			WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 		},
 
 		TagsModel: model.TagsModel{
 			IncludeTags: false,
 		},
+
+		DestinationCoordinate: keyvault.NewObjectCoordinateModel("", "acceptance-test-pfxcert"),
 	}
 
 	confData := core.ConfidentialCertConfidentialDataStruct{
-		CertificateData:         testkeymaterial.EphemeralCertificatePEM,
-		CertificateDataFormat:   keyvault.CertFormatPem,
-		CertificateDataPassword: "",
+		CertificateData:         testkeymaterial.EphemeralCertPFX12,
+		CertificateDataFormat:   keyvault.CertFormatPkcs12,
+		CertificateDataPassword: "s1cr3t",
 	}
 
-	if rv, tfErr := keyvault.OutputCertificateTerraformCode(mdl, kwp, &confData); tfErr != nil {
+	if rv, tfErr := keyvault.OutputCertificateTerraformCode(mdl, &kwp, &confData); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {
@@ -45,13 +48,13 @@ func generatePEMEncodedCertificateResource(t *testing.T) string {
 	}
 }
 
-func TestAccConfidentialPEMEncodedCertificate(t *testing.T) {
+func TestAccConfidentialPKCS12File(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Read testing
 			{
-				Config: providerConfig + generatePEMEncodedCertificateResource(t),
+				Config: providerConfig + generatePFXCertificateResource(t),
 				Check: resource.ComposeTestCheckFunc(
 					// Validate that the secret version is set after creation
 					resource.TestCheckResourceAttrSet("az-confidential_certificate.cert", "secret_id"),

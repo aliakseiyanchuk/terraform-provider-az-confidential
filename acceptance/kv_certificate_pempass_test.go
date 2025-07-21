@@ -14,20 +14,23 @@ import (
 func generatePEMEncodedPasswordProtectedCertificateResource(t *testing.T) string {
 
 	kwp := model.ContentWrappingParams{
-		Labels:           []string{"acceptance-testing"},
+		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
+		},
 		LoadRsaPublicKey: core.LoadPublicKeyFromFileOnce(wrappingKey),
 	}
 
 	mdl := keyvault.TerraformCodeModel{
 		BaseTerraformCodeModel: model.BaseTerraformCodeModel{
 			TFBlockName:           "cert",
-			CiphertextLabels:      kwp.GetLabels(),
 			WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 		},
 
 		TagsModel: model.TagsModel{
 			IncludeTags: false,
 		},
+
+		DestinationCoordinate: keyvault.NewObjectCoordinateModel("", "acceptance-test-pemPassCert"),
 	}
 
 	confData := core.ConfidentialCertConfidentialDataStruct{
@@ -36,7 +39,7 @@ func generatePEMEncodedPasswordProtectedCertificateResource(t *testing.T) string
 		CertificateDataPassword: "s1cr3t",
 	}
 
-	if rv, tfErr := keyvault.OutputCertificateTerraformCode(mdl, kwp, &confData); tfErr != nil {
+	if rv, tfErr := keyvault.OutputCertificateTerraformCode(mdl, &kwp, &confData); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {

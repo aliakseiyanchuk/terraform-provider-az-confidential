@@ -12,7 +12,9 @@ import (
 func generateApimSubscriptionResourceForAllApis(t *testing.T) string {
 
 	kwp := model.ContentWrappingParams{
-		Labels:                []string{"acceptance-testing"},
+		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
+		},
 		LoadRsaPublicKey:      core.LoadPublicKeyFromFileOnce(wrappingKey),
 		WrappingKeyCoordinate: model.NewWrappingKey(),
 	}
@@ -37,11 +39,11 @@ func generateApimSubscriptionResourceForAllApis(t *testing.T) string {
 		},
 	}
 
-	if rv, tfErr := apim.OutputSubscriptionTerraformCode(mdl, kwp, "allApiA", "allApiB"); tfErr != nil {
+	if rv, tfErr := apim.OutputSubscriptionTerraformCode(mdl, &kwp, "allApiA", "allApiB"); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {
-		print(rv)
+		//print(rv)
 		return rv
 	}
 }

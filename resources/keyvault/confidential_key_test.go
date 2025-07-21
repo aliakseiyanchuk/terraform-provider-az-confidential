@@ -455,13 +455,21 @@ func givenVersionedConfidentialDataFromEphemeralKey() core.ConfidentialBinaryDat
 	jwkKey, _ := jwk.Import(testkeymaterial.EphemeralRsaKeyText)
 	jsonBytes, _ := json.Marshal(jwkKey)
 
+	md := core.VersionedConfidentialMetadata{
+		ObjectType: KeyObjectType,
+	}
+
 	helper := core.NewVersionedBinaryConfidentialDataHelper()
-	return helper.CreateConfidentialBinaryData(jsonBytes, "key", nil).Data
+	return helper.CreateConfidentialBinaryData(jsonBytes, md).Data
 }
 
 func givenVersionedBinaryConfidentialDataFromString(s string) core.ConfidentialBinaryData {
+	md := core.VersionedConfidentialMetadata{
+		ObjectType: KeyObjectType,
+	}
+
 	helper := core.NewVersionedBinaryConfidentialDataHelper()
-	return helper.CreateConfidentialBinaryData([]byte(s), "key", nil).Data
+	return helper.CreateConfidentialBinaryData([]byte(s), md).Data
 }
 
 //func Test_CAzVKR_DoCreate_IfDataIsNotGZipCompressed(t *testing.T) {

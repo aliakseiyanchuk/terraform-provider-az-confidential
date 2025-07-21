@@ -2,11 +2,30 @@ package core
 
 import "encoding/json"
 
+type Stringifiable interface {
+	String() string
+}
+
+func StringifiableComparator(a string, b Stringifiable) bool {
+	return a == b.String()
+}
+
+type ProviderConstraint string
+type PlacementConstraint string
+
+func (p PlacementConstraint) String() string { return string(p) }
+func (p ProviderConstraint) String() string  { return string(p) }
+
+// ConfidentialDataJsonHeader is a header for the confidential material that provides the meta-information
+// about what this confidential material is and the limits to its use
 type ConfidentialDataJsonHeader struct {
-	Uuid           string   `json:"u"`
-	Type           string   `json:"t"`
-	Labels         []string `json:"l,omitempty"`
-	ModelReference string   `json:"mrf,omitempty"`
+	Uuid                 string                `json:"u"`
+	Type                 string                `json:"t"`
+	CreateLimit          int64                 `json:"clt,omitempty,omitzero"`
+	Expiry               int64                 `json:"exp,omitempty,omitzero"`
+	ProviderConstraints  []ProviderConstraint  `json:"prc,omitempty"`
+	PlacementConstraints []PlacementConstraint `json:"plc,omitempty"`
+	ModelReference       string                `json:"mrf,omitempty"`
 }
 
 type ConfidentialDataMessageJson struct {

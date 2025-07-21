@@ -137,11 +137,11 @@ func (n *NamedValueSpecializer) GetSupportedConfidentialMaterialTypes() []string
 	return []string{NamedValueObjectType}
 }
 
-func (n *NamedValueSpecializer) CheckPlacement(ctx context.Context, uuid string, labels []string, tfModel *NamedValueModel) diag.Diagnostics {
+func (n *NamedValueSpecializer) CheckPlacement(ctx context.Context, pc []core.ProviderConstraint, pl []core.PlacementConstraint, tfModel *NamedValueModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}
 	n.factory.EnsureCanPlaceLabelledObjectAt(ctx,
-		uuid,
-		labels,
+		pc,
+		pl,
 		"api management named value",
 		&tfModel.DestinationNamedValue,
 		&rv,
