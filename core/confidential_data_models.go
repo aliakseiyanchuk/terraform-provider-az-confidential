@@ -23,6 +23,7 @@ type ConfidentialDataJsonHeader struct {
 	Type                 string                `json:"t"`
 	CreateLimit          int64                 `json:"clt,omitempty,omitzero"`
 	Expiry               int64                 `json:"exp,omitempty,omitzero"`
+	NumUses              int                   `json:"nu,omitempty,omitzero"`
 	ProviderConstraints  []ProviderConstraint  `json:"prc,omitempty"`
 	PlacementConstraints []PlacementConstraint `json:"plc,omitempty"`
 	ModelReference       string                `json:"mrf,omitempty"`

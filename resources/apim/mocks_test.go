@@ -317,6 +317,11 @@ func (m *AZClientsFactoryMock) IsObjectIdTracked(ctx context.Context, id string)
 	return rv.Get(0).(bool), rv.Error(1)
 }
 
+func (m *AZClientsFactoryMock) GetTackedObjectUses(ctx context.Context, id string) (int, error) {
+	rv := m.Mock.Called(ctx, id)
+	return rv.Get(0).(int), rv.Error(1)
+}
+
 func (m *AZClientsFactoryMock) IsObjectTrackingEnabled() bool {
 	rv := m.Mock.Called()
 	return rv.Get(0).(bool)

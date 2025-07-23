@@ -17,3 +17,11 @@ type ContentWrappingParams struct {
 func (kwp *ContentWrappingParams) AddPlacementConstraints(label ...core.PlacementConstraint) {
 	kwp.PlacementConstraints = append(kwp.PlacementConstraints, label...)
 }
+
+func (kwp *ContentWrappingParams) GetMetadataForTerraform(objName, destExp string) VersionedConfidentialMetadataTFCode {
+	return VersionedConfidentialMetadataTFCode{
+		VersionedConfidentialMetadata: kwp.VersionedConfidentialMetadata,
+		ObjectSingular:                objName,
+		DestinationArgument:           destExp,
+	}
+}

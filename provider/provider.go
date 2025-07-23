@@ -34,6 +34,9 @@ type ObjectHashTracker interface {
 	// IsObjectIdTracked Checks if the object Id is tracked
 	IsObjectIdTracked(ctx context.Context, id string) (bool, error)
 
+	// GetTackedObjectUses retrieves how many times a particular object was used.
+	GetTackedObjectUses(ctx context.Context, id string) (int, error)
+
 	// TrackObjectId Track object Id in the memory of seeing objects
 	TrackObjectId(ctx context.Context, id string) error
 }
@@ -284,6 +287,14 @@ func (f *AZClientsFactoryImpl) IsObjectIdTracked(ctx context.Context, id string)
 	}
 }
 
+func (f *AZClientsFactoryImpl) GetTackedObjectUses(ctx context.Context, id string) (int, error) {
+	if f.hashTacker != nil {
+		return f.hashTacker.GetTackedObjectUses(ctx, id)
+	} else {
+		return 0, nil
+	}
+}
+
 func (f *AZClientsFactoryImpl) TrackObjectId(ctx context.Context, id string) error {
 	if f.hashTacker != nil {
 		return f.hashTacker.TrackObjectId(ctx, id)
@@ -298,6 +309,14 @@ var _ core.AZClientsFactory = &AZClientsFactoryImpl{}
 // to place the object at the intended location.
 func (f *AZClientsFactoryImpl) EnsureCanPlaceLabelledObjectAt(_ context.Context, providerConstraints []core.ProviderConstraint, placementConstraints []core.PlacementConstraint, tfResourceType string, targetCoord core.LabelledObject, diagnostics *diag.Diagnostics) {
 	if len(providerConstraints) > 0 {
+		if len(f.ProviderLabels) == 0 {
+			diagnostics.AddError(
+				"Insure provider",
+				fmt.Sprintf("This %s defines constraints on the provider. This provider is not configured with any labels. Either replace ciphertext by removing the provider constriant, or label the provider.", tfResourceType),
+			)
+			return
+		}
+
 		if !core.AnyIsInWithComparator(
 			f.ProviderLabels,
 			providerConstraints, func(a string, b core.ProviderConstraint) bool { return a == string(b) }) {

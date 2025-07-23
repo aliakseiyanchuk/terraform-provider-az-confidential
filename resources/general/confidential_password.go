@@ -122,6 +122,11 @@ func (d *ConfidentialPasswordDataSource) Read(ctx context.Context, req datasourc
 		resp.Diagnostics.AddError("Mismatching confidential object type", fmt.Sprintf("Expected `password`, received `%s`", rawMsg.Header.Type))
 	}
 
+	d.CheckCiphertextExpiry(rawMsg, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	d.Factory.EnsureCanPlaceLabelledObjectAt(ctx, rawMsg.Header.ProviderConstraints, nil, "password", nil, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		tflog.Error(ctx, "checking possibility to place this object raised an error")

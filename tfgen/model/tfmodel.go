@@ -66,18 +66,18 @@ type BaseTerraformCodeModel struct {
 	TFBlockName string
 
 	EncryptedContent         TerraformFieldExpression[string]
-	EncryptedContentMetadata core.VersionedConfidentialMetadata
+	EncryptedContentMetadata VersionedConfidentialMetadataTFCode
 
 	WrappingKeyCoordinate WrappingKey
 }
 
-func NewBaseTerraformCodeModel(kwp *ContentWrappingParams, blockName string) BaseTerraformCodeModel {
+func NewBaseTerraformCodeModel(kwp *ContentWrappingParams, blockName, objectName, destArg string) BaseTerraformCodeModel {
 	return BaseTerraformCodeModel{
 		TFBlockName: blockName,
 		// The Terraform resources should be provided in the Heredoc
 		// style for added readability.
 		EncryptedContent:         NewStringTerraformFieldHeredocExpression(),
-		EncryptedContentMetadata: kwp.VersionedConfidentialMetadata,
+		EncryptedContentMetadata: kwp.GetMetadataForTerraform(objectName, destArg),
 
 		WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 	}
@@ -85,7 +85,8 @@ func NewBaseTerraformCodeModel(kwp *ContentWrappingParams, blockName string) Bas
 
 func Render(templateName, templateStr string, obj interface{}) (string, error) {
 	funcMap := template.FuncMap{
-		"fold80": func(s string) []string { return FoldString(s, 80) },
+		"fold80":            func(s string) []string { return FoldString(s, 80) },
+		"formatEpochRFC822": func(t int64) string { return core.FormatUnixSecondsRFC822(t) },
 	}
 
 	tmpl, templErr := template.New(templateName).Funcs(funcMap).Parse(templateStr)

@@ -350,6 +350,54 @@ type CommonConfidentialResource struct {
 	Factory core.AZClientsFactory
 }
 
+func (d *CommonConfidentialResource) CheckCiphertextExpiry(rawMsg core.ConfidentialDataMessageJson, dg *diag.Diagnostics) {
+	if rawMsg.Header.Expiry > 0 {
+		now := time.Now()
+
+		if now.Unix() > rawMsg.Header.Expiry {
+			dg.AddError(
+				"Ciphertext has expired",
+				"The ciphertext may no longer be used. Re-encrypt and replace the ciphertext of this resource",
+			)
+			return
+		}
+
+		warningDuration := time.Hour * 24 * 30
+		expiryTime := time.Unix(rawMsg.Header.Expiry, 0)
+		diff := expiryTime.Sub(time.Now())
+		if diff < warningDuration {
+			dg.AddWarning(
+				"Ciphertext is about to expire",
+				"Ciphertext has less than 30 days remaining in the allowed use. Re-encrypt and replace the ciphertext of this resource before it expires",
+			)
+		}
+	}
+}
+
+func (d *CommonConfidentialResource) CheckCiphertextCreateLimit(rawMsg core.ConfidentialDataMessageJson, dg *diag.Diagnostics) {
+	if rawMsg.Header.CreateLimit > 0 {
+		now := time.Now()
+
+		if now.Unix() > rawMsg.Header.CreateLimit {
+			dg.AddError(
+				"Ciphertext create window has expired",
+				"The ciphertext may no longer be used to create Azure objects. Re-encrypt and replace the ciphertext of this resource",
+			)
+			return
+		}
+
+		warningDuration := time.Hour * 24
+		expiryTime := time.Unix(rawMsg.Header.Expiry, 0)
+		diff := expiryTime.Sub(time.Now())
+		if diff < warningDuration {
+			dg.AddWarning(
+				"Ciphertext create window is about to expire",
+				"Ciphertext has less than 24 hours remaining to create Azure objects. Re-encrypt and replace the ciphertext of this resource before it expires",
+			)
+		}
+	}
+}
+
 func (d *CommonConfidentialResource) ExtractConfidentialModelPlainText(ctx context.Context, mdl ConfidentialMaterialModel, diagnostics *diag.Diagnostics) []byte {
 	if d.Factory == nil {
 		diagnostics.AddError("incomplete provider configuration", "provider does no have an initialized Azure objects Factory")

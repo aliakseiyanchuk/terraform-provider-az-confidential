@@ -84,6 +84,7 @@ type AZClientsFactory interface {
 
 	IsObjectTrackingEnabled() bool
 	IsObjectIdTracked(ctx context.Context, id string) (bool, error)
+	GetTackedObjectUses(ctx context.Context, id string) (int, error)
 	TrackObjectId(ctx context.Context, id string) error
 
 	GetDecrypterFor(ctx context.Context, coord WrappingKeyCoordinate) RSADecrypter

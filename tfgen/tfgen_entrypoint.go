@@ -13,6 +13,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 var commandGroups []string
@@ -25,6 +26,15 @@ type EntryPointCLIArgs struct {
 	ConstraintTarget    bool
 
 	PrintCiphertextOnly bool
+
+	CreateLimit time.Duration
+	ExpiryDays  int
+	NumUses     int
+	CreateOnce  bool
+
+	NoCreateLimit bool
+	NoExpireLimit bool
+	NoUsageLimit  bool
 }
 
 func init() {
@@ -68,11 +78,53 @@ func CreateCommonCLIArgs() (*EntryPointCLIArgs, *flag.FlagSet) {
 	)
 
 	baseFlags.BoolVar(&rv.ConstraintTarget,
-		"lock-placement",
+		"lock-destination",
 		false,
 		"The ciphertext may only be used to create an Azure resource with the configuration "+
 			"specified when the ciphertext is created. For example, when creating a kv key resource, you can specify a specific "+
 			"vault name and key name. Exact option depend on the resource type.",
+	)
+
+	baseFlags.DurationVar(&rv.CreateLimit,
+		"time-to-create",
+		time.Hour*24*3,
+		"Time before a resource can be created. Defaults to 3 calendar days. Use -no-create-limit to remove this limit.",
+	)
+
+	baseFlags.BoolVar(&rv.NoCreateLimit,
+		"no-create-limit",
+		false,
+		"Removes the timing limit on create from the ciphertext",
+	)
+
+	baseFlags.IntVar(&rv.ExpiryDays,
+		"days-to-expire",
+		365,
+		"Days the ciphertext remains valid. Defaults to 365 days. Use -no-expiry-limit to remove this limit",
+	)
+
+	baseFlags.BoolVar(&rv.NoExpireLimit,
+		"no-expiry-limit",
+		false,
+		"Removes the expiry date from  ciphertext. The ciphertext will be perpetually valid.",
+	)
+
+	baseFlags.IntVar(&rv.NumUses,
+		"num-uses",
+		10,
+		"Number of times this ciphertext can be used to create object. Defaults to 10. Set to zero to disable this limit",
+	)
+
+	baseFlags.BoolVar(&rv.CreateOnce,
+		"create-once",
+		false,
+		"Create this resource once. A shortcut for `-num-uses 1`",
+	)
+
+	baseFlags.BoolVar(&rv.NoUsageLimit,
+		"no-usage-limit",
+		false,
+		"Removes the limit on ciphertext usages. The ciphertext can be used any number of times.",
 	)
 
 	baseFlags.BoolVar(&rv.PrintCiphertextOnly,
@@ -93,13 +145,31 @@ func buildContentWrappingParams(cliArgs *EntryPointCLIArgs) (*model.ContentWrapp
 		}
 	}
 
+	createLimit := int64(0)
+	if !cliArgs.NoCreateLimit {
+		createLimit = time.Now().Add(cliArgs.CreateLimit).Unix()
+	}
+
+	expiryLimit := int64(0)
+	if !cliArgs.NoExpireLimit {
+		expiryLimit = time.Now().Add(time.Hour * time.Duration(24*cliArgs.ExpiryDays)).Unix()
+	}
+
+	numUses := -1
+	if cliArgs.CreateOnce {
+		numUses = 1
+	} else if !cliArgs.NoUsageLimit {
+		numUses = cliArgs.NumUses
+	}
+
 	rv := &model.ContentWrappingParams{
 		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
 			ObjectType:           "",
 			ProviderConstraints:  providerConstraints,
 			PlacementConstraints: nil,
-			CreateLimit:          0,
-			Expiry:               0,
+			CreateLimit:          createLimit,
+			Expiry:               expiryLimit,
+			NumUses:              numUses,
 		},
 		WrappingKeyCoordinate: model.NewWrappingKey(),
 		LoadRsaPublicKey: sync.OnceValues(func() (*rsa.PublicKey, error) {

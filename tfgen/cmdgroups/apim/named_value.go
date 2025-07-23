@@ -150,7 +150,7 @@ func MakeNamedValueGenerator(kwp *model.ContentWrappingParams, args []string) (m
 	}
 
 	mdl := NamedValueTerraformCodeModel{
-		BaseTerraformCodeModel: model.NewBaseTerraformCodeModel(kwp, "named_value"),
+		BaseTerraformCodeModel: model.NewBaseTerraformCodeModel(kwp, "named_value", "api management named value", "destination_named_value"),
 
 		Tags: model.KeylessTagsModel{
 			IncludeTags: true,

@@ -21,7 +21,7 @@ func TestWillRenderFullSubscriptionModel(t *testing.T) {
 	}
 
 	mdl := SubscriptionTerraformCodeModel{
-		BaseTerraformCodeModel: model.NewBaseTerraformCodeModel(&kwp, "subscription"),
+		BaseTerraformCodeModel: model.NewBaseTerraformCodeModel(&kwp, "subscription", "apim subscription", "destination_subscription"),
 
 		DisplayName:  model.NewStringTerraformFieldExpressionWithValue("confidentialSubscription"),
 		State:        model.NewStringTerraformFieldExpressionWithValue("submitted"),

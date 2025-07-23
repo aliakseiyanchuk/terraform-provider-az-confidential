@@ -64,7 +64,7 @@ func MakeSecretGenerator(kwp *model.ContentWrappingParams, args []string) (model
 	mdl := TerraformCodeModel{
 		BaseTerraformCodeModel: model.BaseTerraformCodeModel{
 			TFBlockName:              "secret",
-			EncryptedContentMetadata: kwp.VersionedConfidentialMetadata,
+			EncryptedContentMetadata: kwp.GetMetadataForTerraform("keyvault secret", "destination_secret"),
 			WrappingKeyCoordinate:    kwp.WrappingKeyCoordinate,
 			//EncryptedContent:      model.NewStringTerraformFieldExpression(),
 		},

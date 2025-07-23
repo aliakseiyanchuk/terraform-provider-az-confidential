@@ -15,6 +15,11 @@ func FormatTime(timeRef *time.Time) types.String {
 	return types.StringValue(timeRef.UTC().Format(timeLayout))
 }
 
+func FormatUnixSecondsRFC822(t int64) string {
+	tm := time.Unix(t, 0)
+	return tm.Format(time.RFC822)
+}
+
 func ParseTime(timeRef types.String) *time.Time {
 	v := timeRef.ValueString()
 	if len(v) == 0 {

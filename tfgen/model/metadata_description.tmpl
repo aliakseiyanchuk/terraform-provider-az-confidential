@@ -1,0 +1,85 @@
+  {{- if not .IsWeaklyProtected }}
+  # ---------------------------------------------------------------------------
+  # Ciphertext usage constraints overview
+  #
+  # The ciphertext embed the constraints described in the comments below. Creating
+  # {{ .ObjectSingular }} should succeed provided that ALL of these constraints are met
+  # The operations on the resource will break -- per design -- when either of the
+  # constraints will become unsatisfied. Renew the ciphertext periodically.
+  {{- if .LimitsUsage  }}
+  {{- if gt .NumUses 1 }}
+  #
+  # This ciphertext may be used {{ .NumUses }} times to create a {{ .ObjectSingular }}.
+  # After this, the ciphertext will need to be re-created again.
+  {{- end }}
+  {{- if .IsUsedOnce }}
+  #
+  # This {{ .ObjectSingular }} can be created only ONCE.
+  {{- end }}
+  # NOTE: This control is only effective if the provider is allowed performing decrypt operation with
+  # the key wrapping key is also configured to track the use of the ciphertext. Provider that is not
+  # configured to track objects will refuse creating this {{ .ObjectSingular }}.
+  {{- else }}
+  #
+  # WARNING: the ciphertext does not include any constraints on the number of times it may be used. This is seen
+  # as a potentially insecure configuration which may be appropriate for test environments. For production use,
+  # limiting the number of times this ciphertext may be used is a great consideration.
+  {{- end }}
+  {{- if gt .CreateLimit 0 }}
+  #
+  # This ciphertext should be used before {{ formatEpochRFC822 .CreateLimit }} to create {{ .ObjectSingular }}(s).
+  {{- else }}
+  #
+  # This ciphertext may be used PERPETUALLY to create {{ .ObjectSingular }}s. This may be appropriate for the test environments.
+  # This setting is discouraged for production configuration.
+  {{- end }}
+  {{- if gt .Expiry 0 }}
+  #
+  # This ciphertext can be used until {{ formatEpochRFC822 .Expiry }} to read and/or update {{ .ObjectSingular }}(s).
+  # Note that the support for in-place updates depends on the confidential resource. Some Azure resources
+  # are immutable.
+  {{- else }}
+  #
+  # This ciphertext may be used PERPETUALLY to create and/or update {{ .ObjectSingular }}s.
+  # This may be appropriate for the test environments or IF Azure resource is immutable. This setting is discouraged
+  # for production configuration. Consider implementing recurrent refresh of encrypted material in your Terraform configuration.
+  {{- end }}
+  {{- if .HasProviderConstraints }}
+  #
+  # The ciphertext constraints the placement with a provider bearing either of these labels:
+  {{- range $value := .ProviderConstraints }}
+  # - {{ $value }}
+  {{- end }}
+  # This settings is used to avoid e.g. environment mix-ups e.g. where a ciphertext containing production
+  # material is accidentally copied into a project intended e.g. for user acceptance testing.
+  {{- else }}
+  #
+  # The ciphertext does not place any specific constraints on the provider. Any provider will be able
+  # to create any secrets out of this ciphertext, provided it has access to the decrypt the ciphertext.
+  # This may be INSUFFICIENTLY secure configuration. Consider adding provider labels to improve your
+  # security posture.
+  {{- end }}
+  {{- if .HasPlacementConstraints }}
+  #
+  # The ciphertext LOCKS the destination {{ .ObjectSingular }} address. Changing the `{{ .DestinationArgument }}` argument
+  # will result in an error. If you would need to move this {{ .ObjectSingular }} to a different address, this will require
+  # you to re-create the ciphertext.
+  #
+  # Note that this IS a secure practice.
+  {{- else }}
+  #
+  # The ciphertext does NOT lock the destination {{ .ObjectSingular }}'s address. It can be changed later by modifying
+  # the `{{ .DestinationArgument }}` argument. While this configuration is appropriate in context where the creator of
+  # the ciphertext does not know (yet) the intended target placement, consider if locking the destination would
+  # contribute to improving your overall security posture.
+  {{- end }}
+  {{- end }}
+  {{- if .IsWeaklyProtected }}
+  # ---------------------------------------------------------------------------
+  # INSECURE ENCRYPTION WARNING! READ CAREFULLY BEFORE PROCEEDING!
+  #
+  # This ciphertext does NOT embed any secondary controls. This means that any az-confidential
+  # provider instance would be able to unwrap it, provided it has access to the wrapping key.
+  # Although this might be safe in your specific context, please weight the risk
+  # of an accidental or malicious copying of this secret e.g. across environments.
+  {{- end }}

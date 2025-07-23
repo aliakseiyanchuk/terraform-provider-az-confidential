@@ -20,7 +20,7 @@ func generateApimSubscriptionResourceForAllApis(t *testing.T) string {
 	}
 
 	mdl := apim.SubscriptionTerraformCodeModel{
-		BaseTerraformCodeModel: model.NewBaseTerraformCodeModel(&kwp, "subscription"),
+		BaseTerraformCodeModel: model.NewBaseTerraformCodeModel(&kwp, "subscription", "apim subscription", "destination_subscription"),
 
 		DisplayName:  model.NewStringTerraformFieldExpressionWithValue("allApiSubscription"),
 		State:        model.NewStringTerraformFieldExpressionWithValue("active"),

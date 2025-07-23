@@ -20,7 +20,7 @@ func givenTypicalNamedValueWrappingParameters(t *testing.T) (NamedValueTerraform
 	}
 
 	mdl := NamedValueTerraformCodeModel{
-		BaseTerraformCodeModel: model.NewBaseTerraformCodeModel(&kwp, "named_value"),
+		BaseTerraformCodeModel: model.NewBaseTerraformCodeModel(&kwp, "named_value", "apim named value", "destination_named_value"),
 
 		Tags: model.KeylessTagsModel{
 			IncludeTags: true,

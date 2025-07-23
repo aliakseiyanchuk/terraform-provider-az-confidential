@@ -140,6 +140,11 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 			return
 		}
 
+		d.CheckCiphertextExpiry(rawMsg, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+
 		if !slices.Contains(d.Specializer.GetSupportedConfidentialMaterialTypes(), rawMsg.Header.Type) {
 			resp.Diagnostics.AddError("Unexpected object type", fmt.Sprintf(
 				"Expected %s, got %s",
@@ -223,6 +228,11 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		return
 	}
 
+	d.CheckCiphertextExpiry(rawMsg, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	if !slices.Contains(d.Specializer.GetSupportedConfidentialMaterialTypes(), rawMsg.Header.Type) {
 		resp.Diagnostics.AddError("Unexpected object type", fmt.Sprintf(
 			"Expected %s, got %s",
@@ -238,19 +248,26 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		return
 	}
 
-	// Check if this object was already placed somewhere else; in this case, the resource
-	// creation cannot be performed.
-	if d.Factory.IsObjectTrackingEnabled() {
-		if objTracked, trackCheckErr := d.Factory.IsObjectIdTracked(ctx, rawMsg.Header.Uuid); trackCheckErr != nil {
+	if rawMsg.Header.NumUses > 0 && !d.Factory.IsObjectTrackingEnabled() {
+		resp.Diagnostics.AddError(
+			"Insecure provider configuration",
+			"The ciphertext of this resource requires tracking the number of times this object is created, while this provider is not configured to do so. Please configure the provider to track objects",
+		)
+		return
+	}
+
+	if rawMsg.Header.NumUses > 0 {
+		// In case a ciphertext may be used several times, the usage is allowed to this limit
+		if numTracked, ntErr := d.Factory.GetTackedObjectUses(ctx, rawMsg.Header.Uuid); ntErr != nil {
 			resp.Diagnostics.AddError(
-				"Cannot assert that this ciphertext was never previously used",
-				fmt.Sprintf("Attempt to check whether this ciphertext was previously used to create a resource erred: %s", trackCheckErr.Error()),
+				"Cannot assert the number of times this ciphertext was used",
+				fmt.Sprintf("Attempt to check how many times the ciphertext was previously used to create a resource erred: %s", ntErr.Error()),
 			)
 			return
-		} else if objTracked {
+		} else if numTracked >= rawMsg.Header.NumUses {
 			resp.Diagnostics.AddError(
-				"Repeated use of ciphertext is detected",
-				fmt.Sprintf("It appears that this ciphertext was previously used to create a resource. Please re-create the ciphertext"),
+				"Ciphertext has been used all time it was allowed to do so",
+				fmt.Sprintf("The use of this ciphertext to create Azure objects has been exhaused. Re-encrypt and replace the ciphertext to continue."),
 			)
 			return
 		}
@@ -273,10 +290,26 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-	if trackErr := d.Factory.TrackObjectId(ctx, rawMsg.Header.Uuid); trackErr != nil {
-		errMsg := fmt.Sprintf("could not track the object entered into the state: %s", trackErr.Error())
-		tflog.Error(ctx, errMsg)
-		resp.Diagnostics.AddError("Incomplete object tracking", errMsg)
+
+	if rawMsg.Header.NumUses > 0 {
+		if trackErr := d.Factory.TrackObjectId(ctx, rawMsg.Header.Uuid); trackErr != nil {
+			errMsg := fmt.Sprintf("could not track the object entered into the state: %s", trackErr.Error())
+			tflog.Error(ctx, errMsg)
+			resp.Diagnostics.AddError("Incomplete object tracking", errMsg)
+		}
+
+		if numTracked, ntErr := d.Factory.GetTackedObjectUses(ctx, rawMsg.Header.Uuid); ntErr != nil {
+			resp.Diagnostics.AddError(
+				"Cannot assert the number of times this ciphertext was used",
+				fmt.Sprintf("Attempt to check how many times the ciphertext was previously used to create a resource erred: %s", ntErr.Error()),
+			)
+			return
+		} else if numTracked == rawMsg.Header.NumUses && rawMsg.Header.NumUses > 1 {
+			resp.Diagnostics.AddWarning(
+				"No more resource create are possible",
+				"The ciphertext allows limited number of times to create Azure objects. No further users are possible. Please recreate ciphertext of this resource ",
+			)
+		}
 	}
 }
 

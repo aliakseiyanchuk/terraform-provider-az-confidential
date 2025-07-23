@@ -2,9 +2,11 @@ package core
 
 import (
 	"crypto/rsa"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
+	"time"
 )
 
 type VersionedConfidentialMetadata struct {
@@ -13,6 +15,7 @@ type VersionedConfidentialMetadata struct {
 	PlacementConstraints []PlacementConstraint
 	CreateLimit          int64
 	Expiry               int64
+	NumUses              int
 }
 
 func (p *VersionedConfidentialMetadata) HasProviderConstraints() bool {
@@ -31,11 +34,37 @@ func (p *VersionedConfidentialMetadata) LimitsExpiry() bool {
 	return p.Expiry > 0
 }
 
+func (p *VersionedConfidentialMetadata) LimitsUsage() bool {
+	return p.NumUses > 0
+}
+
+func (p *VersionedConfidentialMetadata) IsUsedOnce() bool {
+	return p.NumUses == 1
+}
+
+func (p *VersionedConfidentialMetadata) GetCreateLimitTimestamp() string {
+	return p.formatUnixTimestamp(p.CreateLimit)
+}
+
+func (p *VersionedConfidentialMetadata) formatUnixTimestamp(limit int64) string {
+	if limit > 0 {
+		t := time.Unix(limit, 0)
+		return FormatTime(&t).ValueString()
+	} else {
+		return "----PERPETUAL----"
+	}
+}
+
+func (p *VersionedConfidentialMetadata) GetExpiryTimestamp() string {
+	return p.formatUnixTimestamp(p.Expiry)
+}
+
 func (p *VersionedConfidentialMetadata) IsWeaklyProtected() bool {
 	return !p.HasProviderConstraints() &&
 		!p.HasPlacementConstraints() &&
 		!p.LimitsExpiry() &&
-		!p.LimitsCreate()
+		!p.LimitsCreate() &&
+		!p.LimitsUsage()
 }
 
 type VersionedConfidentialDataCreateParam[T any] struct {

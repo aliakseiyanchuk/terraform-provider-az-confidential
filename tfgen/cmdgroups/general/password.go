@@ -42,7 +42,7 @@ func MakePasswordGenerator(kwp *model.ContentWrappingParams, args []string) (mod
 
 	mdl := model.BaseTerraformCodeModel{
 		TFBlockName:              "password",
-		EncryptedContentMetadata: kwp.VersionedConfidentialMetadata,
+		EncryptedContentMetadata: kwp.GetMetadataForTerraform("password", ""),
 		WrappingKeyCoordinate:    kwp.WrappingKeyCoordinate,
 	}
 

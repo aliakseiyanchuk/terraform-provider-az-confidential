@@ -89,7 +89,7 @@ func MakeCertGenerator(kwp *model.ContentWrappingParams, args ...string) (model.
 	mdl := TerraformCodeModel{
 		BaseTerraformCodeModel: model.BaseTerraformCodeModel{
 			TFBlockName:              "cert",
-			EncryptedContentMetadata: kwp.VersionedConfidentialMetadata,
+			EncryptedContentMetadata: kwp.GetMetadataForTerraform("keyvault certificate", "destination_certificate"),
 			WrappingKeyCoordinate:    kwp.WrappingKeyCoordinate,
 		},
 

@@ -9,6 +9,8 @@ OUTPUT_VAULT_OBJECT="demo"
 PUBKEY?=wrapping_key_pk.pem
 
 LABELS?=-provider-constraints demo,testing
+OPTIONS?=
+CMD_OPTIONS?=
 
 encrypt_password_openssl:
 	printf "${PASSWORD}" \
@@ -29,34 +31,34 @@ encrypt_password_openssl_no_label:
 # Encrypt text secret read from the command-line
 encrypt_secret:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-	${LABELS} \
+	${LABELS} ${OPTIONS} \
 	kv secret \
 	-destination-vault ${OUTPUT_VAULT_NAME} -destination-secret-name ${OUTPUT_VAULT_OBJECT} \
 
 # Encrypt text secret read from the command-line
 encrypt_password:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-	${LABELS} \
+	${LABELS} ${OPTIONS} \
 	general password
 
 encrypt_key:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-	${LABELS} \
+	${LABELS} ${OPTIONS}\
 	kv key \
 	-destination-vault ${OUTPUT_VAULT_NAME} -destination-key-name ${OUTPUT_VAULT_OBJECT} \
 
 encrypt_cert:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-	${LABELS} \
+	${LABELS} ${OPTIONS} \
 	kv certificate \
 	-destination-vault ${OUTPUT_VAULT_NAME} -destination-cert-name ${OUTPUT_VAULT_OBJECT} \
 
 encrypt_apim_named_value:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-	${LABELS} \
-	apim named_value
+	${LABELS} ${OPTIONS} \
+	apim named_value ${CMD_OPTIONS}
 
 encrypt_apim_subscription:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
-	${LABELS} \
-	apim subscription
+	${LABELS} ${OPTIONS} \
+	apim subscription ${CMD_OPTIONS}

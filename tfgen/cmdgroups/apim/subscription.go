@@ -147,7 +147,7 @@ func MakeSubscriptionGenerator(kwp *model.ContentWrappingParams, args []string) 
 	}
 
 	mdl := SubscriptionTerraformCodeModel{
-		BaseTerraformCodeModel: model.NewBaseTerraformCodeModel(kwp, "subscription"),
+		BaseTerraformCodeModel: model.NewBaseTerraformCodeModel(kwp, "subscription", "api management subscription", "destination_subscription"),
 
 		DisplayName:  model.NewStringTerraformFieldExpressionWithValue("confidentialSubscription"),
 		State:        model.NewStringTerraformFieldExpressionWithValue("active"),

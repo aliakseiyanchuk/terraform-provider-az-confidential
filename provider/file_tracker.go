@@ -25,13 +25,27 @@ func (tracker *LocalFileTracker) IsObjectIdTracked(_ context.Context, id string)
 	return false, nil
 }
 
+func (tracker *LocalFileTracker) GetTackedObjectUses(_ context.Context, id string) (int, error) {
+	key := core.Sha256Of(id)
+	if v, ok := tracker.hashes[key]; ok {
+		return int(v), nil
+	}
+
+	return 0, nil
+}
+
 func (tracker *LocalFileTracker) TrackObjectId(ctx context.Context, id string) error {
 	if objectTracked, err := tracker.IsObjectIdTracked(ctx, id); objectTracked || err != nil {
 		return errors.New("cannot track this object id: either it's already in; or reading the persistent storage was not successful")
 	}
 
 	key := core.Sha256Of(id)
-	tracker.hashes[key] = 1
+
+	if v, ok := tracker.hashes[key]; ok {
+		tracker.hashes[key] = v + 1
+	} else {
+		tracker.hashes[key] = 1
+	}
 
 	data, _ := json.Marshal(tracker.hashes)
 	data = core.GZipCompress(data)

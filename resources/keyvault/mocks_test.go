@@ -148,6 +148,11 @@ func (m *AZClientsFactoryMock) TrackObjectId(ctx context.Context, id string) err
 	return rv.Error(0)
 }
 
+func (m *AZClientsFactoryMock) GetTackedObjectUses(ctx context.Context, id string) (int, error) {
+	rv := m.Mock.Called(ctx, id)
+	return rv.Get(0).(int), rv.Error(1)
+}
+
 func (m *AZClientsFactoryMock) GetDecrypterFor(ctx context.Context, coord core.WrappingKeyCoordinate) core.RSADecrypter {
 	rv := m.Mock.Called(ctx, coord)
 	return rv.Get(0).(core.RSADecrypter)

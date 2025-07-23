@@ -87,7 +87,7 @@ func MakeKeyGenerator(kwp *model.ContentWrappingParams, args ...string) (model.S
 		TerraformCodeModel: TerraformCodeModel{
 			BaseTerraformCodeModel: model.BaseTerraformCodeModel{
 				TFBlockName:              "key",
-				EncryptedContentMetadata: kwp.VersionedConfidentialMetadata,
+				EncryptedContentMetadata: kwp.GetMetadataForTerraform("keyvault key", "destination_key"),
 				WrappingKeyCoordinate:    kwp.WrappingKeyCoordinate,
 			},
 
