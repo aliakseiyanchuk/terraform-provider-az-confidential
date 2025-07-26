@@ -266,8 +266,7 @@ provider "az-confidential" {
 - `default_wrapping_key` (Attributes) Default location of the wrapping key (see [below for nested schema](#nestedatt--default_wrapping_key))
 - `disallow_resource_specified_wrapping_key` (Boolean) Disallow individual resources to specify resource-level unwrapping keys
 - `file_hash_tracker` (Attributes) Configures local file being used to track created objects (see [below for nested schema](#nestedatt--file_hash_tracker))
-- `labels` (Set of String) Provider labels
-- `require_label_match` (String) Match required between unwrapped ciphertext and labels of this provider
+- `labels` (Set of String) Labels associated with this provider. These labels are used to ensure that the the encrypted message can be processed. A practical application of provider labelling is to implement environmental or regional separation of various projects. For example, adding `labels = ["test", "acceptance"]` may be used to designate infrastructure intended for for testing and (user) acceptance that **cannot** contain production objects of any kind.
 - `storage_account_tracker` (Attributes) Configures Azure Storage Account table to be used to track objects created (see [below for nested schema](#nestedatt--storage_account_tracker))
 - `subscription_id` (String) Subscription ID to use
 - `tenant_id` (String) Tenant ID to use

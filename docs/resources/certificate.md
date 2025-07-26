@@ -70,7 +70,7 @@ resource "az-confidential_certificate" "confidential_certificate" {
 
 ### Required
 
-- `content` (String) Encrypted secret value
+- `content` (String) Encrypted confidential content to create this resource
 - `destination_certificate` (Attributes) Specification of a vault where this certificate needs to be stored (see [below for nested schema](#nestedatt--destination_certificate))
 
 ### Optional
@@ -109,7 +109,7 @@ Optional:
 
 Optional:
 
-- `algorithm` (String) Algorithm to use for unwrapping secret/content encryption key
+- `algorithm` (String) Algorithm to use for unwrapping secret/content encryption key; defaults to RSA OAEP 256; a sensible default that doesn't need to be changed
 - `name` (String) Name of the wrapping key
 - `vault_name` (String) Vault name containing the wrapping key
 - `version` (String) Version of the wrapping key to use for unwrapping operations
