@@ -2,18 +2,22 @@ package keyvault
 
 import (
 	"context"
+	"crypto/rsa"
 	_ "embed"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
@@ -305,7 +309,7 @@ func (a *AzKeyVaultSecretResourceSpecializer) GetJsonDataImporter() core.ObjectJ
 // --------------------------------------------------------------------------------
 // Factory method
 
-//go:embed confidential_secret.md
+//go:embed secret.md
 var secretResourceMarkdownDescription string
 
 const SecretObjectType = "kv/secret"
@@ -364,4 +368,76 @@ func NewSecretResource() resource.Resource {
 		ResourceName:   "secret",
 		ResourceSchema: resourceSchema,
 	}
+}
+
+type AzKVObjectCoordinateParamValidator struct{}
+
+func (v *AzKVObjectCoordinateParamValidator) ValidateParameterObject(ctx context.Context, req function.ObjectParameterValidatorRequest, res *function.ObjectParameterValidatorResponse) {
+
+	// The validator ignores the null values, which mean "any destination".
+	if req.Value.IsUnknown() || req.Value.IsNull() {
+		return
+	}
+
+	p := core.AzKeyVaultObjectCoordinateModel{}
+	req.Value.As(ctx, &p, basetypes.ObjectAsOptions{
+		UnhandledNullAsEmpty:    true,
+		UnhandledUnknownAsEmpty: true,
+	})
+
+	if len(p.VaultName.ValueString()) == 0 || len(p.Name.ValueString()) == 0 {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Both key vault name and object name must be specified to lock the destination"))
+	}
+}
+
+func NewSecretEncryptorFunction() function.Function {
+	rv := resources.FunctionTemplate[string, core.AzKeyVaultObjectCoordinateModel]{
+		Name:                "encrypt_keyvault_secret",
+		Summary:             "Produces a ciphertext string suitable for use with az-confidential_secret resource",
+		MarkdownDescription: "Encrypts a secret string without the use of the `tfgen` tool",
+
+		ObjectType: SecretObjectType,
+		DataParameter: function.StringParameter{
+			Name:        "secret",
+			Description: "Secret value that should appear in the key vault",
+		},
+		DestinationParameter: function.ObjectParameter{
+			Name:               "destination_secret",
+			Description:        "Destination vault and secret name",
+			AllowNullValue:     true,
+			AllowUnknownValues: true,
+
+			AttributeTypes: map[string]attr.Type{
+				"vault_name": types.StringType,
+				"name":       types.StringType,
+			},
+
+			Validators: []function.ObjectParameterValidator{
+				&AzKVObjectCoordinateParamValidator{},
+			},
+		},
+		ConfidentialModelSupplier: func() string { return "" },
+		DestinationModelSupplier: func() *core.AzKeyVaultObjectCoordinateModel {
+			var ptr *core.AzKeyVaultObjectCoordinateModel
+			return ptr
+		},
+
+		CreatEncryptedMessage: func(confidentialModel string, dest *core.AzKeyVaultObjectCoordinateModel, md core.VersionedConfidentialMetadata, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+			helper := core.NewVersionedStringConfidentialDataHelper()
+
+			if dest != nil {
+				coord := core.AzKeyVaultObjectCoordinate{
+					VaultName: dest.VaultName.ValueString(),
+					Name:      dest.Name.ValueString(),
+					Type:      "secrets",
+				}
+				md.PlacementConstraints = []core.PlacementConstraint{core.PlacementConstraint(coord.GetLabel())}
+			}
+
+			helper.CreateConfidentialStringData(confidentialModel, md)
+			return helper.ToEncryptedMessage(pubKey)
+		},
+	}
+
+	return &rv
 }

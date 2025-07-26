@@ -2,6 +2,7 @@ package apim
 
 import (
 	"context"
+	"crypto/rsa"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement"
@@ -10,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -17,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"regexp"
 )
@@ -426,4 +429,95 @@ func NewNamedValueResource() resource.Resource {
 		ResourceName:   "apim_named_value",
 		ResourceSchema: resourceSchema,
 	}
+}
+
+type NamedValueDestinationFunctionParmaValidator struct{}
+
+func (n *NamedValueDestinationFunctionParmaValidator) ValidateParameterObject(ctx context.Context, req function.ObjectParameterValidatorRequest, res *function.ObjectParameterValidatorResponse) {
+
+	if req.Value.IsUnknown() || req.Value.IsNull() {
+		return
+	}
+
+	v := DestinationNamedValueModel{}
+
+	dg := req.Value.As(ctx, &v, basetypes.ObjectAsOptions{
+		UnhandledNullAsEmpty:    true,
+		UnhandledUnknownAsEmpty: true,
+	})
+	if dg.HasError() {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Mismatching data structure. This is an internal error of this provider. Please report this issue"))
+		return
+	}
+
+	if len(v.AzSubscriptionId.ValueString()) == 0 {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Azure subscription Id is required to lock the named value destination"))
+		return
+	}
+
+	if len(v.ResourceGroup.ValueString()) == 0 {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Resource group name is required to lock the named value destination"))
+		return
+	}
+
+	if len(v.ServiceName.ValueString()) == 0 {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("API management service name is required to lock the named value destination"))
+		return
+	}
+
+	if len(v.Name.ValueString()) == 0 {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Named value name is required to lock the named value destination"))
+		return
+	}
+}
+
+func NewNamedValueEncryptorFunction() function.Function {
+	rv := resources.FunctionTemplate[string, DestinationNamedValueModel]{
+		Name:                "encrypt_apim_named_value",
+		Summary:             "Produces a ciphertext string suitable for use with az-confidential_apim_named_value resource",
+		MarkdownDescription: "Encrypts an APIM named value without the use of the `tfgen` tool",
+
+		ObjectType: NamedValueObjectType,
+		DataParameter: function.StringParameter{
+			Name:               "named_value",
+			Description:        "named value that should be added to the API Management Service",
+			AllowNullValue:     false,
+			AllowUnknownValues: false,
+		},
+		DestinationParameter: function.ObjectParameter{
+			Name:               "destination_named_value",
+			Description:        "Destination vault and secret name",
+			AllowNullValue:     true,
+			AllowUnknownValues: true,
+
+			AttributeTypes: map[string]attr.Type{
+				"az_subscription_id":  types.StringType,
+				"resource_group":      types.StringType,
+				"api_management_name": types.StringType,
+				"name":                types.StringType,
+			},
+
+			Validators: []function.ObjectParameterValidator{
+				&NamedValueDestinationFunctionParmaValidator{},
+			},
+		},
+		ConfidentialModelSupplier: func() string { return "" },
+		DestinationModelSupplier: func() *DestinationNamedValueModel {
+			var ptr *DestinationNamedValueModel
+			return ptr
+		},
+
+		CreatEncryptedMessage: func(confidentialModel string, dest *DestinationNamedValueModel, md core.VersionedConfidentialMetadata, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+			helper := core.NewVersionedStringConfidentialDataHelper()
+
+			if dest != nil {
+				md.PlacementConstraints = []core.PlacementConstraint{core.PlacementConstraint(dest.GetLabel())}
+			}
+
+			helper.CreateConfidentialStringData(confidentialModel, md)
+			return helper.ToEncryptedMessage(pubKey)
+		},
+	}
+
+	return &rv
 }

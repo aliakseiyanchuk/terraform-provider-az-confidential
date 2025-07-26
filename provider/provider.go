@@ -615,7 +615,14 @@ func (p *AZConnectorProviderImpl) Configure(ctx context.Context, req tfprovider.
 }
 
 func (p *AZConnectorProviderImpl) Functions(_ context.Context) []func() function.Function {
-	return []func() function.Function{}
+	return []func() function.Function{
+		general.NewPasswordEncryptionFunction,
+		keyvault.NewSecretEncryptorFunction,
+		keyvault.NewKeyEncryptorFunction,
+		keyvault.NewCertificateEncryptorFunction,
+		apim.NewNamedValueEncryptorFunction,
+		apim.NewSubscriptionEncryptorFunction,
+	}
 }
 
 var _ tfprovider.Provider = &AZConnectorProviderImpl{}

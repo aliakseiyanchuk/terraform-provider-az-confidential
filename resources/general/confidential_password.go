@@ -2,6 +2,7 @@ package general
 
 import (
 	"context"
+	"crypto/rsa"
 	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
@@ -11,6 +12,7 @@ import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -157,4 +159,26 @@ var _ datasource.DataSource = &ConfidentialPasswordDataSource{}
 
 func NewConfidentialPasswordDataSource() datasource.DataSource {
 	return &ConfidentialPasswordDataSource{}
+}
+
+func NewPasswordEncryptionFunction() function.Function {
+	rv := resources.FunctionTemplate[string, int]{
+		Name:                "encrypt_password",
+		Summary:             "Encrypts a password",
+		MarkdownDescription: "Encrypts a password string to be used with az-confidential_password data source",
+		ObjectType:          PasswordObjectType,
+		DataParameter: function.StringParameter{
+			Name:        "password",
+			Description: "Password value that should appear in the key vault",
+		},
+		ConfidentialModelSupplier: func() string { return "" },
+		DestinationModelSupplier:  func() *int { return nil },
+
+		CreatEncryptedMessage: func(confidentialModel string, _ *int, md core.VersionedConfidentialMetadata, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+			helper := core.NewVersionedStringConfidentialDataHelper()
+			helper.CreateConfidentialStringData(confidentialModel, md)
+			return helper.ToEncryptedMessage(pubKey)
+		},
+	}
+	return &rv
 }

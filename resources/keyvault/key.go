@@ -7,7 +7,9 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	_ "embed"
+	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
@@ -16,6 +18,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
@@ -23,6 +26,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/lestrrat-go/jwx/v3/jwk"
 	"golang.org/x/crypto/ssh"
@@ -228,7 +232,7 @@ func (cm *KeyModel) assignPublicKeysAttrs(pubKey interface{}, dg *diag.Diagnosti
 
 }
 
-//go:embed confidential_key.md
+//go:embed key.md
 var confidentialKeyResourceMarkdownDescription string
 
 type AzKeyVaultKeyResourceSpecializer struct {
@@ -553,4 +557,167 @@ func NewKeyResource() resource.Resource {
 		ResourceName:   "key",
 		ResourceSchema: resourceSchema,
 	}
+}
+
+type KeyDataFunctionParameter struct {
+	Key      types.String `tfsdk:"key"`
+	Password types.String `tfsdk:"password"`
+}
+
+type AzKvPrivateKeyParamValidator struct{}
+
+func (vld *AzKvPrivateKeyParamValidator) ValidateParameterObject(ctx context.Context, req function.ObjectParameterValidatorRequest, res *function.ObjectParameterValidatorResponse) {
+	v := KeyDataFunctionParameter{}
+
+	req.Value.As(ctx, &v, basetypes.ObjectAsOptions{
+		UnhandledNullAsEmpty:    true,
+		UnhandledUnknownAsEmpty: true,
+	})
+
+	if len(v.Key.ValueString()) == 0 {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Private key value must be specified"))
+	}
+}
+
+func NewKeyEncryptorFunction() function.Function {
+	rv := resources.FunctionTemplate[KeyDataFunctionParameter, core.AzKeyVaultObjectCoordinateModel]{
+		Name:                "encrypt_keyvault_key",
+		Summary:             "Produces a ciphertext string suitable for use with az-confidential_key resource",
+		MarkdownDescription: "Encrypts an RSA or elliptic curve key without the use of the `tfgen` tool",
+
+		ObjectType: KeyObjectType,
+		DataParameter: function.ObjectParameter{
+			Name:        "key_data",
+			Description: "Private key to be encrypted",
+
+			AttributeTypes: map[string]attr.Type{
+				"key":      types.StringType,
+				"password": types.StringType,
+			},
+
+			Validators: []function.ObjectParameterValidator{
+				&AzKvPrivateKeyParamValidator{},
+			},
+		},
+		DestinationParameter: function.ObjectParameter{
+			Name:               "destination_key",
+			Description:        "Destination vault and key name",
+			AllowNullValue:     true,
+			AllowUnknownValues: true,
+
+			AttributeTypes: map[string]attr.Type{
+				"vault_name": types.StringType,
+				"name":       types.StringType,
+			},
+
+			Validators: []function.ObjectParameterValidator{
+				&AzKVObjectCoordinateParamValidator{},
+			},
+		},
+		ConfidentialModelSupplier: func() KeyDataFunctionParameter { return KeyDataFunctionParameter{} },
+		DestinationModelSupplier: func() *core.AzKeyVaultObjectCoordinateModel {
+			var ptr *core.AzKeyVaultObjectCoordinateModel
+			return ptr
+		},
+
+		CreatEncryptedMessage: func(confidentialModel KeyDataFunctionParameter, dest *core.AzKeyVaultObjectCoordinateModel, md core.VersionedConfidentialMetadata, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+			if dest != nil {
+				coord := core.AzKeyVaultObjectCoordinate{
+					VaultName: dest.VaultName.ValueString(),
+					Name:      dest.Name.ValueString(),
+					Type:      "keys",
+				}
+				md.PlacementConstraints = []core.PlacementConstraint{core.PlacementConstraint(coord.GetLabel())}
+			}
+
+			keyData := []byte(confidentialModel.Key.ValueString())
+			var jwkKey interface{}
+
+			// Acquire the key
+			if core.IsPEMEncoded(keyData) {
+				if block, blockErr := core.ParseSinglePEMBlock(keyData); blockErr != nil {
+					return core.EncryptedMessage{}, blockErr
+				} else {
+					if block.Type == "ENCRYPTED PRIVATE KEY" {
+						if len(confidentialModel.Password.ValueString()) == 0 {
+							return core.EncryptedMessage{}, errors.New("password must be specified for encrypted private key")
+						}
+						key, loadErr := core.PrivateKeyFromEncryptedBlock(block, confidentialModel.Password.ValueString())
+						if loadErr != nil {
+							return core.EncryptedMessage{}, errors.New("incorrect password for the private key")
+						}
+
+						if j, jwkImportErr := jwk.Import(key); jwkImportErr != nil {
+							return core.EncryptedMessage{}, fmt.Errorf("cannot convert RSA key to JSON Web Key: %s", jwkImportErr.Error())
+						} else {
+							jwkKey = j
+						}
+					} else if block.Type == "PRIVATE KEY" {
+						key, loadErr := core.PrivateKeyFromBlock(block)
+						if loadErr != nil {
+							return core.EncryptedMessage{}, fmt.Errorf("cannot import rsa key bytes: %s", loadErr.Error())
+						}
+
+						if j, jwkImportErr := jwk.Import(key); jwkImportErr != nil {
+							return core.EncryptedMessage{}, fmt.Errorf("cannot import rsa key: %s", jwkImportErr.Error())
+						} else {
+							jwkKey = j
+						}
+					} else if block.Type == "EC PRIVATE KEY" {
+						key, loadErr := core.PrivateKeyFromBlock(block)
+						if loadErr != nil {
+							return core.EncryptedMessage{}, fmt.Errorf("cannot import elliptic-curve key bytes: %s", loadErr.Error())
+						}
+
+						if j, jwkImportErr := jwk.Import(key); jwkImportErr != nil {
+							return core.EncryptedMessage{}, fmt.Errorf("cannot import elliptic-curve key: %s", jwkImportErr.Error())
+						} else {
+							jwkKey = j
+						}
+					} else {
+						return core.EncryptedMessage{}, fmt.Errorf("private key block %s import is not supported by Azure", block.Type)
+					}
+				}
+			} else {
+				var key any
+				var derLoadErr error
+
+				if key, derLoadErr = x509.ParsePKCS8PrivateKey(keyData); derLoadErr != nil {
+					if len(confidentialModel.Password.ValueString()) == 0 {
+						return core.EncryptedMessage{}, errors.New("password must be specified for DER-encrypted private key")
+					}
+
+					if key, derLoadErr = core.PrivateKeyFromDER(keyData, string(confidentialModel.Password.ValueString())); derLoadErr != nil {
+						return core.EncryptedMessage{}, fmt.Errorf("cannot load private key: %s", derLoadErr.Error())
+					}
+				}
+
+				if j, jwkImportErr := jwk.Import(key); jwkImportErr != nil {
+					return core.EncryptedMessage{}, fmt.Errorf("cannot import rsa/escada key bytes: %s", jwkImportErr.Error())
+				} else {
+					jwkKey = j
+				}
+			}
+
+			if jwkKey == nil {
+				return core.EncryptedMessage{}, errors.New("cannot convert input to JSON Web Key")
+			}
+
+			// Produce ciphertext
+
+			jwkData, marshalErr := json.Marshal(jwkKey)
+			if marshalErr != nil {
+				return core.EncryptedMessage{}, marshalErr
+			}
+
+			md.ObjectType = KeyObjectType
+
+			helper := core.NewVersionedBinaryConfidentialDataHelper()
+			_ = helper.CreateConfidentialBinaryData(jwkData, md)
+
+			return helper.ToEncryptedMessage(pubKey)
+		},
+	}
+
+	return &rv
 }

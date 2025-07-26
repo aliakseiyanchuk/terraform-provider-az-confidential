@@ -2,21 +2,27 @@ package keyvault
 
 import (
 	"context"
+	"crypto/rsa"
 	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azcertificates"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"software.sslmate.com/src/go-pkcs12"
 )
 
 type CertificateModel struct {
@@ -129,7 +135,7 @@ func (d *CertificateModel) ConvertToUpdateCertParam() azcertificates.UpdateCerti
 	return rv
 }
 
-//go:embed confidential_certificate.md
+//go:embed certificate.md
 var certificateResourceMarkdownDescription string
 
 type AzKeyVaultCertificateResourceSpecializer struct {
@@ -403,4 +409,156 @@ func NewCertificateResource() resource.Resource {
 		ResourceName:   "certificate",
 		ResourceSchema: resourceSchema,
 	}
+}
+
+type CertificateDataFunctionParameter struct {
+	Certificate types.String `tfsdk:"certificate"`
+	Password    types.String `tfsdk:"password"`
+}
+
+const (
+	CertFormatPem    = "application/x-pem-file"
+	CertFormatPkcs12 = "application/x-pkcs12"
+)
+
+type AzKvCertificateParamValidator struct{}
+
+func (vld *AzKvCertificateParamValidator) ValidateParameterObject(ctx context.Context, req function.ObjectParameterValidatorRequest, res *function.ObjectParameterValidatorResponse) {
+	v := CertificateDataFunctionParameter{}
+
+	req.Value.As(ctx, &v, basetypes.ObjectAsOptions{
+		UnhandledNullAsEmpty:    true,
+		UnhandledUnknownAsEmpty: true,
+	})
+
+	if len(v.Certificate.ValueString()) == 0 {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Certificate data value must be specified"))
+	}
+
+	// The input must be either PEM encoded, otherwise it must be a valid b64
+	if !core.IsPEMEncoded([]byte(v.Certificate.ValueString())) {
+		if _, b64Decode := base64.StdEncoding.DecodeString(v.Certificate.ValueString()); b64Decode != nil {
+			res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Certificate data value must be PEM encoded, or at least Base64-encoded"))
+		}
+	}
+}
+
+func NewCertificateEncryptorFunction() function.Function {
+	rv := resources.FunctionTemplate[CertificateDataFunctionParameter, core.AzKeyVaultObjectCoordinateModel]{
+		Name:                "encrypt_keyvault_certificate",
+		Summary:             "Produces a ciphertext string suitable for use with az-confidential_certificate resource",
+		MarkdownDescription: "Encrypts a certificate data without the use of the `tfgen` tool",
+
+		ObjectType: CertificateObjectType,
+		DataParameter: function.ObjectParameter{
+			Name:        "certificate_data",
+			Description: "Certificate data to be encrypted",
+
+			AttributeTypes: map[string]attr.Type{
+				"certificate": types.StringType,
+				"password":    types.StringType,
+			},
+
+			Validators: []function.ObjectParameterValidator{
+				&AzKvCertificateParamValidator{},
+			},
+		},
+		DestinationParameter: function.ObjectParameter{
+			Name:               "destination_certificate",
+			Description:        "Destination vault and certificate name",
+			AllowNullValue:     true,
+			AllowUnknownValues: true,
+
+			AttributeTypes: map[string]attr.Type{
+				"vault_name": types.StringType,
+				"name":       types.StringType,
+			},
+
+			Validators: []function.ObjectParameterValidator{
+				&AzKVObjectCoordinateParamValidator{},
+			},
+		},
+		ConfidentialModelSupplier: func() CertificateDataFunctionParameter { return CertificateDataFunctionParameter{} },
+		DestinationModelSupplier: func() *core.AzKeyVaultObjectCoordinateModel {
+			var ptr *core.AzKeyVaultObjectCoordinateModel
+			return ptr
+		},
+
+		CreatEncryptedMessage: func(confidentialModel CertificateDataFunctionParameter, dest *core.AzKeyVaultObjectCoordinateModel, md core.VersionedConfidentialMetadata, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+			if dest != nil {
+				coord := core.AzKeyVaultObjectCoordinate{
+					VaultName: dest.VaultName.ValueString(),
+					Name:      dest.Name.ValueString(),
+					Type:      "certificates",
+				}
+				md.PlacementConstraints = []core.PlacementConstraint{core.PlacementConstraint(coord.GetLabel())}
+			}
+
+			certData := []byte(confidentialModel.Certificate.ValueString())
+
+			confData := core.ConfidentialCertConfidentialDataStruct{
+				CertificateData:         certData,
+				CertificateDataFormat:   "application/unknown",
+				CertificateDataPassword: "",
+			}
+
+			// Acquire the key
+			if core.IsPEMEncoded(certData) {
+				blocks, blockErr := core.ParsePEMBlocks(certData)
+				confData.CertificateDataFormat = CertFormatPem
+
+				if blockErr != nil {
+					return core.EncryptedMessage{}, fmt.Errorf("cannot parse PEM blocks: %s", blockErr.Error())
+				}
+
+				if len(core.FindCertificateBlocks(blocks)) == 0 {
+					return core.EncryptedMessage{}, errors.New("input does not contain any certificate blocks")
+				}
+
+				privateKeyBlock := core.FindPrivateKeyBlock(blocks)
+				if privateKeyBlock == nil {
+					return core.EncryptedMessage{}, errors.New("input does not contain any private keys")
+				}
+
+				if privateKeyBlock.Type == "ENCRYPTED PRIVATE KEY" {
+					certPwd := confidentialModel.Password.ValueString()
+					if len(certPwd) == 0 {
+						return core.EncryptedMessage{}, errors.New("password is required where private key is encrypted")
+					}
+
+					// Try to decrypt the PEM key; to ensure that the password is correct
+					_, loadErr := core.PrivateKeyFromEncryptedBlock(blocks[0], certPwd)
+					if loadErr != nil {
+						return core.EncryptedMessage{}, loadErr
+					} else {
+						confData.CertificateDataPassword = certPwd
+					}
+				} else if privateKeyBlock.Type != "PRIVATE KEY" {
+					return core.EncryptedMessage{}, errors.New("input certificate data does not contain private key")
+				}
+			} else {
+				confData.CertificateDataFormat = CertFormatPkcs12
+
+				b64Decode, _ := base64.StdEncoding.DecodeString(confidentialModel.Certificate.ValueString())
+
+				if _, _, pwdErr := pkcs12.Decode(b64Decode, confidentialModel.Password.ValueString()); pwdErr != nil {
+					return core.EncryptedMessage{}, fmt.Errorf("cannot load certificate from PKCS12/PFX bag; %s", pwdErr.Error())
+				}
+
+				confData.CertificateData = b64Decode
+			}
+
+			// Produce ciphertext
+			helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
+			_ = helper.CreateConfidentialCertificateData(
+				confData.GetCertificateData(),
+				confData.GetCertificateDataFormat(),
+				confData.GetCertificateDataPassword(),
+				md,
+			)
+			return helper.ToEncryptedMessage(pubKey)
+		},
+	}
+
+	return &rv
 }

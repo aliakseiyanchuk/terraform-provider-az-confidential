@@ -2,6 +2,7 @@ package apim
 
 import (
 	"context"
+	"crypto/rsa"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement"
@@ -9,7 +10,9 @@ import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -18,6 +21,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"regexp"
 )
 
@@ -564,4 +568,142 @@ func NewSubscriptionResource() resource.Resource {
 		ResourceName:   "apim_subscription",
 		ResourceSchema: resourceSchema,
 	}
+}
+
+type SubscriptionDataFunctionParameter struct {
+	PrimaryKey   types.String `tfsdk:"primary_key"`
+	SecondaryKey types.String `tfsdk:"secondary_key"`
+}
+
+type SubscriptionDataFunctionParameterValidator struct{}
+
+func (s *SubscriptionDataFunctionParameterValidator) ValidateParameterObject(ctx context.Context, req function.ObjectParameterValidatorRequest, res *function.ObjectParameterValidatorResponse) {
+	if req.Value.IsUnknown() || req.Value.IsNull() {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Subscription key data cannot be nil"))
+	}
+
+	p := SubscriptionDataFunctionParameter{}
+	dg := req.Value.As(ctx, &p, basetypes.ObjectAsOptions{
+		UnhandledNullAsEmpty:    true,
+		UnhandledUnknownAsEmpty: true,
+	})
+
+	if dg.HasError() {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Mismatching data structure. This is an internal error of this provider. Please report this issue"))
+		return
+	}
+
+	pk := p.PrimaryKey.ValueString()
+	sk := p.SecondaryKey.ValueString()
+
+	if len(pk) == 0 {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Primary subscription key is required"))
+	} else if len(sk) == 0 {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Secondary subscription key is required"))
+	} else if pk == sk {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Primary and secondary key cannot have the same value"))
+	}
+}
+
+type SubscriptionDestinationFunctionParmaValidator struct{}
+
+func (n *SubscriptionDestinationFunctionParmaValidator) ValidateParameterObject(ctx context.Context, req function.ObjectParameterValidatorRequest, res *function.ObjectParameterValidatorResponse) {
+
+	if req.Value.IsUnknown() || req.Value.IsNull() {
+		return
+	}
+
+	v := DestinationSubscriptionCoordinateModel{}
+
+	dg := req.Value.As(ctx, &v, basetypes.ObjectAsOptions{
+		UnhandledNullAsEmpty:    true,
+		UnhandledUnknownAsEmpty: true,
+	})
+	if dg.HasError() {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Mismatching data structure. This is an internal error of this provider. Please report this issue"))
+		return
+	}
+
+	if len(v.AzSubscriptionId.ValueString()) == 0 {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Azure subscription Id is required to lock the named value destination"))
+		return
+	}
+
+	if len(v.ResourceGroup.ValueString()) == 0 {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Resource group name is required to lock the named value destination"))
+		return
+	}
+
+	if len(v.ServiceName.ValueString()) == 0 {
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("API management service name is required to lock the named value destination"))
+		return
+	}
+
+	// These are minimal requirements for target locking.
+}
+
+func NewSubscriptionEncryptorFunction() function.Function {
+	rv := resources.FunctionTemplate[SubscriptionDataFunctionParameter, DestinationSubscriptionCoordinateModel]{
+		Name:                "encrypt_apim_subscription",
+		Summary:             "Produces a ciphertext string suitable for use with az-confidential_apim_subnscription resource",
+		MarkdownDescription: "Encrypts an APIM subscription keys without the use of the `tfgen` tool",
+
+		ObjectType: NamedValueObjectType,
+		DataParameter: function.ObjectParameter{
+			Name:               "subscription_keys",
+			Description:        "Subscription keys that need to be created in the target APIM service",
+			AllowNullValue:     false,
+			AllowUnknownValues: false,
+
+			AttributeTypes: map[string]attr.Type{
+				"primary_key":   types.StringType,
+				"secondary_key": types.StringType,
+			},
+
+			Validators: []function.ObjectParameterValidator{
+				&SubscriptionDataFunctionParameterValidator{},
+			},
+		},
+		DestinationParameter: function.ObjectParameter{
+			Name:               "destination_subscription",
+			Description:        "Destination API management subscription",
+			AllowNullValue:     true,
+			AllowUnknownValues: true,
+
+			AttributeTypes: map[string]attr.Type{
+				"az_subscription_id":   types.StringType,
+				"resource_group":       types.StringType,
+				"api_management_name":  types.StringType,
+				"apim_subscription_id": types.StringType,
+				"api_id":               types.StringType,
+				"product_id":           types.StringType,
+				"user_id":              types.StringType,
+			},
+
+			Validators: []function.ObjectParameterValidator{
+				&SubscriptionDestinationFunctionParmaValidator{},
+			},
+		},
+		ConfidentialModelSupplier: func() SubscriptionDataFunctionParameter { return SubscriptionDataFunctionParameter{} },
+		DestinationModelSupplier: func() *DestinationSubscriptionCoordinateModel {
+			var ptr *DestinationSubscriptionCoordinateModel
+			return ptr
+		},
+
+		CreatEncryptedMessage: func(confidentialModel SubscriptionDataFunctionParameter, dest *DestinationSubscriptionCoordinateModel, md core.VersionedConfidentialMetadata, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+			if dest != nil {
+				md.PlacementConstraints = []core.PlacementConstraint{core.PlacementConstraint(dest.GetLabel())}
+			}
+
+			helper := NewConfidentialSubscriptionHelper()
+			_ = helper.CreateSubscriptionData(
+				confidentialModel.PrimaryKey.ValueString(),
+				confidentialModel.SecondaryKey.ValueString(),
+				md)
+
+			return helper.ToEncryptedMessage(pubKey)
+		},
+	}
+
+	return &rv
 }

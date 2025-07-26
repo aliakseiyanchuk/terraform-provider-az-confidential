@@ -522,7 +522,7 @@ func PrivateKeyFromEncryptedBlock(block *pem.Block, password string) (any, error
 	}
 }
 
-// IsPEMEncoded returns true if teh data source represents a valid PEM-encoded
+// IsPEMEncoded returns true if the data source represents a valid PEM-encoded
 // stream, comprising valid blocks.
 func IsPEMEncoded(data []byte) bool {
 	// Ensure that PEM blocks are well-formed.
