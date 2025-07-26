@@ -8,48 +8,48 @@ import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 )
 
-//go:embed password_template.tmpl
-var passwordTFTemplate string
+//go:embed content_template.tmpl
+var ContentTFTemplate string
 
-type PasswordCLIParams struct {
+type ContentCLIParams struct {
 	inputFile     string
 	inputIsBase64 bool
 }
 
-func CreatePasswordArgParser() (*PasswordCLIParams, *flag.FlagSet) {
-	var passwordParams PasswordCLIParams
+func CreatePasswordArgParser() (*ContentCLIParams, *flag.FlagSet) {
+	var contentParams ContentCLIParams
 
 	var passwordCmd = flag.NewFlagSet("password", flag.ContinueOnError)
-	passwordCmd.StringVar(&passwordParams.inputFile,
-		"password-file",
+	passwordCmd.StringVar(&contentParams.inputFile,
+		"content-file",
 		"",
-		"Read password from specified file")
+		"Read the content from specified file")
 
-	passwordCmd.BoolVar(&passwordParams.inputIsBase64,
+	passwordCmd.BoolVar(&contentParams.inputIsBase64,
 		"base64",
 		false,
 		"Input is base-64 encoded")
 
-	return &passwordParams, passwordCmd
+	return &contentParams, passwordCmd
 }
 
-func MakePasswordGenerator(kwp *model.ContentWrappingParams, args []string) (model.SubCommandExecution, error) {
-	passwordParams, passCmd := CreatePasswordArgParser()
+func MakeContentGenerator(kwp *model.ContentWrappingParams, args []string) (model.SubCommandExecution, error) {
+	contentParams, passCmd := CreatePasswordArgParser()
 
 	if parseErr := passCmd.Parse(args); parseErr != nil {
 		return nil, parseErr
 	}
 
 	mdl := model.BaseTerraformCodeModel{
-		TFBlockName:              "password",
-		EncryptedContentMetadata: kwp.GetMetadataForTerraform("password", ""),
+		TFBlockName:              "content",
+		EncryptedContentMetadata: kwp.GetMetadataForTerraform("content", ""),
 		WrappingKeyCoordinate:    kwp.WrappingKeyCoordinate,
 	}
 
 	return func(inputReader model.InputReader, onlyCiphertext bool) (string, error) {
-		passwordData, readErr := inputReader("Enter password data",
-			passwordParams.inputFile,
-			passwordParams.inputIsBase64,
+		passwordData, readErr := inputReader("Enter content data",
+			contentParams.inputFile,
+			contentParams.inputIsBase64,
 			false)
 
 		if readErr != nil {
@@ -59,25 +59,25 @@ func MakePasswordGenerator(kwp *model.ContentWrappingParams, args []string) (mod
 		secretDataAsStr := string(passwordData)
 
 		if onlyCiphertext {
-			return OutputPasswordEncryptedContent(kwp, secretDataAsStr)
+			return OutputContentEncryptedContent(kwp, secretDataAsStr)
 
 		} else {
-			return OutputDatasourcePasswordTerraformCode(mdl, kwp, secretDataAsStr)
+			return OutputDatasourceContentTerraformCode(mdl, kwp, secretDataAsStr)
 		}
 	}, nil
 }
 
-func OutputDatasourcePasswordTerraformCode(mdl model.BaseTerraformCodeModel, kwp *model.ContentWrappingParams, passwordString string) (string, error) {
-	s, err := OutputPasswordEncryptedContent(kwp, passwordString)
+func OutputDatasourceContentTerraformCode(mdl model.BaseTerraformCodeModel, kwp *model.ContentWrappingParams, passwordString string) (string, error) {
+	s, err := OutputContentEncryptedContent(kwp, passwordString)
 	if err != nil {
 		return s, err
 	}
 
 	mdl.EncryptedContent.SetValue(s)
-	return model.Render("password", passwordTFTemplate, &mdl)
+	return model.Render("password", ContentTFTemplate, &mdl)
 }
 
-func OutputPasswordEncryptedContent(kwp *model.ContentWrappingParams, passwordString string) (string, error) {
+func OutputContentEncryptedContent(kwp *model.ContentWrappingParams, passwordString string) (string, error) {
 	kwp.ObjectType = general.PasswordObjectType
 	helper := core.NewVersionedStringConfidentialDataHelper()
 	_ = helper.CreateConfidentialStringData(passwordString, kwp.VersionedConfidentialMetadata)

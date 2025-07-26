@@ -18,7 +18,7 @@ func EntryPoint(kwp *model.ContentWrappingParams, command string, args []string)
 		os.Exit(2)
 		return nil, nil
 	case "password":
-		return MakePasswordGenerator(kwp, args)
+		return MakeContentGenerator(kwp, args)
 	default:
 		return nil, fmt.Errorf("unknown subcommand: %s", command)
 	}

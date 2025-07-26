@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func generatePasswordDataSource(t *testing.T) string {
+func generateContentDataSource(t *testing.T) string {
 
 	kwp := model.ContentWrappingParams{
 		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
@@ -20,10 +20,10 @@ func generatePasswordDataSource(t *testing.T) string {
 	}
 
 	mdl := model.BaseTerraformCodeModel{
-		TFBlockName: "password",
+		TFBlockName: "content",
 	}
 
-	if rv, tfErr := general.OutputDatasourcePasswordTerraformCode(mdl, &kwp, "this is a very secret string"); tfErr != nil {
+	if rv, tfErr := general.OutputDatasourceContentTerraformCode(mdl, &kwp, "this is a very secret string"); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
 		return rv
 	} else {
@@ -32,16 +32,16 @@ func generatePasswordDataSource(t *testing.T) string {
 	}
 }
 
-func TestAccConfidentialPasswordDataSourceBasicStringConfiguration(t *testing.T) {
+func TestAccConfidentialContentDataSourceBasicStringConfiguration(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Read testing
 			{
-				Config: providerConfig + generatePasswordDataSource(t),
+				Config: providerConfig + generateContentDataSource(t),
 				Check: resource.ComposeTestCheckFunc(
 					// Validate that the message is set
-					resource.TestCheckResourceAttr("data.az-confidential_password.confidential_password", "plaintext_password", "this is a very secret string"),
+					resource.TestCheckResourceAttr("data.az-confidential_content.content", "plaintext", "this is a very secret string"),
 				),
 			},
 		},

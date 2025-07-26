@@ -2,7 +2,7 @@
 # Minimal terraform code for your example:
 # ----------------------------------------------------------------------------
 
-data "az-confidential_password" "confidential_password" {
+data "az-confidential_content" "{{ .TFBlockName }}" {
     content = <<-CIPHERTEXT
            {{- range $value := fold80 .EncryptedContent.TerraformExpression }}
            {{ $value }}
