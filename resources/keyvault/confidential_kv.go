@@ -1,10 +1,12 @@
-package resources
+package keyvault
 
 import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/hashicorp/terraform-plugin-framework/resource/identityschema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 )
+
+// Models that could be used in combination with the Terraform identity.
 
 type AzKeyVaultObjectIdentityModel struct {
 	VaultName     string `tfsdk:"vault_name"`

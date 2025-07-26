@@ -101,6 +101,7 @@ func (vcd *VersionedConfidentialDataHelperTemplate[T, TAtRest]) Set(p VersionedC
 		ProviderConstraints:  p.ProviderConstraints,
 		PlacementConstraints: p.PlacementConstraints,
 		ModelReference:       vcd.ModelName,
+		NumUses:              p.NumUses,
 	}
 
 	rv := VersionedConfidentialData[T]{

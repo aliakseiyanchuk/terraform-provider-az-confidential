@@ -76,6 +76,17 @@ type MutableConfidentialResourceRU[TMdl any, TConfData any, AZAPIObject any] int
 	SetDriftToConfidentialData(ctx context.Context, planData *TMdl)
 }
 
+type RequestAbstraction struct {
+	Get      func(ctx context.Context, val interface{}) diag.Diagnostics
+	HasError func() bool
+}
+
+type ResponseAbstraction struct {
+	Set            func(ctx context.Context, val interface{}) diag.Diagnostics
+	RemoveResource func(context.Context)
+	Diagnostics    *diag.Diagnostics
+}
+
 type ConfidentialGenericResource[TMdl, TIdentity any, TConfData any, AZAPIObject any] struct {
 	ConfidentialResourceBase
 	Specializer CommonConfidentialResourceSpecialization[TMdl, TConfData, AZAPIObject]
@@ -104,10 +115,24 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) S
 }
 
 func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	reqAbs := RequestAbstraction{
+		Get: req.State.Get,
+	}
+
+	resAbs := ResponseAbstraction{
+		Set:            resp.State.Set,
+		RemoveResource: resp.State.RemoveResource,
+		Diagnostics:    &resp.Diagnostics,
+	}
+
+	d.ReadT(ctx, reqAbs, resAbs)
+}
+
+func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) ReadT(ctx context.Context, req RequestAbstraction, resp ResponseAbstraction) {
 	data := d.Specializer.NewTerraformModel()
 
 	// Read Terraform prior state data into the model
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	resp.Diagnostics.Append(req.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -123,24 +148,18 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 		// Mutable read/update requires decryption of the ciphertext. Because the update presents the possibility
 		// of the injection, the ciphertext is checked for correctness
 
-		// Read Terraform prior state data into the model
-		resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-
 		confMdl := d.Specializer.GetConfidentialMaterialFrom(data)
 		if IsDriftMessage(confMdl.EncryptedSecret.ValueString()) {
 			tflog.Warn(ctx, "This resource contains drift tag instead of confidential material; update will be performed via Terraform standard flow")
 			return
 		}
 
-		rawMsg := d.GetRawVersionedConfidentialDataMessage(ctx, data, &resp.Diagnostics)
+		rawMsg := d.GetRawVersionedConfidentialDataMessage(ctx, confMdl, resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
 
-		d.CheckCiphertextExpiry(rawMsg, &resp.Diagnostics)
+		d.CheckCiphertextExpiry(rawMsg, resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -169,7 +188,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 		//
 		// The update operation will track the object to make sure that new creations would not be possible.
 
-		confidentialMaterial := d.RehydrateConfidentialDataFromRawMessage(rawMsg, &resp.Diagnostics)
+		confidentialMaterial := d.RehydrateConfidentialDataFromRawMessage(rawMsg, resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -188,7 +207,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 	tflog.Info(ctx, fmt.Sprintf("Resource existence check on read: %s", resourceExistenceCheck.String()))
 
 	if resourceExistenceCheck == ResourceNotFound {
-		resp.State.RemoveResource(ctx)
+		resp.RemoveResource(ctx)
 	} else if resourceExistenceCheck == ResourceExists || resourceExistenceCheck == ResourceConfidentialDataDrift {
 		convertDiagnostics := d.Specializer.ConvertToTerraform(azObj, &data)
 		if len(convertDiagnostics) > 0 {
@@ -206,29 +225,46 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 			d.MutableRU.SetDriftToConfidentialData(ctx, &data)
 		}
 
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+		resp.Diagnostics.Append(resp.Set(ctx, &data)...)
 	} else if resourceExistenceCheck == ResourceCheckError {
 		tflog.Error(ctx, "Failed to check the existence of resource during read; consult diagnostic messages")
+		if !resp.Diagnostics.HasError() {
+			resp.Diagnostics.AddError("Missing read error reason", "An error was reported during reading this object without specifying the diagnostics. This is the error of az-confidential provider. Kindly please report this problem.")
+		}
 	} else {
 		tflog.Debug(ctx, "resource does not exist yet")
 	}
 }
 
 func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	reqAbs := RequestAbstraction{
+		Get: req.Plan.Get,
+	}
+
+	resAbs := ResponseAbstraction{
+		Set:            resp.State.Set,
+		RemoveResource: resp.State.RemoveResource,
+		Diagnostics:    &resp.Diagnostics,
+	}
+
+	d.ReadT(ctx, reqAbs, resAbs)
+}
+
+func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) CreateT(ctx context.Context, req RequestAbstraction, resp ResponseAbstraction) {
 	data := d.Specializer.NewTerraformModel()
 
 	// Read Terraform prior state data into the model
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	resp.Diagnostics.Append(req.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	rawMsg := d.GetRawVersionedConfidentialDataMessage(ctx, data, &resp.Diagnostics)
+	rawMsg := d.GetRawVersionedConfidentialDataMessage(ctx, d.Specializer.GetConfidentialMaterialFrom(data), resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	d.CheckCiphertextExpiry(rawMsg, &resp.Diagnostics)
+	d.CheckCiphertextExpiry(rawMsg, resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -273,7 +309,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		}
 	}
 
-	confidentialMaterial := d.RehydrateConfidentialDataFromRawMessage(rawMsg, &resp.Diagnostics)
+	confidentialMaterial := d.RehydrateConfidentialDataFromRawMessage(rawMsg, resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -289,7 +325,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		resp.Diagnostics.Append(convertDiagnostics...)
 	}
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	resp.Diagnostics.Append(resp.Set(ctx, &data)...)
 
 	if rawMsg.Header.NumUses > 0 {
 		if trackErr := d.Factory.TrackObjectId(ctx, rawMsg.Header.Uuid); trackErr != nil {
@@ -326,9 +362,9 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 	return confidentialMaterial
 }
 
-func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) GetRawVersionedConfidentialDataMessage(ctx context.Context, data TMdl, dg *diag.Diagnostics) core.ConfidentialDataMessageJson {
+func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) GetRawVersionedConfidentialDataMessage(ctx context.Context, confMat ConfidentialMaterialModel, dg *diag.Diagnostics) core.ConfidentialDataMessageJson {
 	rawMsg := core.ConfidentialDataMessageJson{}
-	plainTextGzip := d.ExtractConfidentialModelPlainText(ctx, d.Specializer.GetConfidentialMaterialFrom(data), dg)
+	plainTextGzip := d.ExtractConfidentialModelPlainText(ctx, confMat, dg)
 	if dg.HasError() {
 		return rawMsg
 	}
@@ -380,7 +416,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) U
 		// Mutable read/update requires decryption. This process is simplified compared to create because
 		// read operation should have done all the necessary checks.
 
-		rawMsg := d.GetRawVersionedConfidentialDataMessage(ctx, data, &resp.Diagnostics)
+		rawMsg := d.GetRawVersionedConfidentialDataMessage(ctx, d.Specializer.GetConfidentialMaterialFrom(data), &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
