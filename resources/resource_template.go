@@ -247,7 +247,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		Diagnostics:    &resp.Diagnostics,
 	}
 
-	d.ReadT(ctx, reqAbs, resAbs)
+	d.CreateT(ctx, reqAbs, resAbs)
 }
 
 func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) CreateT(ctx context.Context, req RequestAbstraction, resp ResponseAbstraction) {
