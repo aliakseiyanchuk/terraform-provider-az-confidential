@@ -494,7 +494,7 @@ func AcquireCertificateData(certData []byte, password string) (core.Confidential
 	return &confData, nil
 }
 
-func CreateCertificateEncryptedMessage(certData core.ConfidentialCertificateData, coord *core.AzKeyVaultObjectCoordinate, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+func CreateCertificateEncryptedMessage(certData core.ConfidentialCertificateData, coord *core.AzKeyVaultObjectCoordinate, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, core.SecondaryProtectionParameters, error) {
 	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper(CertificateObjectType)
 
 	if coord != nil {
@@ -507,7 +507,8 @@ func CreateCertificateEncryptedMessage(certData core.ConfidentialCertificateData
 		certData.GetCertificateDataPassword(),
 		md,
 	)
-	return helper.ToEncryptedMessage(pubKey)
+	em, err := helper.ToEncryptedMessage(pubKey)
+	return em, md, err
 }
 
 func NewCertificateEncryptorFunction() function.Function {
@@ -575,7 +576,8 @@ func NewCertificateEncryptorFunction() function.Function {
 			}
 
 			// Produce ciphertext
-			return CreateCertificateEncryptedMessage(certData, coord, md, pubKey)
+			em, _, emErr := CreateCertificateEncryptedMessage(certData, coord, md, pubKey)
+			return em, emErr
 		},
 	}
 

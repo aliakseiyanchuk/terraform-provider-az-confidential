@@ -55,7 +55,6 @@ func MakeSecretGenerator(kwp *model.ContentWrappingParams, args []string) (model
 		BaseTerraformCodeModel: model.BaseTerraformCodeModel{
 			TFBlockName:           "secret",
 			WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
-			//EncryptedContent:      model.NewStringTerraformFieldExpression(),
 		},
 
 		TagsModel: model.TagsModel{
@@ -80,22 +79,9 @@ func MakeSecretGenerator(kwp *model.ContentWrappingParams, args []string) (model
 		secretDataAsStr := string(secretData)
 
 		if onlyCiphertext {
-			rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
-			if rsaKeyErr != nil {
-				return "", rsaKeyErr
-			}
-
-			var lockCoord *core.AzKeyVaultObjectCoordinate
-			if kwp.LockPlacement {
-				lockCoord = &core.AzKeyVaultObjectCoordinate{
-					VaultName: secretParams.vaultName,
-					Name:      secretParams.vaultObjectName,
-				}
-			}
-
-			em, emErr := keyvault.CreateSecretEncryptedMessage(secretDataAsStr, lockCoord, kwp.SecondaryProtectionParameters, rsaKey)
-			if emErr != nil {
-				return "", emErr
+			em, _, err := makeSecretEncryptedMessage(mdl, kwp, secretDataAsStr)
+			if err != nil {
+				return "", err
 			}
 
 			fld := model.FoldString(em.ToBase64PEM(), 80)
@@ -108,9 +94,22 @@ func MakeSecretGenerator(kwp *model.ContentWrappingParams, args []string) (model
 }
 
 func OutputSecretTerraformCode(mdl TerraformCodeModel, kwp *model.ContentWrappingParams, secretDataAsStr string) (string, error) {
+	em, params, err := makeSecretEncryptedMessage(mdl, kwp, secretDataAsStr)
+	if err != nil {
+		return "", err
+	}
+
+	mdl.BaseTerraformCodeModel.EncryptedContentMetadata = kwp.GetMetadataForTerraformFor(params, "keyvault secret", "destination_secret")
+	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
+	mdl.EncryptedContentMetadata.ResourceHasDestination = true
+
+	return model.Render("secret", secretTFTemplate, &mdl)
+}
+
+func makeSecretEncryptedMessage(mdl TerraformCodeModel, kwp *model.ContentWrappingParams, secretDataAsStr string) (core.EncryptedMessage, core.SecondaryProtectionParameters, error) {
 	rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
 	if rsaKeyErr != nil {
-		return "", rsaKeyErr
+		return core.EncryptedMessage{}, kwp.SecondaryProtectionParameters, rsaKeyErr
 	}
 
 	var lockCoord *core.AzKeyVaultObjectCoordinate
@@ -121,12 +120,6 @@ func OutputSecretTerraformCode(mdl TerraformCodeModel, kwp *model.ContentWrappin
 		}
 	}
 
-	em, emErr := keyvault.CreateSecretEncryptedMessage(secretDataAsStr, lockCoord, kwp.SecondaryProtectionParameters, rsaKey)
-	if emErr != nil {
-		return "", emErr
-	}
-
-	mdl.BaseTerraformCodeModel.EncryptedContentMetadata = kwp.GetMetadataForTerraform("keyvault secret", "destination_secret")
-	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
-	return model.Render("secret", secretTFTemplate, &mdl)
+	em, md, emErr := keyvault.CreateSecretEncryptedMessage(secretDataAsStr, lockCoord, kwp.SecondaryProtectionParameters, rsaKey)
+	return em, md, emErr
 }

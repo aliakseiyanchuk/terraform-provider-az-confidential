@@ -471,7 +471,7 @@ func (n *NamedValueDestinationFunctionParmaValidator) ValidateParameterObject(ct
 	}
 }
 
-func CreateNamedValueEncryptedMessage(confidentialModel string, dest *DestinationNamedValueModel, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+func CreateNamedValueEncryptedMessage(confidentialModel string, dest *DestinationNamedValueModel, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, core.SecondaryProtectionParameters, error) {
 	helper := core.NewVersionedStringConfidentialDataHelper(NamedValueObjectType)
 
 	if dest != nil {
@@ -479,7 +479,8 @@ func CreateNamedValueEncryptedMessage(confidentialModel string, dest *Destinatio
 	}
 
 	helper.CreateConfidentialStringData(confidentialModel, md)
-	return helper.ToEncryptedMessage(pubKey)
+	em, emErr := helper.ToEncryptedMessage(pubKey)
+	return em, md, emErr
 }
 
 func NewNamedValueEncryptorFunction() function.Function {
@@ -517,7 +518,10 @@ func NewNamedValueEncryptorFunction() function.Function {
 			return ptr
 		},
 
-		CreatEncryptedMessage: CreateNamedValueEncryptedMessage,
+		CreatEncryptedMessage: func(confidentialModel string, dest *DestinationNamedValueModel, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+			em, _, err := CreateNamedValueEncryptedMessage(confidentialModel, dest, md, pubKey)
+			return em, err
+		},
 	}
 
 	return &rv

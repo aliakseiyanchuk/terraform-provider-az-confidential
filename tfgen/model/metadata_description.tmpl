@@ -59,6 +59,7 @@
   # This may be INSUFFICIENTLY secure configuration. Consider adding provider labels to improve your
   # security posture.
   {{- end }}
+  {{- if .ResourceHasDestination }}
   {{- if .HasPlacementConstraints }}
   #
   # The ciphertext LOCKS the destination {{ .ObjectSingular }} address. Changing the `{{ .DestinationArgument }}` argument
@@ -72,6 +73,7 @@
   # the `{{ .DestinationArgument }}` argument. While this configuration is appropriate in context where the creator of
   # the ciphertext does not know (yet) the intended target placement, consider if locking the destination would
   # contribute to improving your overall security posture.
+  {{- end }}
   {{- end }}
   {{- end }}
   {{- if .IsWeaklyProtected }}

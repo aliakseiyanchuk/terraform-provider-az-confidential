@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"errors"
 	"flag"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/general"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 	"strings"
@@ -62,14 +63,9 @@ func MakeContentGenerator(kwp *model.ContentWrappingParams, args []string) (mode
 		content := string(contentBytes)
 
 		if onlyCiphertext {
-			rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
-			if rsaKeyErr != nil {
-				return "", rsaKeyErr
-			}
-
-			em, emErr := general.CreateContentEncryptedMessage(content, kwp.SecondaryProtectionParameters, rsaKey)
-			if emErr != nil {
-				return "", emErr
+			em, err := makeContentEncryptedMessage(kwp, content)
+			if err != nil {
+				return "", err
 			}
 
 			fld := model.FoldString(em.ToBase64PEM(), 80)
@@ -82,17 +78,23 @@ func MakeContentGenerator(kwp *model.ContentWrappingParams, args []string) (mode
 }
 
 func OutputDatasourceContentTerraformCode(mdl model.BaseTerraformCodeModel, kwp *model.ContentWrappingParams, content string) (string, error) {
-	rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
-	if rsaKeyErr != nil {
-		return "", rsaKeyErr
-	}
-
-	em, emErr := general.CreateContentEncryptedMessage(content, kwp.SecondaryProtectionParameters, rsaKey)
-	if emErr != nil {
-		return "", emErr
+	em, err := makeContentEncryptedMessage(kwp, content)
+	if err != nil {
+		return "", err
 	}
 
 	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
 	mdl.EncryptedContentMetadata = kwp.GetMetadataForTerraform("content", "")
+	mdl.EncryptedContentMetadata.ResourceHasDestination = false
 	return model.Render("content", ContentTFTemplate, &mdl)
+}
+
+func makeContentEncryptedMessage(kwp *model.ContentWrappingParams, content string) (core.EncryptedMessage, error) {
+	rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
+	if rsaKeyErr != nil {
+		return core.EncryptedMessage{}, rsaKeyErr
+	}
+
+	em, emErr := general.CreateContentEncryptedMessage(content, kwp.SecondaryProtectionParameters, rsaKey)
+	return em, emErr
 }

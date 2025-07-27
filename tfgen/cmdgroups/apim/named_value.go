@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"errors"
 	"flag"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	res_apim "github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/apim"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -169,26 +170,9 @@ func MakeNamedValueGenerator(kwp *model.ContentWrappingParams, args []string) (m
 		namedValueAsStr := string(namedValue)
 
 		if onlyCiphertext {
-			publicKey, rsaKeyErr := kwp.LoadRsaPublicKey()
-			if rsaKeyErr != nil {
-				return "", rsaKeyErr
-			}
-
-			var lockCoord *res_apim.DestinationNamedValueModel
-			if kwp.LockPlacement {
-				lockCoord = &res_apim.DestinationNamedValueModel{
-					DestinationApiManagement: res_apim.DestinationApiManagement{
-						AzSubscriptionId: types.StringValue(mdl.DestinationNamedValue.AzSubscriptionId.Value),
-						ResourceGroup:    types.StringValue(mdl.DestinationNamedValue.ResourceGroupName.Value),
-						ServiceName:      types.StringValue(mdl.DestinationNamedValue.ServiceName.Value),
-					},
-					Name: types.StringValue(mdl.DestinationNamedValue.NamedValue.Value),
-				}
-			}
-
-			em, emErr := res_apim.CreateNamedValueEncryptedMessage(namedValueAsStr, lockCoord, kwp.SecondaryProtectionParameters, publicKey)
-			if emErr != nil {
-				return "", emErr
+			em, _, err := makeNamedValueEncryptedMessage(mdl, kwp, namedValueAsStr)
+			if err != nil {
+				return "", err
 			}
 
 			fld := model.FoldString(em.ToBase64PEM(), 80)
@@ -203,9 +187,21 @@ func MakeNamedValueGenerator(kwp *model.ContentWrappingParams, args []string) (m
 }
 
 func OutputNamedValueTerraformCode(mdl NamedValueTerraformCodeModel, kwp *model.ContentWrappingParams, namedValueDataAsStr string) (string, error) {
+	em, params, err := makeNamedValueEncryptedMessage(mdl, kwp, namedValueDataAsStr)
+	if err != nil {
+		return "", err
+	}
+
+	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
+	mdl.EncryptedContentMetadata = kwp.GetMetadataForTerraformFor(params, "api management named value", "destination_named_value")
+	mdl.EncryptedContentMetadata.ResourceHasDestination = true
+	return model.Render("apim/namedValue", namedValueTFTemplate, &mdl)
+}
+
+func makeNamedValueEncryptedMessage(mdl NamedValueTerraformCodeModel, kwp *model.ContentWrappingParams, namedValueDataAsStr string) (core.EncryptedMessage, core.SecondaryProtectionParameters, error) {
 	publicKey, rsaKeyErr := kwp.LoadRsaPublicKey()
 	if rsaKeyErr != nil {
-		return "", rsaKeyErr
+		return core.EncryptedMessage{}, kwp.SecondaryProtectionParameters, rsaKeyErr
 	}
 
 	var lockCoord *res_apim.DestinationNamedValueModel
@@ -220,12 +216,6 @@ func OutputNamedValueTerraformCode(mdl NamedValueTerraformCodeModel, kwp *model.
 		}
 	}
 
-	em, emErr := res_apim.CreateNamedValueEncryptedMessage(namedValueDataAsStr, lockCoord, kwp.SecondaryProtectionParameters, publicKey)
-	if emErr != nil {
-		return "", emErr
-	}
-
-	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
-	mdl.EncryptedContentMetadata = kwp.GetMetadataForTerraform("api management named value", "destination_named_value")
-	return model.Render("apim/namedValue", namedValueTFTemplate, &mdl)
+	em, md, emErr := res_apim.CreateNamedValueEncryptedMessage(namedValueDataAsStr, lockCoord, kwp.SecondaryProtectionParameters, publicKey)
+	return em, md, emErr
 }

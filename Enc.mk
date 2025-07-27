@@ -36,10 +36,10 @@ encrypt_secret:
 	-destination-vault ${OUTPUT_VAULT_NAME} -destination-secret-name ${OUTPUT_VAULT_OBJECT} \
 
 # Encrypt text secret read from the command-line
-encrypt_password:
+encrypt_content:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
 	${LABELS} ${OPTIONS} \
-	general password
+	general content
 
 encrypt_key:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \

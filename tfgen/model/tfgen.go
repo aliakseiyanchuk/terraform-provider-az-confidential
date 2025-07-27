@@ -15,8 +15,12 @@ type ContentWrappingParams struct {
 }
 
 func (kwp *ContentWrappingParams) GetMetadataForTerraform(objName, destExp string) VersionedConfidentialMetadataTFCode {
+	return kwp.GetMetadataForTerraformFor(kwp.SecondaryProtectionParameters, objName, destExp)
+}
+
+func (kwp *ContentWrappingParams) GetMetadataForTerraformFor(sp core.SecondaryProtectionParameters, objName, destExp string) VersionedConfidentialMetadataTFCode {
 	return VersionedConfidentialMetadataTFCode{
-		SecondaryProtectionParameters: kwp.SecondaryProtectionParameters,
+		SecondaryProtectionParameters: sp,
 		ObjectSingular:                objName,
 		DestinationArgument:           destExp,
 	}

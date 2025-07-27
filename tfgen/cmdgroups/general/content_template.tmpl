@@ -1,5 +1,8 @@
 #
-# Minimal terraform code for your example:
+# Content datasource, as its name implies, allows unpacking a content of any
+# length into the state. This datasource is a solution for cases where a
+# data element **must not** be in the Terraform configuration by value while
+# it is not sensitive enough to require placing e.g. into a Key Vault.
 # ----------------------------------------------------------------------------
 
 data "az-confidential_content" "{{ .TFBlockName }}" {

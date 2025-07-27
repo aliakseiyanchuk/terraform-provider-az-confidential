@@ -97,23 +97,9 @@ func MakeCertGenerator(kwp *model.ContentWrappingParams, args ...string) (model.
 		}
 
 		if onlyCiphertext {
-			rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
-			if rsaKeyErr != nil {
-				return "", rsaKeyErr
-			}
-
-			var coord *core.AzKeyVaultObjectCoordinate
-			if kwp.LockPlacement {
-				coord = &core.AzKeyVaultObjectCoordinate{
-					VaultName: certParams.vaultName,
-					Name:      certParams.vaultObjectName,
-					Type:      "certificates",
-				}
-			}
-
-			em, emErr := keyvault.CreateCertificateEncryptedMessage(certData, coord, kwp.SecondaryProtectionParameters, rsaKey)
-			if emErr != nil {
-				return "", emErr
+			em, _, err := makeCertificateEncryptedMessage(mdl, kwp, certData)
+			if err != nil {
+				return "", err
 			}
 
 			fld := model.FoldString(em.ToBase64PEM(), 80)
@@ -160,9 +146,22 @@ func AcquireCertificateData(certParams *CertTFGenParams, inputReader model.Input
 }
 
 func OutputCertificateTerraformCode(mdl TerraformCodeModel, kwp *model.ContentWrappingParams, data core.ConfidentialCertificateData) (string, error) {
+	em, params, err := makeCertificateEncryptedMessage(mdl, kwp, data)
+	if err != nil {
+		return "", err
+	}
+
+	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
+	mdl.EncryptedContentMetadata = kwp.GetMetadataForTerraformFor(params, "keyvault certificate", "destination_certificate")
+	mdl.EncryptedContentMetadata.ResourceHasDestination = true
+
+	return model.Render("cert", certTFTemplate, &mdl)
+}
+
+func makeCertificateEncryptedMessage(mdl TerraformCodeModel, kwp *model.ContentWrappingParams, data core.ConfidentialCertificateData) (core.EncryptedMessage, core.SecondaryProtectionParameters, error) {
 	rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
 	if rsaKeyErr != nil {
-		return "", rsaKeyErr
+		return core.EncryptedMessage{}, kwp.SecondaryProtectionParameters, rsaKeyErr
 	}
 
 	var lockCoord *core.AzKeyVaultObjectCoordinate
@@ -173,12 +172,6 @@ func OutputCertificateTerraformCode(mdl TerraformCodeModel, kwp *model.ContentWr
 		}
 	}
 
-	em, emErr := keyvault.CreateCertificateEncryptedMessage(data, lockCoord, kwp.SecondaryProtectionParameters, rsaKey)
-	if emErr != nil {
-		return "", emErr
-	}
-
-	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
-	mdl.EncryptedContentMetadata = kwp.GetMetadataForTerraform("keyvault certificate", "destination_certificate")
-	return model.Render("cert", certTFTemplate, &mdl)
+	em, md, emErr := keyvault.CreateCertificateEncryptedMessage(data, lockCoord, kwp.SecondaryProtectionParameters, rsaKey)
+	return em, md, emErr
 }

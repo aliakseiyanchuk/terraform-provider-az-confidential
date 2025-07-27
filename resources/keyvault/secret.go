@@ -390,7 +390,7 @@ func (v *AzKVObjectCoordinateParamValidator) ValidateParameterObject(ctx context
 	}
 }
 
-func CreateSecretEncryptedMessage(confidentialString string, coord *core.AzKeyVaultObjectCoordinate, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+func CreateSecretEncryptedMessage(confidentialString string, coord *core.AzKeyVaultObjectCoordinate, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, core.SecondaryProtectionParameters, error) {
 	helper := core.NewVersionedStringConfidentialDataHelper(SecretObjectType)
 
 	if coord != nil {
@@ -398,7 +398,8 @@ func CreateSecretEncryptedMessage(confidentialString string, coord *core.AzKeyVa
 	}
 
 	helper.CreateConfidentialStringData(confidentialString, md)
-	return helper.ToEncryptedMessage(pubKey)
+	em, err := helper.ToEncryptedMessage(pubKey)
+	return em, md, err
 }
 
 func NewSecretEncryptorFunction() function.Function {
@@ -442,7 +443,8 @@ func NewSecretEncryptorFunction() function.Function {
 				}
 			}
 
-			return CreateSecretEncryptedMessage(confidentialModel, coord, md, pubKey)
+			em, _, err := CreateSecretEncryptedMessage(confidentialModel, coord, md, pubKey)
+			return em, err
 		},
 	}
 

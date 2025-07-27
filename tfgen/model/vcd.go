@@ -10,8 +10,9 @@ var confidentialDataAppraisalTemplate string
 
 type VersionedConfidentialMetadataTFCode struct {
 	core.SecondaryProtectionParameters
-	ObjectSingular      string
-	DestinationArgument string
+	ObjectSingular         string
+	DestinationArgument    string
+	ResourceHasDestination bool
 }
 
 func (md *VersionedConfidentialMetadataTFCode) CiphertextAppraisal() string {

@@ -101,23 +101,9 @@ func MakeKeyGenerator(kwp *model.ContentWrappingParams, args ...string) (model.S
 		mdl.AddDefaultKeyOperationsFor(jwkKey)
 
 		if onlyCiphertext {
-			rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
-			if rsaKeyErr != nil {
-				return "", rsaKeyErr
-			}
-
-			var coord *core.AzKeyVaultObjectCoordinate
-			if kwp.LockPlacement {
-				coord = &core.AzKeyVaultObjectCoordinate{
-					VaultName: keyParams.vaultName,
-					Name:      keyParams.vaultObjectName,
-					Type:      "keys",
-				}
-			}
-
-			em, emErr := keyvault.CreateKeyEncryptedMessage(jwkKey, coord, kwp.SecondaryProtectionParameters, rsaKey)
-			if emErr != nil {
-				return "", emErr
+			em, _, err := makeKeyEncryptedMessage(mdl, kwp, jwkKey)
+			if err != nil {
+				return "", err
 			}
 
 			fld := model.FoldString(em.ToBase64PEM(), 80)
@@ -131,7 +117,7 @@ func MakeKeyGenerator(kwp *model.ContentWrappingParams, args ...string) (model.S
 
 func PrivateKeyNeedsPassword(keyData []byte) bool {
 	if !core.IsPEMEncoded(keyData) {
-		// We need password if PKCS8 bag cannot be opened without a password.
+		// We need a password if a PKCS8 bag cannot be opened without a password.
 		if _, derLoadErr := x509.ParsePKCS8PrivateKey(keyData); derLoadErr != nil {
 			return true
 		} else {
@@ -223,9 +209,22 @@ func (g *KeyResourceTerraformModel) AddDefaultKeyOperationsFor(jwkKey interface{
 }
 
 func OutputKeyTerraformCode(mdl KeyResourceTerraformModel, kwp *model.ContentWrappingParams, jwkKey interface{}) (string, error) {
+	em, params, err := makeKeyEncryptedMessage(mdl, kwp, jwkKey)
+	if err != nil {
+		return "", err
+	}
+
+	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
+	mdl.EncryptedContentMetadata = kwp.GetMetadataForTerraformFor(params, "keyvault key", "destination_key")
+	mdl.EncryptedContentMetadata.ResourceHasDestination = true
+
+	return model.Render("key", keyTFTemplate, &mdl)
+}
+
+func makeKeyEncryptedMessage(mdl KeyResourceTerraformModel, kwp *model.ContentWrappingParams, jwkKey interface{}) (core.EncryptedMessage, core.SecondaryProtectionParameters, error) {
 	rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
 	if rsaKeyErr != nil {
-		return "", rsaKeyErr
+		return core.EncryptedMessage{}, kwp.SecondaryProtectionParameters, rsaKeyErr
 	}
 
 	var lockCoord *core.AzKeyVaultObjectCoordinate
@@ -236,13 +235,6 @@ func OutputKeyTerraformCode(mdl KeyResourceTerraformModel, kwp *model.ContentWra
 		}
 	}
 
-	em, emErr := keyvault.CreateKeyEncryptedMessage(jwkKey, lockCoord, kwp.SecondaryProtectionParameters, rsaKey)
-	if emErr != nil {
-		return "", emErr
-	}
-
-	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
-	mdl.EncryptedContentMetadata = kwp.GetMetadataForTerraform("keyvault key", "destination_key")
-
-	return model.Render("key", keyTFTemplate, &mdl)
+	em, md, emErr := keyvault.CreateKeyEncryptedMessage(jwkKey, lockCoord, kwp.SecondaryProtectionParameters, rsaKey)
+	return em, md, emErr
 }

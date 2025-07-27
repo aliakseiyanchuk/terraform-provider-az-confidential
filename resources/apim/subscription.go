@@ -457,7 +457,7 @@ func (s *SubscriptionSpecializer) DoDelete(ctx context.Context, planData *Subscr
 // TODO: write and embed a readme
 var subscriptionResourceMarkdownDescription string
 
-func CreateSubscriptionEncryptedMessage(subscriptionKeys SubscriptionDataFunctionParameter, dest *DestinationSubscriptionCoordinateModel, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+func CreateSubscriptionEncryptedMessage(subscriptionKeys SubscriptionDataFunctionParameter, dest *DestinationSubscriptionCoordinateModel, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, core.SecondaryProtectionParameters, error) {
 	if dest != nil {
 		md.PlacementConstraints = []core.PlacementConstraint{core.PlacementConstraint(dest.GetLabel())}
 	}
@@ -468,7 +468,8 @@ func CreateSubscriptionEncryptedMessage(subscriptionKeys SubscriptionDataFunctio
 		subscriptionKeys.SecondaryKey.ValueString(),
 		md)
 
-	return helper.ToEncryptedMessage(pubKey)
+	em, err := helper.ToEncryptedMessage(pubKey)
+	return em, md, err
 }
 
 func NewSubscriptionResource() resource.Resource {
@@ -704,7 +705,10 @@ func NewSubscriptionEncryptorFunction() function.Function {
 			return ptr
 		},
 
-		CreatEncryptedMessage: CreateSubscriptionEncryptedMessage,
+		CreatEncryptedMessage: func(confidentialModel SubscriptionDataFunctionParameter, dest *DestinationSubscriptionCoordinateModel, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+			em, _, emErr := CreateSubscriptionEncryptedMessage(confidentialModel, dest, md, pubKey)
+			return em, emErr
+		},
 	}
 
 	return &rv

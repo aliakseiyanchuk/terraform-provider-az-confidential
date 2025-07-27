@@ -652,11 +652,11 @@ func AcquireJWT(keyData []byte, password string) (interface{}, error) {
 	return jwkKey, nil
 }
 
-func CreateKeyEncryptedMessage(jwtKey interface{}, destLock *core.AzKeyVaultObjectCoordinate, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+func CreateKeyEncryptedMessage(jwtKey interface{}, destLock *core.AzKeyVaultObjectCoordinate, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, core.SecondaryProtectionParameters, error) {
 	// Produce ciphertext
 	jwkData, marshalErr := json.Marshal(jwtKey)
 	if marshalErr != nil {
-		return core.EncryptedMessage{}, marshalErr
+		return core.EncryptedMessage{}, md, marshalErr
 	}
 
 	if destLock != nil {
@@ -666,7 +666,8 @@ func CreateKeyEncryptedMessage(jwtKey interface{}, destLock *core.AzKeyVaultObje
 	helper := core.NewVersionedBinaryConfidentialDataHelper(KeyObjectType)
 	_ = helper.CreateConfidentialBinaryData(jwkData, md)
 
-	return helper.ToEncryptedMessage(pubKey)
+	em, emErr := helper.ToEncryptedMessage(pubKey)
+	return em, md, emErr
 }
 
 func NewKeyEncryptorFunction() function.Function {
@@ -732,11 +733,12 @@ func NewKeyEncryptorFunction() function.Function {
 				return core.EncryptedMessage{}, jwtErr
 			}
 
-			return CreateKeyEncryptedMessage(jwtKey,
+			em, _, jwtErr := CreateKeyEncryptedMessage(jwtKey,
 				coord,
 				md,
 				pubKey,
 			)
+			return em, jwtErr
 		},
 	}
 
