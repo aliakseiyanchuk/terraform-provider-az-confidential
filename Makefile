@@ -49,8 +49,11 @@ generate:
 test:
 	go test ${TEST}
 
+only_acceptance_test: install
+	TF_ACC=1 go test -v -cover ./acceptance
+
 acceptance_test: install
-	TF_ACC=1 go test ./acceptance
+	TF_ACC=1 go test -v -cover ./...
 
 tfgen:
 	go build -o ${TF_GEN_BINARY} ./bin/tfgen
