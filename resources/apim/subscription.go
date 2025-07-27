@@ -25,8 +25,8 @@ import (
 	"regexp"
 )
 
-func GetDestinationSubscriptionLabel(azSubscriptionId,
-	resourceGroupName, serviceName, subscriptionId, apiScope, productScope, owner string) string {
+func CreateDestinationSubscription(azSubscriptionId,
+	resourceGroupName, serviceName, subscriptionId, apiScope, productScope, owner string) DestinationSubscriptionCoordinateModel {
 	mdl := DestinationSubscriptionCoordinateModel{
 		DestinationApiManagement: DestinationApiManagement{
 			AzSubscriptionId: types.StringValue(azSubscriptionId),
@@ -39,7 +39,7 @@ func GetDestinationSubscriptionLabel(azSubscriptionId,
 		UserIdentifier:    types.StringValue(owner),
 	}
 
-	return mdl.GetLabel()
+	return mdl
 }
 
 type ConfidentialSubscriptionData interface {
@@ -73,22 +73,23 @@ type ConfidentialSubscriptionHelper struct {
 	core.VersionedConfidentialDataHelperTemplate[ConfidentialSubscriptionData, ConfidentialSubscriptionStruct]
 }
 
-func (vcd *ConfidentialSubscriptionHelper) CreateSubscriptionData(primary, secondary string, md core.VersionedConfidentialMetadata) core.VersionedConfidentialData[ConfidentialSubscriptionData] {
+func (vcd *ConfidentialSubscriptionHelper) CreateSubscriptionData(primary, secondary string, md core.SecondaryProtectionParameters) core.VersionedConfidentialData[ConfidentialSubscriptionData] {
 	p := core.VersionedConfidentialDataCreateParam[ConfidentialSubscriptionData]{
 		Value: &ConfidentialSubscriptionStruct{
 			PrimaryKey:   primary,
 			SecondaryKey: secondary,
 		},
-		VersionedConfidentialMetadata: md,
+		SecondaryProtectionParameters: md,
 	}
 
 	return vcd.Set(p)
 }
 
-func NewConfidentialSubscriptionHelper() *ConfidentialSubscriptionHelper {
+func NewConfidentialSubscriptionHelper(objectType string) *ConfidentialSubscriptionHelper {
 	rv := &ConfidentialSubscriptionHelper{}
 	rv.KnowValue = &ConfidentialSubscriptionStruct{}
 	rv.ModelName = "api_management/subscription/v1"
+	rv.ObjectType = objectType
 
 	rv.ModelAtRestSupplier = func(s string) (ConfidentialSubscriptionStruct, error) {
 		var err error
@@ -209,7 +210,7 @@ func (s *SubscriptionSpecializer) CheckPlacement(ctx context.Context, pc []core.
 }
 
 func (s *SubscriptionSpecializer) GetJsonDataImporter() core.ObjectJsonImportSupport[ConfidentialSubscriptionData] {
-	return NewConfidentialSubscriptionHelper()
+	return NewConfidentialSubscriptionHelper(SubscriptionObjectType)
 }
 
 var idExp = regexp.MustCompile("/subscriptions/(.*)/resourceGroups/(.*)/providers/Microsoft.ApiManagement/service/(.*)/subscriptions/(.*)")
@@ -456,6 +457,20 @@ func (s *SubscriptionSpecializer) DoDelete(ctx context.Context, planData *Subscr
 // TODO: write and embed a readme
 var subscriptionResourceMarkdownDescription string
 
+func CreateSubscriptionEncryptedMessage(subscriptionKeys SubscriptionDataFunctionParameter, dest *DestinationSubscriptionCoordinateModel, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+	if dest != nil {
+		md.PlacementConstraints = []core.PlacementConstraint{core.PlacementConstraint(dest.GetLabel())}
+	}
+
+	helper := NewConfidentialSubscriptionHelper(SubscriptionObjectType)
+	_ = helper.CreateSubscriptionData(
+		subscriptionKeys.PrimaryKey.ValueString(),
+		subscriptionKeys.SecondaryKey.ValueString(),
+		md)
+
+	return helper.ToEncryptedMessage(pubKey)
+}
+
 func NewSubscriptionResource() resource.Resource {
 	modelAttributes := map[string]schema.Attribute{
 		"subscription_id": schema.StringAttribute{
@@ -648,7 +663,6 @@ func NewSubscriptionEncryptorFunction() function.Function {
 		Summary:             "Produces a ciphertext string suitable for use with az-confidential_apim_subnscription resource",
 		MarkdownDescription: "Encrypts an APIM subscription keys without the use of the `tfgen` tool",
 
-		ObjectType: NamedValueObjectType,
 		DataParameter: function.ObjectParameter{
 			Name:               "subscription_keys",
 			Description:        "Subscription keys that need to be created in the target APIM service",
@@ -690,19 +704,7 @@ func NewSubscriptionEncryptorFunction() function.Function {
 			return ptr
 		},
 
-		CreatEncryptedMessage: func(confidentialModel SubscriptionDataFunctionParameter, dest *DestinationSubscriptionCoordinateModel, md core.VersionedConfidentialMetadata, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
-			if dest != nil {
-				md.PlacementConstraints = []core.PlacementConstraint{core.PlacementConstraint(dest.GetLabel())}
-			}
-
-			helper := NewConfidentialSubscriptionHelper()
-			_ = helper.CreateSubscriptionData(
-				confidentialModel.PrimaryKey.ValueString(),
-				confidentialModel.SecondaryKey.ValueString(),
-				md)
-
-			return helper.ToEncryptedMessage(pubKey)
-		},
+		CreatEncryptedMessage: CreateSubscriptionEncryptedMessage,
 	}
 
 	return &rv

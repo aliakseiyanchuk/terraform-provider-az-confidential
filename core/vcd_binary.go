@@ -45,9 +45,9 @@ type VersionedBinaryConfidentialDataHelper struct {
 	VersionedConfidentialDataHelperTemplate[ConfidentialBinaryData, BinaryConfidentialDataJsonModel]
 }
 
-func (vcd *VersionedBinaryConfidentialDataHelper) CreateConfidentialBinaryData(value []byte, md VersionedConfidentialMetadata) VersionedConfidentialData[ConfidentialBinaryData] {
+func (vcd *VersionedBinaryConfidentialDataHelper) CreateConfidentialBinaryData(value []byte, md SecondaryProtectionParameters) VersionedConfidentialData[ConfidentialBinaryData] {
 	p := VersionedConfidentialDataCreateParam[ConfidentialBinaryData]{
-		VersionedConfidentialMetadata: md,
+		SecondaryProtectionParameters: md,
 		Value: &BinaryConfidentialDataStruct{
 			BinaryData: value,
 		},
@@ -56,9 +56,10 @@ func (vcd *VersionedBinaryConfidentialDataHelper) CreateConfidentialBinaryData(v
 	return vcd.Set(p)
 }
 
-func NewVersionedBinaryConfidentialDataHelper() *VersionedBinaryConfidentialDataHelper {
+func NewVersionedBinaryConfidentialDataHelper(objectType string) *VersionedBinaryConfidentialDataHelper {
 	rv := &VersionedBinaryConfidentialDataHelper{}
 	rv.ModelName = "core/binary/v1"
+	rv.ObjectType = objectType
 	rv.KnowValue = &BinaryConfidentialDataStruct{}
 	rv.ModelAtRestSupplier = func(modelRef string) (BinaryConfidentialDataJsonModel, error) {
 		var err error

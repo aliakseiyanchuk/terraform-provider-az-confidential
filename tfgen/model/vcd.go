@@ -9,7 +9,7 @@ import (
 var confidentialDataAppraisalTemplate string
 
 type VersionedConfidentialMetadataTFCode struct {
-	core.VersionedConfidentialMetadata
+	core.SecondaryProtectionParameters
 	ObjectSingular      string
 	DestinationArgument string
 }

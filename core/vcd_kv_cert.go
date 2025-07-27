@@ -57,7 +57,7 @@ type VersionedKeyVaultCertificateDataHelper struct {
 }
 
 func (vcd *VersionedKeyVaultCertificateDataHelper) CreateConfidentialCertificateData(
-	certData []byte, certFormat, certPassword string, md VersionedConfidentialMetadata) VersionedConfidentialData[ConfidentialCertificateData] {
+	certData []byte, certFormat, certPassword string, md SecondaryProtectionParameters) VersionedConfidentialData[ConfidentialCertificateData] {
 
 	confData := &ConfidentialCertConfidentialDataStruct{
 		CertificateData:         certData,
@@ -69,20 +69,22 @@ func (vcd *VersionedKeyVaultCertificateDataHelper) CreateConfidentialCertificate
 }
 
 func (vcd *VersionedKeyVaultCertificateDataHelper) FromConfidentialCertificateData(
-	confData ConfidentialCertificateData, md VersionedConfidentialMetadata) VersionedConfidentialData[ConfidentialCertificateData] {
+	confData ConfidentialCertificateData, md SecondaryProtectionParameters) VersionedConfidentialData[ConfidentialCertificateData] {
 
 	p := VersionedConfidentialDataCreateParam[ConfidentialCertificateData]{
-		VersionedConfidentialMetadata: md,
+		SecondaryProtectionParameters: md,
 		Value:                         confData,
 	}
 
 	return vcd.Set(p)
 }
 
-func NewVersionedKeyVaultCertificateConfidentialDataHelper() *VersionedKeyVaultCertificateDataHelper {
+func NewVersionedKeyVaultCertificateConfidentialDataHelper(objectType string) *VersionedKeyVaultCertificateDataHelper {
 	rv := &VersionedKeyVaultCertificateDataHelper{}
 	rv.KnowValue = &ConfidentialCertConfidentialDataStruct{}
 	rv.ModelName = "core/certificate/v01"
+	rv.ObjectType = objectType
+
 	rv.ModelAtRestSupplier = func(modelName string) (ConfidentialCertConfidentialDataJsonModel, error) {
 		var err error
 		if modelName != "core/certificate/v01" {

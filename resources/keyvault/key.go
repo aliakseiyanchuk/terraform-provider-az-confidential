@@ -29,6 +29,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/lestrrat-go/jwx/v3/jwk"
+	"github.com/segmentio/asm/base64"
 	"golang.org/x/crypto/ssh"
 	"math/big"
 )
@@ -464,7 +465,7 @@ func (a *AzKeyVaultKeyResourceSpecializer) DoDelete(ctx context.Context, data *K
 }
 
 func (a *AzKeyVaultKeyResourceSpecializer) GetJsonDataImporter() core.ObjectJsonImportSupport[core.ConfidentialBinaryData] {
-	return core.NewVersionedBinaryConfidentialDataHelper()
+	return core.NewVersionedBinaryConfidentialDataHelper(KeyObjectType)
 }
 
 const KeyObjectType = "kv/key"
@@ -579,13 +580,101 @@ func (vld *AzKvPrivateKeyParamValidator) ValidateParameterObject(ctx context.Con
 	}
 }
 
+func AcquireJWT(keyData []byte, password string) (interface{}, error) {
+	var jwkKey interface{}
+
+	// Acquire the key
+	if core.IsPEMEncoded(keyData) {
+		if block, blockErr := core.ParseSinglePEMBlock(keyData); blockErr != nil {
+			return nil, blockErr
+		} else {
+			if block.Type == "ENCRYPTED PRIVATE KEY" {
+				if len(password) == 0 {
+					return nil, errors.New("password must be specified for encrypted private key")
+				}
+				key, loadErr := core.PrivateKeyFromEncryptedBlock(block, password)
+				if loadErr != nil {
+					return nil, errors.New("incorrect password for the private key")
+				}
+
+				if j, jwkImportErr := jwk.Import(key); jwkImportErr != nil {
+					return nil, fmt.Errorf("cannot convert RSA key to JSON Web Key: %s", jwkImportErr.Error())
+				} else {
+					jwkKey = j
+				}
+			} else if block.Type == "PRIVATE KEY" {
+				key, loadErr := core.PrivateKeyFromBlock(block)
+				if loadErr != nil {
+					return nil, fmt.Errorf("cannot import rsa key bytes: %s", loadErr.Error())
+				}
+
+				if j, jwkImportErr := jwk.Import(key); jwkImportErr != nil {
+					return nil, fmt.Errorf("cannot import rsa key: %s", jwkImportErr.Error())
+				} else {
+					jwkKey = j
+				}
+			} else if block.Type == "EC PRIVATE KEY" {
+				key, loadErr := core.PrivateKeyFromBlock(block)
+				if loadErr != nil {
+					return nil, fmt.Errorf("cannot import elliptic-curve key bytes: %s", loadErr.Error())
+				}
+
+				if j, jwkImportErr := jwk.Import(key); jwkImportErr != nil {
+					return nil, fmt.Errorf("cannot import elliptic-curve key: %s", jwkImportErr.Error())
+				} else {
+					jwkKey = j
+				}
+			} else {
+				return nil, fmt.Errorf("private key block %s import is not supported by Azure", block.Type)
+			}
+		}
+	} else {
+		var key any
+		var derLoadErr error
+
+		if key, derLoadErr = x509.ParsePKCS8PrivateKey(keyData); derLoadErr != nil {
+			if len(password) == 0 {
+				return nil, errors.New("password must be specified for DER-encrypted private key")
+			}
+
+			if key, derLoadErr = core.PrivateKeyFromDER(keyData, password); derLoadErr != nil {
+				return nil, fmt.Errorf("cannot load private key: %s", derLoadErr.Error())
+			}
+		}
+
+		if j, jwkImportErr := jwk.Import(key); jwkImportErr != nil {
+			return nil, fmt.Errorf("cannot import rsa/escada key bytes: %s", jwkImportErr.Error())
+		} else {
+			jwkKey = j
+		}
+	}
+
+	return jwkKey, nil
+}
+
+func CreateKeyEncryptedMessage(jwtKey interface{}, destLock *core.AzKeyVaultObjectCoordinate, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+	// Produce ciphertext
+	jwkData, marshalErr := json.Marshal(jwtKey)
+	if marshalErr != nil {
+		return core.EncryptedMessage{}, marshalErr
+	}
+
+	if destLock != nil {
+		md.PlacementConstraints = []core.PlacementConstraint{core.PlacementConstraint(destLock.GetLabel())}
+	}
+
+	helper := core.NewVersionedBinaryConfidentialDataHelper(KeyObjectType)
+	_ = helper.CreateConfidentialBinaryData(jwkData, md)
+
+	return helper.ToEncryptedMessage(pubKey)
+}
+
 func NewKeyEncryptorFunction() function.Function {
 	rv := resources.FunctionTemplate[KeyDataFunctionParameter, core.AzKeyVaultObjectCoordinateModel]{
 		Name:                "encrypt_keyvault_key",
 		Summary:             "Produces a ciphertext string suitable for use with az-confidential_key resource",
 		MarkdownDescription: "Encrypts an RSA or elliptic curve key without the use of the `tfgen` tool",
 
-		ObjectType: KeyObjectType,
 		DataParameter: function.ObjectParameter{
 			Name:        "key_data",
 			Description: "Private key to be encrypted",
@@ -620,9 +709,10 @@ func NewKeyEncryptorFunction() function.Function {
 			return ptr
 		},
 
-		CreatEncryptedMessage: func(confidentialModel KeyDataFunctionParameter, dest *core.AzKeyVaultObjectCoordinateModel, md core.VersionedConfidentialMetadata, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+		CreatEncryptedMessage: func(confidentialModel KeyDataFunctionParameter, dest *core.AzKeyVaultObjectCoordinateModel, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+			var coord *core.AzKeyVaultObjectCoordinate
 			if dest != nil {
-				coord := core.AzKeyVaultObjectCoordinate{
+				coord = &core.AzKeyVaultObjectCoordinate{
 					VaultName: dest.VaultName.ValueString(),
 					Name:      dest.Name.ValueString(),
 					Type:      "keys",
@@ -630,92 +720,23 @@ func NewKeyEncryptorFunction() function.Function {
 				md.PlacementConstraints = []core.PlacementConstraint{core.PlacementConstraint(coord.GetLabel())}
 			}
 
-			keyData := []byte(confidentialModel.Key.ValueString())
-			var jwkKey interface{}
-
-			// Acquire the key
-			if core.IsPEMEncoded(keyData) {
-				if block, blockErr := core.ParseSinglePEMBlock(keyData); blockErr != nil {
-					return core.EncryptedMessage{}, blockErr
-				} else {
-					if block.Type == "ENCRYPTED PRIVATE KEY" {
-						if len(confidentialModel.Password.ValueString()) == 0 {
-							return core.EncryptedMessage{}, errors.New("password must be specified for encrypted private key")
-						}
-						key, loadErr := core.PrivateKeyFromEncryptedBlock(block, confidentialModel.Password.ValueString())
-						if loadErr != nil {
-							return core.EncryptedMessage{}, errors.New("incorrect password for the private key")
-						}
-
-						if j, jwkImportErr := jwk.Import(key); jwkImportErr != nil {
-							return core.EncryptedMessage{}, fmt.Errorf("cannot convert RSA key to JSON Web Key: %s", jwkImportErr.Error())
-						} else {
-							jwkKey = j
-						}
-					} else if block.Type == "PRIVATE KEY" {
-						key, loadErr := core.PrivateKeyFromBlock(block)
-						if loadErr != nil {
-							return core.EncryptedMessage{}, fmt.Errorf("cannot import rsa key bytes: %s", loadErr.Error())
-						}
-
-						if j, jwkImportErr := jwk.Import(key); jwkImportErr != nil {
-							return core.EncryptedMessage{}, fmt.Errorf("cannot import rsa key: %s", jwkImportErr.Error())
-						} else {
-							jwkKey = j
-						}
-					} else if block.Type == "EC PRIVATE KEY" {
-						key, loadErr := core.PrivateKeyFromBlock(block)
-						if loadErr != nil {
-							return core.EncryptedMessage{}, fmt.Errorf("cannot import elliptic-curve key bytes: %s", loadErr.Error())
-						}
-
-						if j, jwkImportErr := jwk.Import(key); jwkImportErr != nil {
-							return core.EncryptedMessage{}, fmt.Errorf("cannot import elliptic-curve key: %s", jwkImportErr.Error())
-						} else {
-							jwkKey = j
-						}
-					} else {
-						return core.EncryptedMessage{}, fmt.Errorf("private key block %s import is not supported by Azure", block.Type)
-					}
-				}
+			var keyData []byte
+			if b64, b64Err := base64.StdEncoding.DecodeString(confidentialModel.Key.ValueString()); b64Err != nil {
+				keyData = b64
 			} else {
-				var key any
-				var derLoadErr error
-
-				if key, derLoadErr = x509.ParsePKCS8PrivateKey(keyData); derLoadErr != nil {
-					if len(confidentialModel.Password.ValueString()) == 0 {
-						return core.EncryptedMessage{}, errors.New("password must be specified for DER-encrypted private key")
-					}
-
-					if key, derLoadErr = core.PrivateKeyFromDER(keyData, string(confidentialModel.Password.ValueString())); derLoadErr != nil {
-						return core.EncryptedMessage{}, fmt.Errorf("cannot load private key: %s", derLoadErr.Error())
-					}
-				}
-
-				if j, jwkImportErr := jwk.Import(key); jwkImportErr != nil {
-					return core.EncryptedMessage{}, fmt.Errorf("cannot import rsa/escada key bytes: %s", jwkImportErr.Error())
-				} else {
-					jwkKey = j
-				}
+				keyData = []byte(confidentialModel.Key.ValueString())
 			}
 
-			if jwkKey == nil {
-				return core.EncryptedMessage{}, errors.New("cannot convert input to JSON Web Key")
+			jwtKey, jwtErr := AcquireJWT(keyData, confidentialModel.Password.ValueString())
+			if jwtErr != nil {
+				return core.EncryptedMessage{}, jwtErr
 			}
 
-			// Produce ciphertext
-
-			jwkData, marshalErr := json.Marshal(jwkKey)
-			if marshalErr != nil {
-				return core.EncryptedMessage{}, marshalErr
-			}
-
-			md.ObjectType = KeyObjectType
-
-			helper := core.NewVersionedBinaryConfidentialDataHelper()
-			_ = helper.CreateConfidentialBinaryData(jwkData, md)
-
-			return helper.ToEncryptedMessage(pubKey)
+			return CreateKeyEncryptedMessage(jwtKey,
+				coord,
+				md,
+				pubKey,
+			)
 		},
 	}
 

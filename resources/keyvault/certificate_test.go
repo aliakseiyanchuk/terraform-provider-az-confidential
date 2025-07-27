@@ -164,11 +164,9 @@ func Test_CAzVCR_DoCreate_NoPayload(t *testing.T) {
 	ks := AzKeyVaultCertificateResourceSpecializer{}
 
 	data := CertificateModel{}
-	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
+	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper(CertificateObjectType)
 
-	md := core.VersionedConfidentialMetadata{
-		ObjectType: CertificateObjectType,
-	}
+	md := core.SecondaryProtectionParameters{}
 
 	var emptyBytes []byte
 	confData := helper.CreateConfidentialCertificateData(emptyBytes, "something", "", md)
@@ -198,12 +196,10 @@ func Test_CAzVCR_DoCreate_IfCertificateClientCannotConnect(t *testing.T) {
 		factory: &factory,
 	}
 
-	md := core.VersionedConfidentialMetadata{
-		ObjectType: CertificateObjectType,
-	}
+	md := core.SecondaryProtectionParameters{}
 
 	data := CertificateModel{}
-	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
+	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper(CertificateObjectType)
 	confData := helper.CreateConfidentialCertificateData(testkeymaterial.EphemeralCertificatePEM, "application/x-pem-file", "", md)
 
 	_, dg := ks.DoCreate(context.Background(), &data, confData.Data)
@@ -223,12 +219,10 @@ func Test_CAzVCR_DoCreate_IfCertificateClientIsNil(t *testing.T) {
 		factory: &factory,
 	}
 
-	md := core.VersionedConfidentialMetadata{
-		ObjectType: CertificateObjectType,
-	}
+	md := core.SecondaryProtectionParameters{}
 
 	data := CertificateModel{}
-	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
+	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper(CertificateObjectType)
 	confData := helper.CreateConfidentialCertificateData(testkeymaterial.EphemeralCertificatePEM, "application/x-pem-file", "", md)
 
 	_, dg := ks.DoCreate(context.Background(), &data, confData.Data)
@@ -250,12 +244,10 @@ func Test_CAzVCR_DoCreate_IfCertificateImportFails(t *testing.T) {
 		factory: &factory,
 	}
 
-	md := core.VersionedConfidentialMetadata{
-		ObjectType: CertificateObjectType,
-	}
+	md := core.SecondaryProtectionParameters{}
 
 	data := CertificateModel{}
-	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
+	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper(CertificateObjectType)
 	confData := helper.CreateConfidentialCertificateData(testkeymaterial.EphemeralCertificatePEM, "application/x-pem-file", "", md)
 
 	_, dg := ks.DoCreate(context.Background(), &data, confData.Data)
@@ -279,12 +271,10 @@ func Test_CAzVCR_DoCreate(t *testing.T) {
 		factory: &factory,
 	}
 
-	md := core.VersionedConfidentialMetadata{
-		ObjectType: CertificateObjectType,
-	}
+	md := core.SecondaryProtectionParameters{}
 
 	data := GivenTypicalInitialCertModel()
-	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
+	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper(CertificateObjectType)
 	confData := helper.CreateConfidentialCertificateData(testkeymaterial.EphemeralCertificatePEM, "application/x-pem-file", "", md)
 
 	_, dg := ks.DoCreate(context.Background(), &data, confData.Data)

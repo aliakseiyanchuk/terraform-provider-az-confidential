@@ -4,9 +4,10 @@ import (
 	_ "embed"
 	"errors"
 	"flag"
-	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	res_apim "github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/apim"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"strings"
 )
 
 //go:embed subscrription.tmpl
@@ -130,20 +131,19 @@ func MakeSubscriptionGenerator(kwp *model.ContentWrappingParams, args []string) 
 		return nil, parseErr
 	}
 
-	if kwp.LockPlacement {
-		if !subscriptionParam.SpecifiesTarget() {
-			return nil, errors.New("at least options -az-subscription-id, -resource-group-name, and -service-name must be supplied where ciphertext is labelled with its intended destination")
-		} else {
-			kwp.AddPlacementConstraints(core.PlacementConstraint(res_apim.GetDestinationSubscriptionLabel(
-				subscriptionParam.AzSubscriptionId,
-				subscriptionParam.ResourceGroupName,
-				subscriptionParam.ServiceName,
-				subscriptionParam.subscriptionId,
-				subscriptionParam.apiScope,
-				subscriptionParam.productScope,
-				subscriptionParam.owner,
-			)))
-		}
+	if kwp.LockPlacement && !subscriptionParam.SpecifiesTarget() {
+		return nil, errors.New("at least options -az-subscription-id, -resource-group-name, and -service-name must be supplied where ciphertext is labelled with its intended destination")
+		//} else {
+		//	kwp.AddPlacementConstraints(core.PlacementConstraint(res_apim.GetDestinationSubscriptionLabel(
+		//		subscriptionParam.AzSubscriptionId,
+		//		subscriptionParam.ResourceGroupName,
+		//		subscriptionParam.ServiceName,
+		//		subscriptionParam.subscriptionId,
+		//		subscriptionParam.apiScope,
+		//		subscriptionParam.productScope,
+		//		subscriptionParam.owner,
+		//	)))
+		//}
 	}
 
 	mdl := SubscriptionTerraformCodeModel{
@@ -191,7 +191,37 @@ func MakeSubscriptionGenerator(kwp *model.ContentWrappingParams, args []string) 
 		}
 
 		if onlyCiphertext {
-			return OutputSubscriptionEncryptedContent(kwp, pkStr, skStr)
+			publicKey, rsaKeyErr := kwp.LoadRsaPublicKey()
+			if rsaKeyErr != nil {
+				return "", rsaKeyErr
+			}
+
+			var lockCoord *res_apim.DestinationSubscriptionCoordinateModel
+			if kwp.LockPlacement {
+				coord := res_apim.CreateDestinationSubscription(
+					mdl.DestinationSubscription.AzSubscriptionId.Value,
+					mdl.DestinationSubscription.ResourceGroupName.Value,
+					mdl.DestinationSubscription.ServiceName.Value,
+					mdl.DestinationSubscription.SubscriptionId.Value,
+					mdl.DestinationSubscription.ApiId.Value,
+					mdl.DestinationSubscription.ProductId.Value,
+					mdl.DestinationSubscription.UserId.Value,
+				)
+				lockCoord = &coord
+			}
+
+			fp := res_apim.SubscriptionDataFunctionParameter{
+				PrimaryKey:   types.StringValue(pkStr),
+				SecondaryKey: types.StringValue(skStr),
+			}
+
+			em, emErr := res_apim.CreateSubscriptionEncryptedMessage(fp, lockCoord, kwp.SecondaryProtectionParameters, publicKey)
+			if emErr != nil {
+				return "", emErr
+			}
+
+			fld := model.FoldString(em.ToBase64PEM(), 80)
+			return strings.Join(fld, "\n"), nil
 
 		} else {
 			return OutputSubscriptionTerraformCode(mdl, kwp, pkStr, skStr)
@@ -201,30 +231,36 @@ func MakeSubscriptionGenerator(kwp *model.ContentWrappingParams, args []string) 
 }
 
 func OutputSubscriptionTerraformCode(mdl SubscriptionTerraformCodeModel, kwp *model.ContentWrappingParams, primary, secondary string) (string, error) {
-	s, err := OutputSubscriptionEncryptedContent(kwp, primary, secondary)
-	if err != nil {
-		return s, err
+	publicKey, rsaKeyErr := kwp.LoadRsaPublicKey()
+	if rsaKeyErr != nil {
+		return "", rsaKeyErr
 	}
 
-	mdl.EncryptedContent.SetValue(s)
+	var lockCoord *res_apim.DestinationSubscriptionCoordinateModel
+	if kwp.LockPlacement {
+		coord := res_apim.CreateDestinationSubscription(
+			mdl.DestinationSubscription.AzSubscriptionId.Value,
+			mdl.DestinationSubscription.ResourceGroupName.Value,
+			mdl.DestinationSubscription.ServiceName.Value,
+			mdl.DestinationSubscription.SubscriptionId.Value,
+			mdl.DestinationSubscription.ApiId.Value,
+			mdl.DestinationSubscription.ProductId.Value,
+			mdl.DestinationSubscription.UserId.Value,
+		)
+		lockCoord = &coord
+	}
+
+	fp := res_apim.SubscriptionDataFunctionParameter{
+		PrimaryKey:   types.StringValue(primary),
+		SecondaryKey: types.StringValue(secondary),
+	}
+
+	em, emErr := res_apim.CreateSubscriptionEncryptedMessage(fp, lockCoord, kwp.SecondaryProtectionParameters, publicKey)
+	if emErr != nil {
+		return "", emErr
+	}
+
+	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
+	mdl.EncryptedContentMetadata = kwp.GetMetadataForTerraform("api management subscription", "destination_subscription")
 	return model.Render("apim/subscription", subscriptionTerraformTemplate, &mdl)
-}
-
-func OutputSubscriptionEncryptedContent(kwp *model.ContentWrappingParams, primary, secondary string) (string, error) {
-	kwp.ObjectType = res_apim.SubscriptionObjectType
-
-	helper := res_apim.NewConfidentialSubscriptionHelper()
-	_ = helper.CreateSubscriptionData(primary, secondary, kwp.VersionedConfidentialMetadata)
-
-	rsaKey, loadErr := kwp.LoadRsaPublicKey()
-	if loadErr != nil {
-		return "", loadErr
-	}
-
-	em, err := helper.ToEncryptedMessage(rsaKey)
-	if err != nil {
-		return "", err
-	}
-
-	return em.ToBase64PEM(), nil
 }

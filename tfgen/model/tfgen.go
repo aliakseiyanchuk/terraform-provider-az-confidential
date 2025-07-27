@@ -6,7 +6,7 @@ import (
 )
 
 type ContentWrappingParams struct {
-	core.VersionedConfidentialMetadata
+	core.SecondaryProtectionParameters
 
 	LoadRsaPublicKey func() (*rsa.PublicKey, error)
 
@@ -14,13 +14,9 @@ type ContentWrappingParams struct {
 	LockPlacement         bool
 }
 
-func (kwp *ContentWrappingParams) AddPlacementConstraints(label ...core.PlacementConstraint) {
-	kwp.PlacementConstraints = append(kwp.PlacementConstraints, label...)
-}
-
 func (kwp *ContentWrappingParams) GetMetadataForTerraform(objName, destExp string) VersionedConfidentialMetadataTFCode {
 	return VersionedConfidentialMetadataTFCode{
-		VersionedConfidentialMetadata: kwp.VersionedConfidentialMetadata,
+		SecondaryProtectionParameters: kwp.SecondaryProtectionParameters,
 		ObjectSingular:                objName,
 		DestinationArgument:           destExp,
 	}

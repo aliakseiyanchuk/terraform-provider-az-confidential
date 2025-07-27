@@ -303,7 +303,7 @@ func (a *AzKeyVaultSecretResourceSpecializer) DoDelete(ctx context.Context, data
 }
 
 func (a *AzKeyVaultSecretResourceSpecializer) GetJsonDataImporter() core.ObjectJsonImportSupport[core.ConfidentialStringData] {
-	return core.NewVersionedStringConfidentialDataHelper()
+	return core.NewVersionedStringConfidentialDataHelper(SecretObjectType)
 }
 
 // --------------------------------------------------------------------------------
@@ -386,8 +386,19 @@ func (v *AzKVObjectCoordinateParamValidator) ValidateParameterObject(ctx context
 	})
 
 	if len(p.VaultName.ValueString()) == 0 || len(p.Name.ValueString()) == 0 {
-		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Both key vault name and object name must be specified to lock the destination"))
+		res.Error = function.ConcatFuncErrors(res.Error, function.NewFuncError("Both vault name and object name must be specified to lock the destination"))
 	}
+}
+
+func CreateSecretEncryptedMessage(confidentialString string, coord *core.AzKeyVaultObjectCoordinate, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+	helper := core.NewVersionedStringConfidentialDataHelper(SecretObjectType)
+
+	if coord != nil {
+		md.PlacementConstraints = []core.PlacementConstraint{core.PlacementConstraint(coord.GetLabel())}
+	}
+
+	helper.CreateConfidentialStringData(confidentialString, md)
+	return helper.ToEncryptedMessage(pubKey)
 }
 
 func NewSecretEncryptorFunction() function.Function {
@@ -396,7 +407,6 @@ func NewSecretEncryptorFunction() function.Function {
 		Summary:             "Produces a ciphertext string suitable for use with az-confidential_secret resource",
 		MarkdownDescription: "Encrypts a secret string without the use of the `tfgen` tool",
 
-		ObjectType: SecretObjectType,
 		DataParameter: function.StringParameter{
 			Name:        "secret",
 			Description: "Secret value that should appear in the key vault",
@@ -422,20 +432,17 @@ func NewSecretEncryptorFunction() function.Function {
 			return ptr
 		},
 
-		CreatEncryptedMessage: func(confidentialModel string, dest *core.AzKeyVaultObjectCoordinateModel, md core.VersionedConfidentialMetadata, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
-			helper := core.NewVersionedStringConfidentialDataHelper()
-
+		CreatEncryptedMessage: func(confidentialModel string, dest *core.AzKeyVaultObjectCoordinateModel, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+			var coord *core.AzKeyVaultObjectCoordinate
 			if dest != nil {
-				coord := core.AzKeyVaultObjectCoordinate{
+				coord = &core.AzKeyVaultObjectCoordinate{
 					VaultName: dest.VaultName.ValueString(),
 					Name:      dest.Name.ValueString(),
 					Type:      "secrets",
 				}
-				md.PlacementConstraints = []core.PlacementConstraint{core.PlacementConstraint(coord.GetLabel())}
 			}
 
-			helper.CreateConfidentialStringData(confidentialModel, md)
-			return helper.ToEncryptedMessage(pubKey)
+			return CreateSecretEncryptedMessage(confidentialModel, coord, md, pubKey)
 		},
 	}
 

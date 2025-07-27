@@ -83,7 +83,14 @@ func (d *ConfidentialContentDataSource) Schema(_ context.Context, _ datasource.S
 	}
 }
 
-const PasswordObjectType = "general/password"
+const ContentObjectType = "general/content"
+
+func CreateContentEncryptedMessage(confidentialContent string, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+	helper := core.NewVersionedStringConfidentialDataHelper(ContentObjectType)
+
+	helper.CreateConfidentialStringData(confidentialContent, md)
+	return helper.ToEncryptedMessage(pubKey)
+}
 
 func (d *ConfidentialContentDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data ConfidentialContentModel
@@ -118,7 +125,7 @@ func (d *ConfidentialContentDataSource) Read(ctx context.Context, req datasource
 		return
 	}
 
-	if rawMsg.Header.Type != PasswordObjectType {
+	if rawMsg.Header.Type != ContentObjectType {
 		resp.Diagnostics.AddError("Mismatching confidential object type", fmt.Sprintf("Expected `password`, received `%s`", rawMsg.Header.Type))
 	}
 
@@ -135,7 +142,7 @@ func (d *ConfidentialContentDataSource) Read(ctx context.Context, req datasource
 		return
 	}
 
-	helper := core.NewVersionedStringConfidentialDataHelper()
+	helper := core.NewVersionedStringConfidentialDataHelper(ContentObjectType)
 	confidentialData, importErr := helper.Import(rawMsg.ConfidentialData, rawMsg.Header.ModelReference)
 	if importErr != nil {
 		tflog.Error(ctx, "diagnostics contain error after unwrapping the ciphertext; cannot continue")
@@ -166,7 +173,6 @@ func NewPasswordEncryptionFunction() function.Function {
 		Name:                "encrypt_content",
 		Summary:             "Encrypts a content",
 		MarkdownDescription: "Encrypts a content string to be used with az-confidential_content data source",
-		ObjectType:          PasswordObjectType,
 		DataParameter: function.StringParameter{
 			Name:        "password",
 			Description: "Password value that should appear in the key vault",
@@ -174,10 +180,8 @@ func NewPasswordEncryptionFunction() function.Function {
 		ConfidentialModelSupplier: func() string { return "" },
 		DestinationModelSupplier:  func() *int { return nil },
 
-		CreatEncryptedMessage: func(confidentialModel string, _ *int, md core.VersionedConfidentialMetadata, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
-			helper := core.NewVersionedStringConfidentialDataHelper()
-			helper.CreateConfidentialStringData(confidentialModel, md)
-			return helper.ToEncryptedMessage(pubKey)
+		CreatEncryptedMessage: func(confidentialContent string, _ *int, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+			return CreateContentEncryptedMessage(confidentialContent, md, pubKey)
 		},
 	}
 	return &rv

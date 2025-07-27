@@ -13,7 +13,7 @@ import (
 func TestWillRenderFullSubscriptionModel(t *testing.T) {
 
 	kwp := model.ContentWrappingParams{
-		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+		SecondaryProtectionParameters: core.SecondaryProtectionParameters{
 			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
 		},
 		LoadRsaPublicKey:      core.LoadPublicKeyFromDataOnce(testkeymaterial.EphemeralRsaPublicKey),

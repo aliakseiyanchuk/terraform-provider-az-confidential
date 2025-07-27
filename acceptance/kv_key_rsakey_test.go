@@ -16,7 +16,7 @@ import (
 func generatePEMEncodedRsaKeyResource(t *testing.T) string {
 
 	kwp := model.ContentWrappingParams{
-		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+		SecondaryProtectionParameters: core.SecondaryProtectionParameters{
 			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
 		},
 		LoadRsaPublicKey: core.LoadPublicKeyFromFileOnce(wrappingKey),

@@ -26,7 +26,7 @@ type ProtectionParams struct {
 	ProviderConstraints types.Set    `tfsdk:"provider_constraints"`
 }
 
-func (p *ProtectionParams) Into(c *core.VersionedConfidentialMetadata) error {
+func (p *ProtectionParams) Into(c *core.SecondaryProtectionParameters) error {
 	if !p.CreateLimit.IsUnknown() && !p.CreateLimit.IsNull() && len(p.CreateLimit.ValueString()) > 0 {
 		d, durErr := time.ParseDuration(p.CreateLimit.ValueString())
 		if durErr != nil {
@@ -51,12 +51,11 @@ type FunctionTemplate[TMdl, DestMdl any] struct {
 	Name                      string
 	Summary                   string
 	MarkdownDescription       string
-	ObjectType                string
 	DataParameter             function.Parameter
 	DestinationParameter      function.Parameter
 	ConfidentialModelSupplier core.Supplier[TMdl]
 	DestinationModelSupplier  core.Supplier[*DestMdl]
-	CreatEncryptedMessage     func(confidentialModel TMdl, dest *DestMdl, md core.VersionedConfidentialMetadata, pubKey *rsa.PublicKey) (core.EncryptedMessage, error)
+	CreatEncryptedMessage     func(confidentialModel TMdl, dest *DestMdl, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error)
 }
 
 func (f *FunctionTemplate[TMdl, DestMdl]) Metadata(_ context.Context, _ function.MetadataRequest, resp *function.MetadataResponse) {
@@ -126,7 +125,7 @@ func (f *FunctionTemplate[TMdl, DestMdl]) Run(ctx context.Context, req function.
 		return
 	}
 
-	md := core.VersionedConfidentialMetadata{}
+	md := core.SecondaryProtectionParameters{}
 	if headerParams != nil {
 		if copyErr := headerParams.Into(&md); copyErr != nil {
 			resp.Error = function.ConcatFuncErrors(resp.Error, function.NewFuncError(fmt.Sprintf("incorrect content protection parameters: %s", copyErr.Error())))

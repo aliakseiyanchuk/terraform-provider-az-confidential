@@ -17,7 +17,7 @@ var basicTags = map[string]string{
 
 func Test_Secret_OutputSecretTerraformCode_Renders(t *testing.T) {
 	kwp := model.ContentWrappingParams{
-		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+		SecondaryProtectionParameters: core.SecondaryProtectionParameters{
 			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
 		},
 		LoadRsaPublicKey: core.LoadPublicKeyFromDataOnce(testkeymaterial.EphemeralRsaPublicKey),

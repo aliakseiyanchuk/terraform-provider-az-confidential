@@ -3,7 +3,6 @@ package keyvault
 import (
 	"crypto/x509"
 	_ "embed"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/keyvault"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 	"github.com/lestrrat-go/jwx/v3/jwk"
+	"strings"
 )
 
 //go:embed key_template.tmpl
@@ -69,26 +69,15 @@ func MakeKeyGenerator(kwp *model.ContentWrappingParams, args ...string) (model.S
 		return nil, parseErr
 	}
 
-	if kwp.LockPlacement {
-		if !keyParams.SpecifiesVault() {
-			return nil, errors.New("options -destination-vault and -destination-key-name must be supplied where ciphertext must be labelled with its intended destination")
-		} else {
-			coord := core.AzKeyVaultObjectCoordinate{
-				VaultName: keyParams.vaultName,
-				Name:      keyParams.vaultObjectName,
-				Type:      "keys",
-			}
-
-			kwp.AddPlacementConstraints(coord.GetPlacementConstraint())
-		}
+	if kwp.LockPlacement && !keyParams.SpecifiesVault() {
+		return nil, errors.New("options -destination-vault and -destination-key-name must be supplied where ciphertext must be labelled with its intended destination")
 	}
 
 	mdl := KeyResourceTerraformModel{
 		TerraformCodeModel: TerraformCodeModel{
 			BaseTerraformCodeModel: model.BaseTerraformCodeModel{
-				TFBlockName:              "key",
-				EncryptedContentMetadata: kwp.GetMetadataForTerraform("keyvault key", "destination_key"),
-				WrappingKeyCoordinate:    kwp.WrappingKeyCoordinate,
+				TFBlockName:           "key",
+				WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 			},
 
 			TagsModel: model.TagsModel{
@@ -109,38 +98,52 @@ func MakeKeyGenerator(kwp *model.ContentWrappingParams, args ...string) (model.S
 			return "", acquireErr
 		}
 
-		if _, rsaOk := jwkKey.(jwk.RSAPrivateKey); rsaOk {
-			mdl.KeyOperations = append(mdl.KeyOperations,
-				azkeys.KeyOperationDecrypt,
-				azkeys.KeyOperationEncrypt,
-				azkeys.KeyOperationSign,
-				azkeys.KeyOperationUnwrapKey,
-				azkeys.KeyOperationVerify,
-				azkeys.KeyOperationWrapKey,
-			)
-		} else if _, symOk := jwkKey.(jwk.SymmetricKey); symOk {
-			mdl.KeyOperations = append(mdl.KeyOperations,
-				azkeys.KeyOperationDecrypt,
-				azkeys.KeyOperationEncrypt,
-				azkeys.KeyOperationSign,
-				azkeys.KeyOperationUnwrapKey,
-				azkeys.KeyOperationVerify,
-				azkeys.KeyOperationWrapKey,
-			)
-		} else if _, ecOk := jwkKey.(jwk.ECDSAPrivateKey); ecOk {
-			mdl.KeyOperations = append(mdl.KeyOperations,
-				azkeys.KeyOperationSign,
-				azkeys.KeyOperationVerify,
-			)
-		}
+		mdl.AddDefaultKeyOperationsFor(jwkKey)
 
 		if onlyCiphertext {
-			return OutputKeyEncryptedContent(kwp, jwkKey)
+			rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
+			if rsaKeyErr != nil {
+				return "", rsaKeyErr
+			}
+
+			var coord *core.AzKeyVaultObjectCoordinate
+			if kwp.LockPlacement {
+				coord = &core.AzKeyVaultObjectCoordinate{
+					VaultName: keyParams.vaultName,
+					Name:      keyParams.vaultObjectName,
+					Type:      "keys",
+				}
+			}
+
+			em, emErr := keyvault.CreateKeyEncryptedMessage(jwkKey, coord, kwp.SecondaryProtectionParameters, rsaKey)
+			if emErr != nil {
+				return "", emErr
+			}
+
+			fld := model.FoldString(em.ToBase64PEM(), 80)
+			return strings.Join(fld, "\n"), nil
 		} else {
 			mdl.AddDefaultKeyOperationsFor(jwkKey)
 			return OutputKeyTerraformCode(mdl, kwp, jwkKey)
 		}
 	}, nil
+}
+
+func PrivateKeyNeedsPassword(keyData []byte) bool {
+	if !core.IsPEMEncoded(keyData) {
+		// We need password if PKCS8 bag cannot be opened without a password.
+		if _, derLoadErr := x509.ParsePKCS8PrivateKey(keyData); derLoadErr != nil {
+			return true
+		} else {
+			return false
+		}
+	}
+	block, blockErr := core.ParseSinglePEMBlock(keyData)
+	if blockErr != nil {
+		return true
+	}
+
+	return block.Type == "ENCRYPTED PRIVATE KEY"
 }
 
 func AcquireKey(keyParams *KeyTFGenParams, inputReader model.InputReader) (interface{}, error) {
@@ -152,6 +155,8 @@ func AcquireKey(keyParams *KeyTFGenParams, inputReader model.InputReader) (inter
 	if readErr != nil {
 		return "", readErr
 	}
+
+	password := ""
 
 	var jwkKey interface{}
 	var jwkImportErr error
@@ -166,67 +171,15 @@ func AcquireKey(keyParams *KeyTFGenParams, inputReader model.InputReader) (inter
 			return "", fmt.Errorf("cannot import symmetric key bytes: %s", jwkImportErr.Error())
 		}
 	} else {
-		if core.IsPEMEncoded(keyData) {
-			if block, blockErr := core.ParseSinglePEMBlock(keyData); blockErr != nil {
-				return nil, fmt.Errorf("not a valid input: %s", blockErr.Error())
+		if PrivateKeyNeedsPassword(keyData) {
+			if pwd, pwdErr := inputReader("Private key requires password", keyParams.passwordFromFile, false, false); pwdErr != nil {
+				return nil, pwdErr
 			} else {
-				if block.Type == "ENCRYPTED PRIVATE KEY" {
-					password, passReadErr := inputReader("Private key requires password", keyParams.passwordFromFile, false, false)
-					if passReadErr != nil {
-						return nil, passReadErr
-					}
-
-					// Try to decrypt the PEM key
-					key, loadErr := core.PrivateKeyFromEncryptedBlock(block, string(password))
-					if loadErr != nil {
-						return nil, fmt.Errorf("unable to load password-protected private key: %s", loadErr.Error())
-					}
-
-					if jwkKey, jwkImportErr = jwk.Import(key); jwkImportErr != nil {
-						return nil, fmt.Errorf("cannot import rsa key bytes: %s", jwkImportErr.Error())
-					}
-				} else if block.Type == "PRIVATE KEY" {
-					key, loadErr := core.PrivateKeyFromBlock(block)
-					if loadErr != nil {
-						return nil, fmt.Errorf("cannot import rsa key bytes: %s", loadErr.Error())
-					}
-
-					if jwkKey, jwkImportErr = jwk.Import(key); jwkImportErr != nil {
-						return nil, fmt.Errorf("cannot import rsa key: %s", jwkImportErr.Error())
-					}
-				} else if block.Type == "EC PRIVATE KEY" {
-					key, loadErr := core.PrivateKeyFromBlock(block)
-					if loadErr != nil {
-						return nil, fmt.Errorf("cannot import elliptic-curve key bytes: %s", loadErr.Error())
-					}
-
-					if jwkKey, jwkImportErr = jwk.Import(key); jwkImportErr != nil {
-						return nil, fmt.Errorf("cannot import elliptic-curve key: %s", jwkImportErr.Error())
-					}
-				} else {
-					return nil, fmt.Errorf("private key block %s import is not supported by Azure", block.Type)
-				}
-			}
-		} else {
-			// Else it must be a DER-encoded private key
-			var key any
-			var derLoadErr error
-
-			if key, derLoadErr = x509.ParsePKCS8PrivateKey(keyData); derLoadErr != nil {
-				password, passReadErr := inputReader("Private key requires password", keyParams.passwordFromFile, false, false)
-				if passReadErr != nil {
-					return nil, passReadErr
-				}
-
-				if key, derLoadErr = core.PrivateKeyFromDER(keyData, string(password)); derLoadErr != nil {
-					return nil, fmt.Errorf("cannot load private key: %s", derLoadErr.Error())
-				}
-			}
-
-			if jwkKey, jwkImportErr = jwk.Import(key); jwkImportErr != nil {
-				return nil, fmt.Errorf("cannot import rsa/escada key bytes: %s", jwkImportErr.Error())
+				password = string(pwd)
 			}
 		}
+
+		jwkKey, jwkImportErr = keyvault.AcquireJWT(keyData, password)
 	}
 
 	return jwkKey, jwkImportErr
@@ -257,38 +210,39 @@ func (g *KeyResourceTerraformModel) AddDefaultKeyOperationsFor(jwkKey interface{
 			azkeys.KeyOperationSign,
 			azkeys.KeyOperationVerify,
 		}
+	} else if _, symOk := jwkKey.(jwk.SymmetricKey); symOk {
+		g.KeyOperations = append(g.KeyOperations,
+			azkeys.KeyOperationDecrypt,
+			azkeys.KeyOperationEncrypt,
+			azkeys.KeyOperationSign,
+			azkeys.KeyOperationUnwrapKey,
+			azkeys.KeyOperationVerify,
+			azkeys.KeyOperationWrapKey,
+		)
 	}
 }
 
 func OutputKeyTerraformCode(mdl KeyResourceTerraformModel, kwp *model.ContentWrappingParams, jwkKey interface{}) (string, error) {
-	ciphertext, err := OutputKeyEncryptedContent(kwp, jwkKey)
-	if err != nil {
-		return ciphertext, err
+	rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
+	if rsaKeyErr != nil {
+		return "", rsaKeyErr
 	}
 
-	mdl.EncryptedContent.SetValue(ciphertext)
+	var lockCoord *core.AzKeyVaultObjectCoordinate
+	if kwp.LockPlacement {
+		lockCoord = &core.AzKeyVaultObjectCoordinate{
+			VaultName: mdl.DestinationCoordinate.VaultName.Value,
+			Name:      mdl.DestinationCoordinate.ObjectName.Value,
+		}
+	}
+
+	em, emErr := keyvault.CreateKeyEncryptedMessage(jwkKey, lockCoord, kwp.SecondaryProtectionParameters, rsaKey)
+	if emErr != nil {
+		return "", emErr
+	}
+
+	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
+	mdl.EncryptedContentMetadata = kwp.GetMetadataForTerraform("keyvault key", "destination_key")
+
 	return model.Render("key", keyTFTemplate, &mdl)
-}
-
-func OutputKeyEncryptedContent(kwp *model.ContentWrappingParams, jwkKey interface{}) (string, error) {
-	jwkData, marshalErr := json.Marshal(jwkKey)
-	if marshalErr != nil {
-		return "", marshalErr
-	}
-
-	kwp.ObjectType = keyvault.KeyObjectType
-	helper := core.NewVersionedBinaryConfidentialDataHelper()
-	_ = helper.CreateConfidentialBinaryData(jwkData, kwp.VersionedConfidentialMetadata)
-
-	rsaKey, loadErr := kwp.LoadRsaPublicKey()
-	if loadErr != nil {
-		return "", loadErr
-	}
-
-	em, err := helper.ToEncryptedMessage(rsaKey)
-	if err != nil {
-		return "", err
-	}
-
-	return em.ToBase64PEM(), nil
 }

@@ -34,7 +34,7 @@ func Test_Key_OutputSecretTerraformCode_Renders(t *testing.T) {
 func givenTypicalKeyWrappingParameters() (KeyResourceTerraformModel, model.ContentWrappingParams) {
 
 	kwp := model.ContentWrappingParams{
-		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+		SecondaryProtectionParameters: core.SecondaryProtectionParameters{
 			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
 		},
 		LoadRsaPublicKey:      core.LoadPublicKeyFromDataOnce(testkeymaterial.EphemeralRsaPublicKey),
@@ -117,6 +117,7 @@ func Test_Key_ConvertSymmetricKey_ErrsOnUnsupportedLength(t *testing.T) {
 	assert.Nil(t, err)
 
 	_ = assertGeneratorFunctionErrs(t, cwp, fn, readMock)
+	readMock.AssertExpectations(t)
 }
 
 func Test_Key_ConvertPEMEncodedRSAKey(t *testing.T) {
@@ -187,5 +188,5 @@ func Test_Key_ConvertPasswordProtectedPEMEncodedRSAKey_IfPasswordIsWrong(t *test
 
 	err = assertGeneratorFunctionErrs(t, cwp, fn, readMock)
 	assert.NotNil(t, err)
-	assert.Equal(t, "unable to load password-protected private key: pkcs8: incorrect password", err.Error())
+	assert.Equal(t, "incorrect password for the private key", err.Error())
 }

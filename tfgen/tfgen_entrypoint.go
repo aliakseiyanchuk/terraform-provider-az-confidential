@@ -163,8 +163,7 @@ func buildContentWrappingParams(cliArgs *EntryPointCLIArgs) (*model.ContentWrapp
 	}
 
 	rv := &model.ContentWrappingParams{
-		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
-			ObjectType:           "",
+		SecondaryProtectionParameters: core.SecondaryProtectionParameters{
 			ProviderConstraints:  providerConstraints,
 			PlacementConstraints: nil,
 			CreateLimit:          createLimit,

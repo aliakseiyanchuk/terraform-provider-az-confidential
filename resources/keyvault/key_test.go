@@ -455,20 +455,16 @@ func givenVersionedConfidentialDataFromEphemeralKey() core.ConfidentialBinaryDat
 	jwkKey, _ := jwk.Import(testkeymaterial.EphemeralRsaKeyText)
 	jsonBytes, _ := json.Marshal(jwkKey)
 
-	md := core.VersionedConfidentialMetadata{
-		ObjectType: KeyObjectType,
-	}
+	md := core.SecondaryProtectionParameters{}
 
-	helper := core.NewVersionedBinaryConfidentialDataHelper()
+	helper := core.NewVersionedBinaryConfidentialDataHelper(KeyObjectType)
 	return helper.CreateConfidentialBinaryData(jsonBytes, md).Data
 }
 
 func givenVersionedBinaryConfidentialDataFromString(s string) core.ConfidentialBinaryData {
-	md := core.VersionedConfidentialMetadata{
-		ObjectType: KeyObjectType,
-	}
+	md := core.SecondaryProtectionParameters{}
 
-	helper := core.NewVersionedBinaryConfidentialDataHelper()
+	helper := core.NewVersionedBinaryConfidentialDataHelper(KeyObjectType)
 	return helper.CreateConfidentialBinaryData([]byte(s), md).Data
 }
 

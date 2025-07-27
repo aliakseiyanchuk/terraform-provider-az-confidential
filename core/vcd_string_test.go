@@ -6,10 +6,8 @@ import (
 )
 
 func Test_VersionDataToEncryptedMessageConversion(t *testing.T) {
-	h := NewVersionedStringConfidentialDataHelper()
-	md := VersionedConfidentialMetadata{
-		ObjectType: "example",
-	}
+	h := NewVersionedStringConfidentialDataHelper("example")
+	md := SecondaryProtectionParameters{}
 	origSecret := h.CreateConfidentialStringData("this is a secret", md)
 
 	// Perform forward conversion
@@ -35,11 +33,9 @@ func Test_VersionDataToEncryptedMessageConversion(t *testing.T) {
 }
 
 func Test_VersionDataToEncryptedMessageConversionWithBase64(t *testing.T) {
-	md := VersionedConfidentialMetadata{
-		ObjectType: "example",
-	}
+	md := SecondaryProtectionParameters{}
 
-	h := NewVersionedStringConfidentialDataHelper()
+	h := NewVersionedStringConfidentialDataHelper("example")
 	origSecret := h.CreateConfidentialStringData("this is a secret", md)
 
 	// Perform forward conversion

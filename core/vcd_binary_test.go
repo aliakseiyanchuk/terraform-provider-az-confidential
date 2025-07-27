@@ -12,11 +12,9 @@ func Test_VersionDataToEncryptedMessageConversionWithAES(t *testing.T) {
 	_, err := rand.Read(buf)
 	assert.Nil(t, err)
 
-	md := VersionedConfidentialMetadata{
-		ObjectType: "example",
-	}
+	md := SecondaryProtectionParameters{}
 
-	h := NewVersionedBinaryConfidentialDataHelper()
+	h := NewVersionedBinaryConfidentialDataHelper("example")
 	origSecret := h.CreateConfidentialBinaryData(buf, md)
 
 	// Perform forward conversion
@@ -47,11 +45,9 @@ func Test_VersionDataToEncryptedMessageConversionWithAESWithBase64(t *testing.T)
 	_, err := rand.Read(buf)
 	assert.Nil(t, err)
 
-	md := VersionedConfidentialMetadata{
-		ObjectType: "example",
-	}
+	md := SecondaryProtectionParameters{}
 
-	h := NewVersionedBinaryConfidentialDataHelper()
+	h := NewVersionedBinaryConfidentialDataHelper("example")
 	origSecret := h.CreateConfidentialBinaryData(buf, md)
 
 	// Perform forward conversion

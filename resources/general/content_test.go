@@ -8,13 +8,11 @@ import (
 	"testing"
 )
 
-func TestConfidentialPasswordModelAcceptTest(t *testing.T) {
-	md := core.VersionedConfidentialMetadata{
-		ObjectType: PasswordObjectType,
-	}
+func TestConfidentialContentModelAcceptTest(t *testing.T) {
+	md := core.SecondaryProtectionParameters{}
 	mdl := ConfidentialContentModel{}
 
-	helper := core.NewVersionedStringConfidentialDataHelper()
+	helper := core.NewVersionedStringConfidentialDataHelper(ContentObjectType)
 	bObj := helper.CreateConfidentialStringData("abc", md)
 
 	mdl.Accept(bObj.Header.Uuid, bObj.Data)

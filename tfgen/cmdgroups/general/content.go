@@ -2,10 +2,11 @@ package general
 
 import (
 	_ "embed"
+	"errors"
 	"flag"
-	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/general"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
+	"strings"
 )
 
 //go:embed content_template.tmpl
@@ -41,13 +42,12 @@ func MakeContentGenerator(kwp *model.ContentWrappingParams, args []string) (mode
 	}
 
 	mdl := model.BaseTerraformCodeModel{
-		TFBlockName:              "content",
-		EncryptedContentMetadata: kwp.GetMetadataForTerraform("content", ""),
-		WrappingKeyCoordinate:    kwp.WrappingKeyCoordinate,
+		TFBlockName:           "content",
+		WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 	}
 
 	return func(inputReader model.InputReader, onlyCiphertext bool) (string, error) {
-		passwordData, readErr := inputReader("Enter content data",
+		contentBytes, readErr := inputReader("Enter content data",
 			contentParams.inputFile,
 			contentParams.inputIsBase64,
 			false)
@@ -55,42 +55,44 @@ func MakeContentGenerator(kwp *model.ContentWrappingParams, args []string) (mode
 		if readErr != nil {
 			return "", readErr
 		}
+		if len(contentBytes) == 0 {
+			return "", errors.New("protecting empty content is superfluous")
+		}
 
-		secretDataAsStr := string(passwordData)
+		content := string(contentBytes)
 
 		if onlyCiphertext {
-			return OutputContentEncryptedContent(kwp, secretDataAsStr)
+			rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
+			if rsaKeyErr != nil {
+				return "", rsaKeyErr
+			}
+
+			em, emErr := general.CreateContentEncryptedMessage(content, kwp.SecondaryProtectionParameters, rsaKey)
+			if emErr != nil {
+				return "", emErr
+			}
+
+			fld := model.FoldString(em.ToBase64PEM(), 80)
+			return strings.Join(fld, "\n"), nil
 
 		} else {
-			return OutputDatasourceContentTerraformCode(mdl, kwp, secretDataAsStr)
+			return OutputDatasourceContentTerraformCode(mdl, kwp, content)
 		}
 	}, nil
 }
 
-func OutputDatasourceContentTerraformCode(mdl model.BaseTerraformCodeModel, kwp *model.ContentWrappingParams, passwordString string) (string, error) {
-	s, err := OutputContentEncryptedContent(kwp, passwordString)
-	if err != nil {
-		return s, err
+func OutputDatasourceContentTerraformCode(mdl model.BaseTerraformCodeModel, kwp *model.ContentWrappingParams, content string) (string, error) {
+	rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
+	if rsaKeyErr != nil {
+		return "", rsaKeyErr
 	}
 
-	mdl.EncryptedContent.SetValue(s)
-	return model.Render("password", ContentTFTemplate, &mdl)
-}
-
-func OutputContentEncryptedContent(kwp *model.ContentWrappingParams, passwordString string) (string, error) {
-	kwp.ObjectType = general.PasswordObjectType
-	helper := core.NewVersionedStringConfidentialDataHelper()
-	_ = helper.CreateConfidentialStringData(passwordString, kwp.VersionedConfidentialMetadata)
-
-	rsaKey, loadErr := kwp.LoadRsaPublicKey()
-	if loadErr != nil {
-		return "", loadErr
+	em, emErr := general.CreateContentEncryptedMessage(content, kwp.SecondaryProtectionParameters, rsaKey)
+	if emErr != nil {
+		return "", emErr
 	}
 
-	em, err := helper.ToEncryptedMessage(rsaKey)
-	if err != nil {
-		return "", err
-	}
-
-	return em.ToBase64PEM(), nil
+	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
+	mdl.EncryptedContentMetadata = kwp.GetMetadataForTerraform("content", "")
+	return model.Render("content", ContentTFTemplate, &mdl)
 }

@@ -12,7 +12,7 @@ import (
 func givenTypicalNamedValueWrappingParameters(t *testing.T) (NamedValueTerraformCodeModel, model.ContentWrappingParams) {
 
 	kwp := model.ContentWrappingParams{
-		VersionedConfidentialMetadata: core.VersionedConfidentialMetadata{
+		SecondaryProtectionParameters: core.SecondaryProtectionParameters{
 			ProviderConstraints: []core.ProviderConstraint{"acceptance-testing"},
 		},
 		LoadRsaPublicKey:      core.LoadPublicKeyFromDataOnce(testkeymaterial.EphemeralRsaPublicKey),

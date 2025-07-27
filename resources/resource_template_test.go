@@ -340,13 +340,12 @@ func (grtc *GenericResourceTestContext) GivenObjectCannotBePlacedAsRequested(msg
 }
 
 func (grtc *GenericResourceTestContext) GivenJsonDataImporter() {
-	var importer core.ObjectJsonImportSupport[core.ConfidentialStringData] = core.NewVersionedStringConfidentialDataHelper()
+	var importer core.ObjectJsonImportSupport[core.ConfidentialStringData] = core.NewVersionedStringConfidentialDataHelper(UnitTestObjectType)
 	grtc.SpecializerMock.On("GetJsonDataImporter").Once().Return(importer)
 }
 
 func (grtc *GenericResourceTestContext) GivenExpiredCiphertext(t *testing.T, mdl string) {
-	md := core.VersionedConfidentialMetadata{
-		ObjectType:           UnitTestObjectType,
+	md := core.SecondaryProtectionParameters{
 		ProviderConstraints:  nil,
 		PlacementConstraints: nil,
 		CreateLimit:          0,
@@ -363,8 +362,7 @@ func (grtc *GenericResourceTestContext) GivenExpiredCiphertext(t *testing.T, mdl
 }
 
 func (grtc *GenericResourceTestContext) GivenExpiringCiphertext(t *testing.T, mdl string) {
-	md := core.VersionedConfidentialMetadata{
-		ObjectType:           UnitTestObjectType,
+	md := core.SecondaryProtectionParameters{
 		ProviderConstraints:  nil,
 		PlacementConstraints: nil,
 		CreateLimit:          0,
@@ -381,8 +379,7 @@ func (grtc *GenericResourceTestContext) GivenExpiringCiphertext(t *testing.T, md
 }
 
 func (grtc *GenericResourceTestContext) GivenCiphertextExpiringIn3Months(t *testing.T, mdl string) {
-	md := core.VersionedConfidentialMetadata{
-		ObjectType:           UnitTestObjectType,
+	md := core.SecondaryProtectionParameters{
 		ProviderConstraints:  nil,
 		PlacementConstraints: nil,
 		CreateLimit:          0,
@@ -399,8 +396,7 @@ func (grtc *GenericResourceTestContext) GivenCiphertextExpiringIn3Months(t *test
 }
 
 func (grtc *GenericResourceTestContext) GivenUseLimitedCiphertext(t *testing.T, mdl string, nUses int) {
-	md := core.VersionedConfidentialMetadata{
-		ObjectType:           UnitTestObjectType,
+	md := core.SecondaryProtectionParameters{
 		ProviderConstraints:  nil,
 		PlacementConstraints: nil,
 		CreateLimit:          0,
@@ -416,8 +412,8 @@ func (grtc *GenericResourceTestContext) GivenUseLimitedCiphertext(t *testing.T, 
 	grtc.ResourceUnderTest.MutableRU = grtc.MutableRU
 }
 
-func (grtc *GenericResourceTestContext) givenCiphertextOperations(t *testing.T, mdl string, md core.VersionedConfidentialMetadata) {
-	helper := core.NewVersionedStringConfidentialDataHelper()
+func (grtc *GenericResourceTestContext) givenCiphertextOperations(t *testing.T, mdl string, md core.SecondaryProtectionParameters) {
+	helper := core.NewVersionedStringConfidentialDataHelper(UnitTestObjectType)
 	_ = helper.CreateConfidentialStringData("this is a secret message", md)
 
 	rsaKey, err := core.LoadPublicKeyFromData(testkeymaterial.EphemeralRsaPublicKey)

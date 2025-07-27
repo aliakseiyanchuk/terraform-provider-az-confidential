@@ -25,10 +25,11 @@ func (vcd *StringConfidentialDataJsonModel) SetStingData(s string) {
 	vcd.StringData = s
 }
 
-func NewVersionedStringConfidentialDataHelper() *VersionedStringConfidentialDataHelper {
+func NewVersionedStringConfidentialDataHelper(objectType string) *VersionedStringConfidentialDataHelper {
 	rv := &VersionedStringConfidentialDataHelper{}
 	rv.KnowValue = &StringConfidentialDataJsonModel{}
 	rv.ModelName = "core/string/v1"
+	rv.ObjectType = objectType
 
 	rv.ModelAtRestSupplier = func(modelName string) (StringConfidentialDataJsonModel, error) {
 		if modelName != "core/string/v1" {
@@ -57,9 +58,9 @@ type VersionedStringConfidentialDataHelper struct {
 	VersionedConfidentialDataHelperTemplate[ConfidentialStringData, StringConfidentialDataJsonModel]
 }
 
-func (vcd *VersionedStringConfidentialDataHelper) CreateConfidentialStringData(v string, md VersionedConfidentialMetadata) VersionedConfidentialData[ConfidentialStringData] {
+func (vcd *VersionedStringConfidentialDataHelper) CreateConfidentialStringData(v string, md SecondaryProtectionParameters) VersionedConfidentialData[ConfidentialStringData] {
 	p := VersionedConfidentialDataCreateParam[ConfidentialStringData]{
-		VersionedConfidentialMetadata: md,
+		SecondaryProtectionParameters: md,
 		Value:                         &StringConfidentialDataJsonModel{StringData: v},
 	}
 

@@ -7,6 +7,7 @@ import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/keyvault"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
+	"strings"
 )
 
 //go:embed secret_template.tmpl
@@ -46,26 +47,14 @@ func MakeSecretGenerator(kwp *model.ContentWrappingParams, args []string) (model
 	if parseErr := secretCmd.Parse(args); parseErr != nil {
 		return nil, parseErr
 	}
-
-	if kwp.LockPlacement {
-		if !secretParams.SpecifiesVault() {
-			return nil, errors.New("options -destination-vault and -destination-secret-name must be supplied where ciphertext must be labelled with its intended destination")
-		} else {
-			coord := core.AzKeyVaultObjectCoordinate{
-				VaultName: secretParams.vaultName,
-				Name:      secretParams.vaultObjectName,
-				Type:      "secrets",
-			}
-
-			kwp.AddPlacementConstraints(coord.GetPlacementConstraint())
-		}
+	if kwp.LockPlacement && !secretParams.SpecifiesVault() {
+		return nil, errors.New("options -destination-vault and -destination-secret-name must be supplied where ciphertext must be labelled with its intended destination")
 	}
 
 	mdl := TerraformCodeModel{
 		BaseTerraformCodeModel: model.BaseTerraformCodeModel{
-			TFBlockName:              "secret",
-			EncryptedContentMetadata: kwp.GetMetadataForTerraform("keyvault secret", "destination_secret"),
-			WrappingKeyCoordinate:    kwp.WrappingKeyCoordinate,
+			TFBlockName:           "secret",
+			WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 			//EncryptedContent:      model.NewStringTerraformFieldExpression(),
 		},
 
@@ -88,43 +77,56 @@ func MakeSecretGenerator(kwp *model.ContentWrappingParams, args []string) (model
 		if readErr != nil {
 			return "", readErr
 		}
-
 		secretDataAsStr := string(secretData)
 
 		if onlyCiphertext {
-			return OutputSecretEncryptedContent(kwp, secretDataAsStr)
+			rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
+			if rsaKeyErr != nil {
+				return "", rsaKeyErr
+			}
 
-		} else {
-			return OutputSecretTerraformCode(mdl, kwp, secretDataAsStr)
+			var lockCoord *core.AzKeyVaultObjectCoordinate
+			if kwp.LockPlacement {
+				lockCoord = &core.AzKeyVaultObjectCoordinate{
+					VaultName: secretParams.vaultName,
+					Name:      secretParams.vaultObjectName,
+				}
+			}
+
+			em, emErr := keyvault.CreateSecretEncryptedMessage(secretDataAsStr, lockCoord, kwp.SecondaryProtectionParameters, rsaKey)
+			if emErr != nil {
+				return "", emErr
+			}
+
+			fld := model.FoldString(em.ToBase64PEM(), 80)
+			return strings.Join(fld, "\n"), nil
 		}
+
+		return OutputSecretTerraformCode(mdl, kwp, secretDataAsStr)
+
 	}, nil
 }
 
 func OutputSecretTerraformCode(mdl TerraformCodeModel, kwp *model.ContentWrappingParams, secretDataAsStr string) (string, error) {
-	s, err := OutputSecretEncryptedContent(kwp, secretDataAsStr)
-	if err != nil {
-		return s, err
+	rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
+	if rsaKeyErr != nil {
+		return "", rsaKeyErr
 	}
 
-	mdl.EncryptedContent.SetValue(s)
+	var lockCoord *core.AzKeyVaultObjectCoordinate
+	if kwp.LockPlacement {
+		lockCoord = &core.AzKeyVaultObjectCoordinate{
+			VaultName: mdl.DestinationCoordinate.VaultName.Value,
+			Name:      mdl.DestinationCoordinate.ObjectName.Value,
+		}
+	}
+
+	em, emErr := keyvault.CreateSecretEncryptedMessage(secretDataAsStr, lockCoord, kwp.SecondaryProtectionParameters, rsaKey)
+	if emErr != nil {
+		return "", emErr
+	}
+
+	mdl.BaseTerraformCodeModel.EncryptedContentMetadata = kwp.GetMetadataForTerraform("keyvault secret", "destination_secret")
+	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
 	return model.Render("secret", secretTFTemplate, &mdl)
-}
-
-func OutputSecretEncryptedContent(kwp *model.ContentWrappingParams, secretText string) (string, error) {
-	kwp.ObjectType = keyvault.SecretObjectType
-
-	helper := core.NewVersionedStringConfidentialDataHelper()
-	_ = helper.CreateConfidentialStringData(secretText, kwp.VersionedConfidentialMetadata)
-
-	rsaKey, loadErr := kwp.LoadRsaPublicKey()
-	if loadErr != nil {
-		return "", loadErr
-	}
-
-	em, err := helper.ToEncryptedMessage(rsaKey)
-	if err != nil {
-		return "", err
-	}
-
-	return em.ToBase64PEM(), nil
 }

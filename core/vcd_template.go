@@ -9,8 +9,9 @@ import (
 	"time"
 )
 
-type VersionedConfidentialMetadata struct {
-	ObjectType           string
+// SecondaryProtectionParameters secondary protection parameters (in addition to the access to the private key)
+// that needs to be embedded in the ciphertext
+type SecondaryProtectionParameters struct {
 	ProviderConstraints  []ProviderConstraint
 	PlacementConstraints []PlacementConstraint
 	CreateLimit          int64
@@ -18,35 +19,35 @@ type VersionedConfidentialMetadata struct {
 	NumUses              int
 }
 
-func (p *VersionedConfidentialMetadata) HasProviderConstraints() bool {
+func (p *SecondaryProtectionParameters) HasProviderConstraints() bool {
 	return len(p.ProviderConstraints) > 0
 }
 
-func (p *VersionedConfidentialMetadata) HasPlacementConstraints() bool {
+func (p *SecondaryProtectionParameters) HasPlacementConstraints() bool {
 	return len(p.PlacementConstraints) > 0
 }
 
-func (p *VersionedConfidentialMetadata) LimitsCreate() bool {
+func (p *SecondaryProtectionParameters) LimitsCreate() bool {
 	return p.CreateLimit > 0
 }
 
-func (p *VersionedConfidentialMetadata) LimitsExpiry() bool {
+func (p *SecondaryProtectionParameters) LimitsExpiry() bool {
 	return p.Expiry > 0
 }
 
-func (p *VersionedConfidentialMetadata) LimitsUsage() bool {
+func (p *SecondaryProtectionParameters) LimitsUsage() bool {
 	return p.NumUses > 0
 }
 
-func (p *VersionedConfidentialMetadata) IsUsedOnce() bool {
+func (p *SecondaryProtectionParameters) IsUsedOnce() bool {
 	return p.NumUses == 1
 }
 
-func (p *VersionedConfidentialMetadata) GetCreateLimitTimestamp() string {
+func (p *SecondaryProtectionParameters) GetCreateLimitTimestamp() string {
 	return p.formatUnixTimestamp(p.CreateLimit)
 }
 
-func (p *VersionedConfidentialMetadata) formatUnixTimestamp(limit int64) string {
+func (p *SecondaryProtectionParameters) formatUnixTimestamp(limit int64) string {
 	if limit > 0 {
 		t := time.Unix(limit, 0)
 		return FormatTime(&t).ValueString()
@@ -55,11 +56,11 @@ func (p *VersionedConfidentialMetadata) formatUnixTimestamp(limit int64) string 
 	}
 }
 
-func (p *VersionedConfidentialMetadata) GetExpiryTimestamp() string {
+func (p *SecondaryProtectionParameters) GetExpiryTimestamp() string {
 	return p.formatUnixTimestamp(p.Expiry)
 }
 
-func (p *VersionedConfidentialMetadata) IsWeaklyProtected() bool {
+func (p *SecondaryProtectionParameters) IsWeaklyProtected() bool {
 	return !p.HasProviderConstraints() &&
 		!p.HasPlacementConstraints() &&
 		!p.LimitsExpiry() &&
@@ -68,7 +69,7 @@ func (p *VersionedConfidentialMetadata) IsWeaklyProtected() bool {
 }
 
 type VersionedConfidentialDataCreateParam[T any] struct {
-	VersionedConfidentialMetadata
+	SecondaryProtectionParameters
 	Value T
 }
 
@@ -77,9 +78,10 @@ type VersionedConfidentialDataCreateParam[T any] struct {
 // - the confidential data itself which can be of any structure, and
 // - a header describing the object type, object labels, and model reference.
 type VersionedConfidentialDataHelperTemplate[T, TAtRest any] struct {
-	KnowValue T
-	Header    ConfidentialDataJsonHeader
-	ModelName string
+	KnowValue  T
+	Header     ConfidentialDataJsonHeader
+	ObjectType string
+	ModelName  string
 
 	ModelAtRestSupplier MapperWithError[string, TAtRest]
 	ValueToRest         Mapper[T, TAtRest]
@@ -95,7 +97,7 @@ func (vcd *VersionedConfidentialDataHelperTemplate[T, TAtRest]) Set(p VersionedC
 
 	vcd.Header = ConfidentialDataJsonHeader{
 		Uuid:                 uuid.New().String(),
-		Type:                 p.ObjectType,
+		Type:                 vcd.ObjectType,
 		CreateLimit:          p.CreateLimit,
 		Expiry:               p.Expiry,
 		ProviderConstraints:  p.ProviderConstraints,

@@ -154,7 +154,7 @@ func (n *NamedValueSpecializer) CheckPlacement(ctx context.Context, pc []core.Pr
 }
 
 func (n *NamedValueSpecializer) GetJsonDataImporter() core.ObjectJsonImportSupport[core.ConfidentialStringData] {
-	return core.NewVersionedStringConfidentialDataHelper()
+	return core.NewVersionedStringConfidentialDataHelper(NamedValueObjectType)
 }
 
 func (n *NamedValueSpecializer) DoCreate(ctx context.Context, data *NamedValueModel, plainData core.ConfidentialStringData) (armapimanagement.NamedValueContract, diag.Diagnostics) {
@@ -471,13 +471,23 @@ func (n *NamedValueDestinationFunctionParmaValidator) ValidateParameterObject(ct
 	}
 }
 
+func CreateNamedValueEncryptedMessage(confidentialModel string, dest *DestinationNamedValueModel, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+	helper := core.NewVersionedStringConfidentialDataHelper(NamedValueObjectType)
+
+	if dest != nil {
+		md.PlacementConstraints = []core.PlacementConstraint{core.PlacementConstraint(dest.GetLabel())}
+	}
+
+	helper.CreateConfidentialStringData(confidentialModel, md)
+	return helper.ToEncryptedMessage(pubKey)
+}
+
 func NewNamedValueEncryptorFunction() function.Function {
 	rv := resources.FunctionTemplate[string, DestinationNamedValueModel]{
 		Name:                "encrypt_apim_named_value",
 		Summary:             "Produces a ciphertext string suitable for use with az-confidential_apim_named_value resource",
 		MarkdownDescription: "Encrypts an APIM named value without the use of the `tfgen` tool",
 
-		ObjectType: NamedValueObjectType,
 		DataParameter: function.StringParameter{
 			Name:               "named_value",
 			Description:        "named value that should be added to the API Management Service",
@@ -507,16 +517,7 @@ func NewNamedValueEncryptorFunction() function.Function {
 			return ptr
 		},
 
-		CreatEncryptedMessage: func(confidentialModel string, dest *DestinationNamedValueModel, md core.VersionedConfidentialMetadata, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
-			helper := core.NewVersionedStringConfidentialDataHelper()
-
-			if dest != nil {
-				md.PlacementConstraints = []core.PlacementConstraint{core.PlacementConstraint(dest.GetLabel())}
-			}
-
-			helper.CreateConfidentialStringData(confidentialModel, md)
-			return helper.ToEncryptedMessage(pubKey)
-		},
+		CreatEncryptedMessage: CreateNamedValueEncryptedMessage,
 	}
 
 	return &rv

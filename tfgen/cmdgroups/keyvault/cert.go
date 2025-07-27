@@ -4,11 +4,10 @@ import (
 	_ "embed"
 	"errors"
 	"flag"
-	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/keyvault"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
-	pkcs12 "software.sslmate.com/src/go-pkcs12"
+	"strings"
 )
 
 //go:embed cert_template.tmpl
@@ -71,26 +70,14 @@ func MakeCertGenerator(kwp *model.ContentWrappingParams, args ...string) (model.
 		return nil, parseErr
 	}
 
-	if kwp.LockPlacement {
-		if !certParams.SpecifiesVault() {
-			return nil, errors.New("options -destination-vault and -destination-cert-name must be supplied where ciphertext must be labelled with its intended destination")
-		} else {
-			coord := core.AzKeyVaultObjectCoordinate{
-				VaultName: certParams.vaultName,
-				Name:      certParams.vaultObjectName,
-				Type:      "certificates",
-			}
-
-			pc := core.PlacementConstraint(coord.GetLabel())
-			kwp.AddPlacementConstraints(pc)
-		}
+	if kwp.LockPlacement && !certParams.SpecifiesVault() {
+		return nil, errors.New("options -destination-vault and -destination-cert-name must be supplied where ciphertext must be labelled with its intended destination")
 	}
 
 	mdl := TerraformCodeModel{
 		BaseTerraformCodeModel: model.BaseTerraformCodeModel{
-			TFBlockName:              "cert",
-			EncryptedContentMetadata: kwp.GetMetadataForTerraform("keyvault certificate", "destination_certificate"),
-			WrappingKeyCoordinate:    kwp.WrappingKeyCoordinate,
+			TFBlockName:           "cert",
+			WrappingKeyCoordinate: kwp.WrappingKeyCoordinate,
 		},
 
 		TagsModel: model.TagsModel{
@@ -103,10 +90,6 @@ func MakeCertGenerator(kwp *model.ContentWrappingParams, args ...string) (model.
 		NotAfterExample:  model.NotAfterExample(),
 	}
 
-	fmt.Println(mdl.DestinationCoordinate.VaultName.TerraformExpression())
-	fmt.Println(mdl.DestinationCoordinate.VaultName.IsDefined())
-	fmt.Println(mdl.DestinationCoordinate.ObjectName.TerraformExpression())
-
 	return func(inputReader model.InputReader, onlyCiphertext bool) (string, error) {
 		certData, certDataErr := AcquireCertificateData(certParams, inputReader)
 		if certDataErr != nil {
@@ -114,11 +97,43 @@ func MakeCertGenerator(kwp *model.ContentWrappingParams, args ...string) (model.
 		}
 
 		if onlyCiphertext {
-			return OutputCertificateEncryptedContent(kwp, certData)
+			rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
+			if rsaKeyErr != nil {
+				return "", rsaKeyErr
+			}
+
+			var coord *core.AzKeyVaultObjectCoordinate
+			if kwp.LockPlacement {
+				coord = &core.AzKeyVaultObjectCoordinate{
+					VaultName: certParams.vaultName,
+					Name:      certParams.vaultObjectName,
+					Type:      "certificates",
+				}
+			}
+
+			em, emErr := keyvault.CreateCertificateEncryptedMessage(certData, coord, kwp.SecondaryProtectionParameters, rsaKey)
+			if emErr != nil {
+				return "", emErr
+			}
+
+			fld := model.FoldString(em.ToBase64PEM(), 80)
+			return strings.Join(fld, "\n"), nil
 		} else {
 			return OutputCertificateTerraformCode(mdl, kwp, certData)
 		}
 	}, nil
+}
+
+func CertificateNeedsPassword(certData []byte) bool {
+	if !core.IsPEMEncoded(certData) {
+		return true
+	}
+	if blocks, pemErr := core.ParsePEMBlocks(certData); pemErr != nil {
+		return true
+	} else {
+		privateKeyBlock := core.FindPrivateKeyBlock(blocks)
+		return privateKeyBlock.Type == "ENCRYPTED PRIVATE KEY"
+	}
 }
 
 func AcquireCertificateData(certParams *CertTFGenParams, inputReader model.InputReader) (core.ConfidentialCertificateData, error) {
@@ -131,98 +146,39 @@ func AcquireCertificateData(certParams *CertTFGenParams, inputReader model.Input
 		return nil, readErr
 	}
 
-	confData := core.ConfidentialCertConfidentialDataStruct{
-		CertificateData:         certData,
-		CertificateDataFormat:   "application/unknown",
-		CertificateDataPassword: "",
-	}
-
-	if core.IsPEMEncoded(certData) {
-		confData.CertificateDataFormat = CertFormatPem
-
-		blocks, blockErr := core.ParsePEMBlocks(certData)
-		if blockErr != nil {
-			return nil, fmt.Errorf("cannot parse PEM blocks: %s", blockErr.Error())
-		}
-
-		if len(core.FindCertificateBlocks(blocks)) == 0 {
-			return nil, errors.New("input does not contain any certificate blocks")
-		}
-
-		privateKeyBlock := core.FindPrivateKeyBlock(blocks)
-		if privateKeyBlock == nil {
-			return nil, errors.New("input does not contain any private keys")
-		}
-
-		if privateKeyBlock.Type == "ENCRYPTED PRIVATE KEY" {
-			password, passReadErr := inputReader("Private key requires password", certParams.certPasswordFile, false, false)
-			if passReadErr != nil {
-				return nil, passReadErr
-			}
-
-			// Try to decrypt the PEM key; to ensure that the password is correct
-			_, loadErr := core.PrivateKeyFromEncryptedBlock(blocks[0], string(password))
-			if loadErr != nil {
-				return nil, loadErr
-			} else {
-				confData.CertificateDataPassword = string(password)
-			}
-		} else if privateKeyBlock.Type != "PRIVATE KEY" {
-			return nil, errors.New("input certificate data does not contain private key")
-		}
-	} else {
-		confData.CertificateDataFormat = CertFormatPkcs12
-
-		var certPassBytes []byte
-		var certPassErr error
-		certPassBytes, certPassErr = inputReader("Enter certificate password", certParams.certPasswordFile, false, false)
-		if certPassErr != nil {
-			return nil, fmt.Errorf("cannot read certificate password: %s", certPassErr.Error())
-		}
-
-		if certParams.noDERVerify {
-			confData.CertificateDataPassword = string(certPassBytes)
+	password := ""
+	if CertificateNeedsPassword(certData) {
+		if p, passReadErr := inputReader("This certificate is password protected; kindly supply it", certParams.certPasswordFile, false, false); passReadErr != nil {
+			return nil, passReadErr
 		} else {
-			// Try reading parsing certificate data
-			if _, _, pwdErr := pkcs12.Decode(certData, string(certPassBytes)); pwdErr != nil {
-				return nil, fmt.Errorf("cannot load certificate from PKCS12/PFX bag; %s", pwdErr.Error())
-			}
+			password = string(p)
 		}
 	}
 
-	return &confData, nil
+	return keyvault.AcquireCertificateData(certData, password)
+
 }
 
 func OutputCertificateTerraformCode(mdl TerraformCodeModel, kwp *model.ContentWrappingParams, data core.ConfidentialCertificateData) (string, error) {
-	ciphertext, err := OutputCertificateEncryptedContent(kwp, data)
-	if err != nil {
-		return ciphertext, err
+	rsaKey, rsaKeyErr := kwp.LoadRsaPublicKey()
+	if rsaKeyErr != nil {
+		return "", rsaKeyErr
 	}
 
-	mdl.EncryptedContent.SetValue(ciphertext)
+	var lockCoord *core.AzKeyVaultObjectCoordinate
+	if kwp.LockPlacement {
+		lockCoord = &core.AzKeyVaultObjectCoordinate{
+			VaultName: mdl.DestinationCoordinate.VaultName.Value,
+			Name:      mdl.DestinationCoordinate.ObjectName.Value,
+		}
+	}
+
+	em, emErr := keyvault.CreateCertificateEncryptedMessage(data, lockCoord, kwp.SecondaryProtectionParameters, rsaKey)
+	if emErr != nil {
+		return "", emErr
+	}
+
+	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
+	mdl.EncryptedContentMetadata = kwp.GetMetadataForTerraform("keyvault certificate", "destination_certificate")
 	return model.Render("cert", certTFTemplate, &mdl)
-}
-
-func OutputCertificateEncryptedContent(kwp *model.ContentWrappingParams, data core.ConfidentialCertificateData) (string, error) {
-	kwp.ObjectType = keyvault.CertificateObjectType
-
-	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper()
-	_ = helper.CreateConfidentialCertificateData(
-		data.GetCertificateData(),
-		data.GetCertificateDataFormat(),
-		data.GetCertificateDataPassword(),
-		kwp.VersionedConfidentialMetadata,
-	)
-
-	rsaKey, loadErr := kwp.LoadRsaPublicKey()
-	if loadErr != nil {
-		return "", loadErr
-	}
-
-	em, err := helper.ToEncryptedMessage(rsaKey)
-	if err != nil {
-		return "", err
-	}
-
-	return em.ToBase64PEM(), nil
 }

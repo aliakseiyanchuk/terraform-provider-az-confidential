@@ -4,9 +4,10 @@ import (
 	_ "embed"
 	"errors"
 	"flag"
-	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	res_apim "github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/apim"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"strings"
 )
 
 //go:embed named_value.tmpl
@@ -136,17 +137,8 @@ func MakeNamedValueGenerator(kwp *model.ContentWrappingParams, args []string) (m
 		return nil, parseErr
 	}
 
-	if kwp.LockPlacement {
-		if !namedValueParams.SpecifiesTarget() {
-			return nil, errors.New("options -az-subscription-id, -resource-group-name, -service-name, and -named-value must be supplied where ciphertext is labelled with its intended destination")
-		} else {
-			kwp.AddPlacementConstraints(core.PlacementConstraint(res_apim.GetDestinationNamedValueLabel(
-				namedValueParams.AzSubscriptionId,
-				namedValueParams.ResourceGroupName,
-				namedValueParams.ServiceName,
-				namedValueParams.namedValueName,
-			)))
-		}
+	if kwp.LockPlacement && !namedValueParams.SpecifiesTarget() {
+		return nil, errors.New("options -az-subscription-id, -resource-group-name, -service-name, and -named-value must be supplied where ciphertext is labelled with its intended destination")
 	}
 
 	mdl := NamedValueTerraformCodeModel{
@@ -177,7 +169,30 @@ func MakeNamedValueGenerator(kwp *model.ContentWrappingParams, args []string) (m
 		namedValueAsStr := string(namedValue)
 
 		if onlyCiphertext {
-			return OutputNamedValueEncryptedContent(kwp, namedValueAsStr)
+			publicKey, rsaKeyErr := kwp.LoadRsaPublicKey()
+			if rsaKeyErr != nil {
+				return "", rsaKeyErr
+			}
+
+			var lockCoord *res_apim.DestinationNamedValueModel
+			if kwp.LockPlacement {
+				lockCoord = &res_apim.DestinationNamedValueModel{
+					DestinationApiManagement: res_apim.DestinationApiManagement{
+						AzSubscriptionId: types.StringValue(mdl.DestinationNamedValue.AzSubscriptionId.Value),
+						ResourceGroup:    types.StringValue(mdl.DestinationNamedValue.ResourceGroupName.Value),
+						ServiceName:      types.StringValue(mdl.DestinationNamedValue.ServiceName.Value),
+					},
+					Name: types.StringValue(mdl.DestinationNamedValue.NamedValue.Value),
+				}
+			}
+
+			em, emErr := res_apim.CreateNamedValueEncryptedMessage(namedValueAsStr, lockCoord, kwp.SecondaryProtectionParameters, publicKey)
+			if emErr != nil {
+				return "", emErr
+			}
+
+			fld := model.FoldString(em.ToBase64PEM(), 80)
+			return strings.Join(fld, "\n"), nil
 
 		} else {
 			return OutputNamedValueTerraformCode(mdl, kwp, namedValueAsStr)
@@ -188,29 +203,29 @@ func MakeNamedValueGenerator(kwp *model.ContentWrappingParams, args []string) (m
 }
 
 func OutputNamedValueTerraformCode(mdl NamedValueTerraformCodeModel, kwp *model.ContentWrappingParams, namedValueDataAsStr string) (string, error) {
-	s, err := OutputNamedValueEncryptedContent(kwp, namedValueDataAsStr)
-	if err != nil {
-		return s, err
+	publicKey, rsaKeyErr := kwp.LoadRsaPublicKey()
+	if rsaKeyErr != nil {
+		return "", rsaKeyErr
 	}
 
-	mdl.EncryptedContent.SetValue(s)
+	var lockCoord *res_apim.DestinationNamedValueModel
+	if kwp.LockPlacement {
+		lockCoord = &res_apim.DestinationNamedValueModel{
+			DestinationApiManagement: res_apim.DestinationApiManagement{
+				AzSubscriptionId: types.StringValue(mdl.DestinationNamedValue.AzSubscriptionId.Value),
+				ResourceGroup:    types.StringValue(mdl.DestinationNamedValue.ResourceGroupName.Value),
+				ServiceName:      types.StringValue(mdl.DestinationNamedValue.ServiceName.Value),
+			},
+			Name: types.StringValue(mdl.DestinationNamedValue.NamedValue.Value),
+		}
+	}
+
+	em, emErr := res_apim.CreateNamedValueEncryptedMessage(namedValueDataAsStr, lockCoord, kwp.SecondaryProtectionParameters, publicKey)
+	if emErr != nil {
+		return "", emErr
+	}
+
+	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
+	mdl.EncryptedContentMetadata = kwp.GetMetadataForTerraform("api management named value", "destination_named_value")
 	return model.Render("apim/namedValue", namedValueTFTemplate, &mdl)
-}
-
-func OutputNamedValueEncryptedContent(kwp *model.ContentWrappingParams, secretText string) (string, error) {
-	kwp.ObjectType = res_apim.NamedValueObjectType
-	helper := core.NewVersionedStringConfidentialDataHelper()
-	_ = helper.CreateConfidentialStringData(secretText, kwp.VersionedConfidentialMetadata)
-
-	rsaKey, loadErr := kwp.LoadRsaPublicKey()
-	if loadErr != nil {
-		return "", loadErr
-	}
-
-	em, err := helper.ToEncryptedMessage(rsaKey)
-	if err != nil {
-		return "", err
-	}
-
-	return em.ToBase64PEM(), nil
 }
