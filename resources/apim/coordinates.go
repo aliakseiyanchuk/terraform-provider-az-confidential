@@ -5,6 +5,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"regexp"
 )
 
 type DestinationApiManagement struct {
@@ -32,9 +33,30 @@ func (d *DestinationSubscriptionCoordinateModel) GetLabel() string {
 		d.UserIdentifier)
 }
 
-func (d *DestinationSubscriptionCoordinateModel) Accept(props armapimanagement.SubscriptionContractProperties) {
+var productRegexp = regexp.MustCompile("^/products/(.+)$")
+var apisRegexp = regexp.MustCompile("^/apis/(.+)$")
+
+func (d *DestinationSubscriptionCoordinateModel) Accept(props *armapimanagement.SubscriptionContractProperties) {
+	if props == nil {
+		core.StringToOptionalTerraform("", &d.ProductIdentifier)
+		core.StringToOptionalTerraform("", &d.APIIdentifier)
+		return
+	}
+
 	core.ConvertStingPrtToTerraform(props.OwnerID, &d.UserIdentifier)
-	core.ConvertStingPrtToTerraform(props.Scope, &d.APIIdentifier)
+
+	productId := ""
+	apiId := ""
+
+	scope := *props.Scope
+	if prodMatcher := productRegexp.FindStringSubmatch(scope); prodMatcher != nil {
+		productId = prodMatcher[1]
+	} else if apiMatcher := apisRegexp.FindStringSubmatch(scope); apiMatcher != nil {
+		apiId = apiMatcher[1]
+	}
+
+	core.StringToOptionalTerraform(productId, &d.ProductIdentifier)
+	core.StringToOptionalTerraform(apiId, &d.APIIdentifier)
 }
 
 func (d *DestinationSubscriptionCoordinateModel) OwnerIdAsPtr() *string {

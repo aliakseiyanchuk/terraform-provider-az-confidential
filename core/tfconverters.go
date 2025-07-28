@@ -105,3 +105,13 @@ func StringValueOf(v *types.String) string {
 		return v.ValueString()
 	}
 }
+
+func StringToOptionalTerraform(v string, out *types.String) {
+	if len(v) > 0 {
+		*out = types.StringValue(v)
+	} else {
+		if !IsEmpty(out) {
+			*out = types.StringValue("")
+		}
+	}
+}

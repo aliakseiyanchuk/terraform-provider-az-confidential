@@ -167,6 +167,7 @@ func (sm *SubscriptionModel) Accept(r armapimanagement.SubscriptionContract) {
 		sm.AllowTracing = types.BoolNull()
 	}
 
+	sm.DestinationSubscription.Accept(r.Properties)
 }
 
 type SubscriptionSpecializer struct {
