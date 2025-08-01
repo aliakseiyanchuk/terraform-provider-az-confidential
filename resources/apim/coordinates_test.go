@@ -71,3 +71,46 @@ func Test_SDCM_AcceptSubscriptionContractOnNullWithUnknownOrNullSource(t *testin
 	assert.True(t, mdl.APIIdentifier.IsUnknown())
 	assert.True(t, mdl.ProductIdentifier.IsNull())
 }
+
+func Test_SDCM_GetLabel(t *testing.T) {
+	mdl := DestinationSubscriptionCoordinateModel{
+		DestinationApiManagement: DestinationApiManagement{
+			AzSubscriptionId: types.StringValue("azSubId"),
+			ResourceGroup:    types.StringValue("rg"),
+			ServiceName:      types.StringValue("serviceName"),
+		},
+		SubscriptionId:    types.StringValue("subId"),
+		APIIdentifier:     types.StringUnknown(),
+		ProductIdentifier: types.StringNull(),
+		UserIdentifier:    types.StringValue("userId"),
+	}
+
+	assert.Equal(t, "az-c-label:///subscriptions/azSubId/resourceGroups/rg/providers/Microsoft.ApiManagement/service/serviceName/subscriptions/subId?api=/product=/user=userId", mdl.GetLabel())
+}
+
+func Test_SDCM_GetScope_Unspecified(t *testing.T) {
+	mdl := DestinationSubscriptionCoordinateModel{
+		APIIdentifier:     types.StringUnknown(),
+		ProductIdentifier: types.StringNull(),
+	}
+
+	assert.Equal(t, "/apis", mdl.GetScope())
+}
+
+func Test_SDCM_GetScope_ApiScoped(t *testing.T) {
+	mdl := DestinationSubscriptionCoordinateModel{
+		APIIdentifier:     types.StringValue("apiId"),
+		ProductIdentifier: types.StringNull(),
+	}
+
+	assert.Equal(t, "/apis/apiId", mdl.GetScope())
+}
+
+func Test_SDCM_GetScope_ProductScoped(t *testing.T) {
+	mdl := DestinationSubscriptionCoordinateModel{
+		APIIdentifier:     types.StringUnknown(),
+		ProductIdentifier: types.StringValue("productId"),
+	}
+
+	assert.Equal(t, "/products/productId", mdl.GetScope())
+}

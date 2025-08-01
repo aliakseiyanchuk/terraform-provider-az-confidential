@@ -670,6 +670,26 @@ func CreateKeyEncryptedMessage(jwtKey interface{}, destLock *core.AzKeyVaultObje
 	return em, md, emErr
 }
 
+func DecryptKeyMessage(em core.EncryptedMessage, decrypter core.RSADecrypter) (core.ConfidentialDataJsonHeader, interface{}, error) {
+	helper := core.NewVersionedBinaryConfidentialDataHelper(KeyObjectType)
+	err := helper.FromEncryptedMessage(em, decrypter)
+	if err != nil {
+		return helper.Header, nil, err
+	}
+
+	jwkSet, jwkErr := jwk.Parse(helper.KnowValue.GetBinaryData())
+	if jwkErr != nil {
+		return helper.Header, nil, jwkErr
+	}
+
+	if jwkKey, ok := jwkSet.Key(0); ok && jwkKey != nil {
+		return helper.Header, jwkKey, nil
+	} else {
+		return helper.Header, nil, errors.New("unable to find a valid JWK in set")
+	}
+
+}
+
 func NewKeyEncryptorFunction() function.Function {
 	rv := resources.FunctionTemplate[KeyDataFunctionParameter, core.AzKeyVaultObjectCoordinateModel]{
 		Name:                "encrypt_keyvault_key",

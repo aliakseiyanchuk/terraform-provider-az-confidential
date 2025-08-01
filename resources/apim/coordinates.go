@@ -2,6 +2,7 @@ package apim
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -23,14 +24,14 @@ type DestinationSubscriptionCoordinateModel struct {
 }
 
 func (d *DestinationSubscriptionCoordinateModel) GetLabel() string {
-	return fmt.Sprintf("az-c-label:///subscriptions/%s/resourceGroups/%s/providers/Microsoft.ApiManagement/service/%s/subscriptions/%s?api=%s/product=%s/user=%s;",
-		d.AzSubscriptionId,
-		d.ResourceGroup,
-		d.ServiceName,
-		d.SubscriptionId,
-		d.APIIdentifier,
-		d.ProductIdentifier,
-		d.UserIdentifier)
+	return fmt.Sprintf("az-c-label:///subscriptions/%s/resourceGroups/%s/providers/Microsoft.ApiManagement/service/%s/subscriptions/%s?api=%s/product=%s/user=%s",
+		d.AzSubscriptionId.ValueString(),
+		d.ResourceGroup.ValueString(),
+		d.ServiceName.ValueString(),
+		d.SubscriptionId.ValueString(),
+		d.APIIdentifier.ValueString(),
+		d.ProductIdentifier.ValueString(),
+		d.UserIdentifier.ValueString())
 }
 
 var productRegexp = regexp.MustCompile("^/products/(.+)$")
@@ -64,14 +65,13 @@ func (d *DestinationSubscriptionCoordinateModel) OwnerIdAsPtr() *string {
 		return nil
 	}
 
-	v := d.UserIdentifier.ValueString()
-	return &v
+	return to.Ptr(d.UserIdentifier.ValueString())
 }
 
 func (d *DestinationSubscriptionCoordinateModel) GetScope() string {
-	if !d.ProductIdentifier.IsNull() {
+	if !core.IsEmpty(&d.ProductIdentifier) {
 		return fmt.Sprintf("/products/%s", d.ProductIdentifier.ValueString())
-	} else if !d.APIIdentifier.IsNull() {
+	} else if !core.IsEmpty(&d.APIIdentifier) {
 		return fmt.Sprintf("/apis/%s", d.APIIdentifier.ValueString())
 	} else {
 		return "/apis"

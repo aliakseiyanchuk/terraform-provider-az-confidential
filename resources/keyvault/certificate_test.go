@@ -2,6 +2,7 @@ package keyvault
 
 import (
 	"context"
+	"crypto/rsa"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core/testkeymaterial"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
@@ -485,4 +486,80 @@ func Test_CAzVCR_DoDelete(t *testing.T) {
 func TestNewConfidentialAzVaultCertificateResourceWillReturn(t *testing.T) {
 	// Test that the new az key vault resource would not crash on start-up
 	_ = NewCertificateResource()
+}
+
+func TestCreateCertificateEncryptedMessageWithPlainCert(t *testing.T) {
+	exerciseCreateCertificateEncryptedMessageCycle(t, testkeymaterial.EphemeralCertificatePEM, "")
+}
+
+func TestCreateCertificateEncryptedMessageWithEncryptedCert(t *testing.T) {
+	exerciseCreateCertificateEncryptedMessageCycle(t, testkeymaterial.EphemeralCertificatePEMWithEncryptedKey, "s1cr3t")
+}
+
+func TestCreateCertificateEncryptedMessageWithDerFormat(t *testing.T) {
+	exerciseCreateCertificateEncryptedMessageCycle(t, testkeymaterial.EphemeralCertPFX12, "s1cr3t")
+}
+
+func exerciseCreateCertificateEncryptedMessageCycle(t *testing.T, certData []byte, password string) {
+	reqMd := core.SecondaryProtectionParameters{
+		CreateLimit:         100,
+		Expiry:              200,
+		ProviderConstraints: []core.ProviderConstraint{"acceptance"},
+		NumUses:             300,
+	}
+
+	lockCoord := &core.AzKeyVaultObjectCoordinate{
+		VaultName: "vaultName",
+		Name:      "certificate",
+		Type:      "certificates",
+	}
+
+	certConData, certAcqErr := AcquireCertificateData(certData, password)
+	assert.NoError(t, certAcqErr)
+
+	rsaKey, err := core.LoadPublicKeyFromData(testkeymaterial.EphemeralRsaPublicKey)
+	assert.NoError(t, err)
+
+	rsaPrivKey, err := core.PrivateKeyFromData(testkeymaterial.EphemeralRsaKeyText)
+	assert.NoError(t, err)
+
+	em, _, err := CreateCertificateEncryptedMessage(certConData, lockCoord, reqMd, rsaKey)
+	assert.NoError(t, err)
+
+	ciphertext := em.ToBase64PEM()
+	rbEm := core.EncryptedMessage{}
+
+	err = rbEm.FromBase64PEM(ciphertext)
+	assert.NoError(t, err)
+
+	hdr, cretData, err := DecryptCertificateMessage(
+		em,
+		func(bytes []byte) ([]byte, error) {
+			return core.RsaDecryptBytes(rsaPrivKey.(*rsa.PrivateKey), bytes, nil)
+		},
+	)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, cretData)
+
+	assert.Equal(t, certData, certConData.GetCertificateData())
+	assert.Equal(t, password, certConData.GetCertificateDataPassword())
+
+	assert.Equal(t, int64(100), hdr.CreateLimit)
+	assert.Equal(t, int64(200), hdr.Expiry)
+	assert.Equal(t, 300, hdr.NumUses)
+	assert.True(t, core.SameBag(
+		func(a, b core.ProviderConstraint) bool { return a == b },
+		[]core.ProviderConstraint{"acceptance"},
+		hdr.ProviderConstraints,
+	))
+	assert.Equal(t,
+		core.PlacementConstraint("az-c-keyvault://vaultName@certificates=certificate"),
+		hdr.PlacementConstraints[0],
+	)
+}
+
+func Test_NewCertificateEncryptorFunction_WillReturn(t *testing.T) {
+	fn := NewCertificateEncryptorFunction()
+	assert.NotNil(t, fn)
 }

@@ -402,6 +402,13 @@ func CreateSecretEncryptedMessage(confidentialString string, coord *core.AzKeyVa
 	return em, md, err
 }
 
+func DecryptSecretMessage(em core.EncryptedMessage, decrypted core.RSADecrypter) (core.ConfidentialDataJsonHeader, core.ConfidentialStringData, error) {
+	helper := core.NewVersionedStringConfidentialDataHelper(SecretObjectType)
+
+	err := helper.FromEncryptedMessage(em, decrypted)
+	return helper.Header, helper.KnowValue, err
+}
+
 func NewSecretEncryptorFunction() function.Function {
 	rv := resources.FunctionTemplate[string, core.AzKeyVaultObjectCoordinateModel]{
 		Name:                "encrypt_keyvault_secret",

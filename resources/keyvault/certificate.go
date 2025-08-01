@@ -488,6 +488,8 @@ func AcquireCertificateData(certData []byte, password string) (core.Confidential
 
 		if _, _, pwdErr := pkcs12.Decode(confData.GetCertificateData(), password); pwdErr != nil {
 			return nil, fmt.Errorf("cannot load certificate from PKCS12/PFX bag; %s", pwdErr.Error())
+		} else {
+			confData.CertificateDataPassword = password
 		}
 	}
 
@@ -509,6 +511,13 @@ func CreateCertificateEncryptedMessage(certData core.ConfidentialCertificateData
 	)
 	em, err := helper.ToEncryptedMessage(pubKey)
 	return em, md, err
+}
+
+func DecryptCertificateMessage(em core.EncryptedMessage, decrypted core.RSADecrypter) (core.ConfidentialDataJsonHeader, core.ConfidentialCertificateData, error) {
+	helper := core.NewVersionedKeyVaultCertificateConfidentialDataHelper(CertificateObjectType)
+
+	err := helper.FromEncryptedMessage(em, decrypted)
+	return helper.Header, helper.KnowValue, err
 }
 
 func NewCertificateEncryptorFunction() function.Function {

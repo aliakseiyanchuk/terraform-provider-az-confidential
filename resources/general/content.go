@@ -92,6 +92,13 @@ func CreateContentEncryptedMessage(confidentialContent string, md core.Secondary
 	return helper.ToEncryptedMessage(pubKey)
 }
 
+func DecryptContentMessage(em core.EncryptedMessage, decrypted core.RSADecrypter) (core.ConfidentialDataJsonHeader, core.ConfidentialStringData, error) {
+	helper := core.NewVersionedStringConfidentialDataHelper(ContentObjectType)
+
+	err := helper.FromEncryptedMessage(em, decrypted)
+	return helper.Header, helper.KnowValue, err
+}
+
 func (d *ConfidentialContentDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data ConfidentialContentModel
 

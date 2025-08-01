@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
+	"strings"
 	"time"
 )
 
@@ -17,6 +18,14 @@ type SecondaryProtectionParameters struct {
 	CreateLimit          int64
 	Expiry               int64
 	NumUses              int
+}
+
+func (p *SecondaryProtectionParameters) SameAs(other SecondaryProtectionParameters) bool {
+	return p.NumUses == other.NumUses &&
+		p.CreateLimit == other.CreateLimit &&
+		p.Expiry == other.Expiry &&
+		SameBag(func(a, b PlacementConstraint) bool { return a == b }, p.PlacementConstraints, other.PlacementConstraints) &&
+		SameBag(func(a, b ProviderConstraint) bool { return a == b }, p.ProviderConstraints, other.ProviderConstraints)
 }
 
 func (p *SecondaryProtectionParameters) HasProviderConstraints() bool {
@@ -157,8 +166,60 @@ func (vcd *VersionedConfidentialDataHelperTemplate[T, TAtRest]) ImportRaw(plainT
 	}
 }
 
+func (vcd *VersionedConfidentialDataHelperTemplate[T, TAtRest]) FromEncryptedMessage(em EncryptedMessage, decrypter RSADecrypter) error {
+	plainText, decryptErr := em.ExtractPlainText(decrypter)
+	if decryptErr != nil {
+		return decryptErr
+	}
+
+	gzip, gzipErr := GZipDecompress(plainText)
+	if gzipErr != nil {
+		return gzipErr
+	}
+
+	v := ConfidentialDataMessageJson{}
+	jsonErr := json.Unmarshal(gzip, &v)
+	if jsonErr != nil {
+		return jsonErr
+	}
+
+	if vcd.ObjectType != v.Header.Type {
+		return fmt.Errorf("unexpected object type: expected %s, got %s", vcd.ObjectType, v.Header.Type)
+	}
+
+	vcd.Header = v.Header
+
+	vcd.ModelName = v.Header.ModelReference
+
+	specificValue, sErr := vcd.Import(v.ConfidentialData, v.Header.ModelReference)
+	vcd.KnowValue = specificValue
+
+	return sErr
+}
+
 func (vcd *VersionedConfidentialDataHelperTemplate[T, TAtRest]) ToEncryptedMessage(rsaKey *rsa.PublicKey) (EncryptedMessage, error) {
-	rv := EncryptedMessage{}
+	rv := EncryptedMessage{
+		headers: map[string]string{
+			"CreateLimit": fmt.Sprintf("%d", vcd.Header.CreateLimit),
+			"Expiry":      fmt.Sprintf("%d", vcd.Header.Expiry),
+			"ProviderConstraints": strings.Join(
+				MapSlice(
+					func(constraint ProviderConstraint) string { return string(constraint) },
+					vcd.Header.ProviderConstraints,
+				),
+				",",
+			),
+			"PlacementConstraints": strings.Join(
+				MapSlice(
+					func(constraint PlacementConstraint) string { return string(constraint) },
+					vcd.Header.PlacementConstraints,
+				),
+				",",
+			),
+			"Type":           vcd.Header.Type,
+			"ModelReference": vcd.Header.ModelReference,
+		},
+	}
 	exportedBytes, exportErr := vcd.Export()
 	if exportErr != nil {
 		return rv, exportErr

@@ -2,9 +2,11 @@ package apim
 
 import (
 	"context"
+	"crypto/rsa"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core/testkeymaterial"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -605,4 +607,99 @@ func Test_NV_ResourceRequest(t *testing.T) {
 	mdResp := resource.MetadataResponse{}
 	rv.Metadata(context.Background(), mdReq, &mdResp)
 	assert.Equal(t, "az-confidential_apim_named_value", mdResp.TypeName)
+}
+
+func Test_NewNamedValueEncryptorFunction_Returns(t *testing.T) {
+	rv := NewNamedValueEncryptorFunction()
+	assert.NotNil(t, rv)
+}
+
+func Test_CreateNamedValueEncryptedMessage_NonLocking(t *testing.T) {
+	reqMd := core.SecondaryProtectionParameters{
+		CreateLimit:         100,
+		Expiry:              200,
+		ProviderConstraints: []core.ProviderConstraint{"acceptance"},
+		NumUses:             300,
+	}
+
+	rsaKey, err := core.LoadPublicKeyFromData(testkeymaterial.EphemeralRsaPublicKey)
+	assert.NoError(t, err)
+
+	_, md, err := CreateNamedValueEncryptedMessage("this is a named value", nil, reqMd, rsaKey)
+	assert.NoError(t, err)
+	assert.True(t, reqMd.SameAs(md))
+}
+
+func Test_CreateNamedValueEncryptedMessage_Locking(t *testing.T) {
+	reqMd := core.SecondaryProtectionParameters{
+		CreateLimit:         100,
+		Expiry:              200,
+		ProviderConstraints: []core.ProviderConstraint{"acceptance"},
+		NumUses:             300,
+	}
+
+	lockCoord := &DestinationNamedValueModel{
+		Name: types.StringValue("namedValue"),
+	}
+
+	rsaKey, err := core.LoadPublicKeyFromData(testkeymaterial.EphemeralRsaPublicKey)
+	assert.NoError(t, err)
+
+	_, md, err := CreateNamedValueEncryptedMessage("this is a named value", lockCoord, reqMd, rsaKey)
+	assert.NoError(t, err)
+	assert.False(t, reqMd.SameAs(md))
+	assert.Equal(t, 1, len(md.PlacementConstraints))
+	assert.Equal(t,
+		"az-c-label:///subscriptions//resourceGroups//providers/Microsoft.ApiManagement/service//namedValues/namedValue",
+		string(md.PlacementConstraints[0]))
+}
+
+func Test_CreateNamedValueEncryptedMessage_EncryptedMessage(t *testing.T) {
+	reqMd := core.SecondaryProtectionParameters{
+		CreateLimit:         100,
+		Expiry:              200,
+		ProviderConstraints: []core.ProviderConstraint{"acceptance"},
+		NumUses:             300,
+	}
+
+	lockCoord := &DestinationNamedValueModel{
+		Name: types.StringValue("namedValue"),
+	}
+
+	rsaKey, err := core.LoadPublicKeyFromData(testkeymaterial.EphemeralRsaPublicKey)
+	assert.NoError(t, err)
+
+	rsaPrivKey, err := core.PrivateKeyFromData(testkeymaterial.EphemeralRsaKeyText)
+	assert.NoError(t, err)
+
+	em, _, err := CreateNamedValueEncryptedMessage("this is a named value", lockCoord, reqMd, rsaKey)
+	assert.NoError(t, err)
+
+	ciphertext := em.ToBase64PEM()
+	rbEm := core.EncryptedMessage{}
+
+	err = rbEm.FromBase64PEM(ciphertext)
+	assert.NoError(t, err)
+
+	hdr, msg, err := DecryptNamedValueMessage(
+		em,
+		func(bytes []byte) ([]byte, error) {
+			return core.RsaDecryptBytes(rsaPrivKey.(*rsa.PrivateKey), bytes, nil)
+		},
+	)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "this is a named value", msg.GetStingData())
+	assert.Equal(t, int64(100), hdr.CreateLimit)
+	assert.Equal(t, int64(200), hdr.Expiry)
+	assert.Equal(t, 300, hdr.NumUses)
+	assert.True(t, core.SameBag(
+		func(a, b core.ProviderConstraint) bool { return a == b },
+		[]core.ProviderConstraint{"acceptance"},
+		hdr.ProviderConstraints,
+	))
+	assert.Equal(t,
+		core.PlacementConstraint("az-c-label:///subscriptions//resourceGroups//providers/Microsoft.ApiManagement/service//namedValues/namedValue"),
+		hdr.PlacementConstraints[0],
+	)
 }

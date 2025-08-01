@@ -4,6 +4,8 @@ import (
 	"context"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core/testkeymaterial"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -603,4 +605,59 @@ func Test_Sub_DoDelete(t *testing.T) {
 	assert.Equal(t, 0, len(dg))
 
 	factoryMock.AssertExpectations(t)
+}
+
+func Test_NewSubscriptionEncryptorFunction_Returns(t *testing.T) {
+	rv := NewSubscriptionEncryptorFunction()
+	assert.NotNil(t, rv)
+}
+
+func Test_CreateSubscriptionEncryptedMessage_NonLocking(t *testing.T) {
+	reqMd := core.SecondaryProtectionParameters{
+		CreateLimit:         100,
+		Expiry:              200,
+		ProviderConstraints: []core.ProviderConstraint{"acceptance"},
+		NumUses:             300,
+	}
+
+	keys := SubscriptionDataFunctionParameter{
+		PrimaryKey:   types.StringValue("a"),
+		SecondaryKey: types.StringValue("b"),
+	}
+
+	rsaKey, err := core.LoadPublicKeyFromData(testkeymaterial.EphemeralRsaPublicKey)
+	assert.NoError(t, err)
+
+	_, md, err := CreateSubscriptionEncryptedMessage(keys, nil, reqMd, rsaKey)
+	assert.NoError(t, err)
+	assert.True(t, reqMd.SameAs(md))
+}
+
+func Test_CreateSubscriptionEncryptedMessage_Locking(t *testing.T) {
+	reqMd := core.SecondaryProtectionParameters{
+		CreateLimit:         100,
+		Expiry:              200,
+		ProviderConstraints: []core.ProviderConstraint{"acceptance"},
+		NumUses:             300,
+	}
+
+	keys := SubscriptionDataFunctionParameter{
+		PrimaryKey:   types.StringValue("a"),
+		SecondaryKey: types.StringValue("b"),
+	}
+
+	lockCoord := &DestinationSubscriptionCoordinateModel{
+		ProductIdentifier: types.StringValue("productId"),
+	}
+
+	rsaKey, err := core.LoadPublicKeyFromData(testkeymaterial.EphemeralRsaPublicKey)
+	assert.NoError(t, err)
+
+	_, md, err := CreateSubscriptionEncryptedMessage(keys, lockCoord, reqMd, rsaKey)
+	assert.NoError(t, err)
+	assert.False(t, reqMd.SameAs(md))
+	assert.Equal(t, 1, len(md.PlacementConstraints))
+	assert.Equal(t,
+		"az-c-label:///subscriptions//resourceGroups//providers/Microsoft.ApiManagement/service//subscriptions/?api=/product=productId/user=",
+		string(md.PlacementConstraints[0]))
 }

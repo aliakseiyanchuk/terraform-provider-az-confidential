@@ -2,9 +2,11 @@ package keyvault
 
 import (
 	"context"
+	"crypto/rsa"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core/testkeymaterial"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -537,4 +539,103 @@ func Test_CAzVSR_DoCreate(t *testing.T) {
 
 	factoryMock.AssertExpectations(t)
 	clMock.AssertExpectations(t)
+}
+
+func Test_NewSecretEncryptorFunction_WillReturn(t *testing.T) {
+	rv := NewSecretEncryptorFunction()
+	assert.NotNil(t, rv)
+}
+
+func Test_CreateSecretEncryptedMessage_NonLocking(t *testing.T) {
+	reqMd := core.SecondaryProtectionParameters{
+		CreateLimit:         100,
+		Expiry:              200,
+		ProviderConstraints: []core.ProviderConstraint{"acceptance"},
+		NumUses:             300,
+	}
+
+	rsaKey, err := core.LoadPublicKeyFromData(testkeymaterial.EphemeralRsaPublicKey)
+	assert.NoError(t, err)
+
+	_, md, err := CreateSecretEncryptedMessage("this is a secret value", nil, reqMd, rsaKey)
+	assert.NoError(t, err)
+	assert.True(t, reqMd.SameAs(md))
+}
+
+func Test_CreateSecretEncryptedMessage_Locking(t *testing.T) {
+	reqMd := core.SecondaryProtectionParameters{
+		CreateLimit:         100,
+		Expiry:              200,
+		ProviderConstraints: []core.ProviderConstraint{"acceptance"},
+		NumUses:             300,
+	}
+
+	lockCoord := &core.AzKeyVaultObjectCoordinate{
+		VaultName: "vaultName",
+		Name:      "secret",
+		Type:      "secrets",
+	}
+
+	rsaKey, err := core.LoadPublicKeyFromData(testkeymaterial.EphemeralRsaPublicKey)
+	assert.NoError(t, err)
+
+	_, md, err := CreateSecretEncryptedMessage("this is a secret value", lockCoord, reqMd, rsaKey)
+	assert.NoError(t, err)
+	assert.False(t, reqMd.SameAs(md))
+	assert.Equal(t, 1, len(md.PlacementConstraints))
+	assert.Equal(t,
+		"az-c-keyvault://vaultName@secrets=secret",
+		string(md.PlacementConstraints[0]))
+}
+
+func Test_CreateSecretEncryptedMessage_EncryptedMessage(t *testing.T) {
+	reqMd := core.SecondaryProtectionParameters{
+		CreateLimit:         100,
+		Expiry:              200,
+		ProviderConstraints: []core.ProviderConstraint{"acceptance"},
+		NumUses:             300,
+	}
+
+	lockCoord := &core.AzKeyVaultObjectCoordinate{
+		VaultName: "vaultName",
+		Name:      "secret",
+		Type:      "secrets",
+	}
+
+	rsaKey, err := core.LoadPublicKeyFromData(testkeymaterial.EphemeralRsaPublicKey)
+	assert.NoError(t, err)
+
+	rsaPrivKey, err := core.PrivateKeyFromData(testkeymaterial.EphemeralRsaKeyText)
+	assert.NoError(t, err)
+
+	em, _, err := CreateSecretEncryptedMessage("this is a secret value", lockCoord, reqMd, rsaKey)
+	assert.NoError(t, err)
+
+	ciphertext := em.ToBase64PEM()
+	rbEm := core.EncryptedMessage{}
+
+	err = rbEm.FromBase64PEM(ciphertext)
+	assert.NoError(t, err)
+
+	hdr, msg, err := DecryptSecretMessage(
+		em,
+		func(bytes []byte) ([]byte, error) {
+			return core.RsaDecryptBytes(rsaPrivKey.(*rsa.PrivateKey), bytes, nil)
+		},
+	)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "this is a secret value", msg.GetStingData())
+	assert.Equal(t, int64(100), hdr.CreateLimit)
+	assert.Equal(t, int64(200), hdr.Expiry)
+	assert.Equal(t, 300, hdr.NumUses)
+	assert.True(t, core.SameBag(
+		func(a, b core.ProviderConstraint) bool { return a == b },
+		[]core.ProviderConstraint{"acceptance"},
+		hdr.ProviderConstraints,
+	))
+	assert.Equal(t,
+		core.PlacementConstraint("az-c-keyvault://vaultName@secrets=secret"),
+		hdr.PlacementConstraints[0],
+	)
 }

@@ -483,6 +483,13 @@ func CreateNamedValueEncryptedMessage(confidentialModel string, dest *Destinatio
 	return em, md, emErr
 }
 
+func DecryptNamedValueMessage(em core.EncryptedMessage, decrypted core.RSADecrypter) (core.ConfidentialDataJsonHeader, core.ConfidentialStringData, error) {
+	helper := core.NewVersionedStringConfidentialDataHelper(NamedValueObjectType)
+
+	err := helper.FromEncryptedMessage(em, decrypted)
+	return helper.Header, helper.KnowValue, err
+}
+
 func NewNamedValueEncryptorFunction() function.Function {
 	rv := resources.FunctionTemplate[string, DestinationNamedValueModel]{
 		Name:                "encrypt_apim_named_value",

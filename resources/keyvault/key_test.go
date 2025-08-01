@@ -2,6 +2,7 @@ package keyvault
 
 import (
 	"context"
+	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -780,4 +781,196 @@ func Test_CAzVKR_DoDelete(t *testing.T) {
 func TestNewConfidentialAzVaultKeyResource(t *testing.T) {
 	// Testing that bootstrapping the resource would complete.
 	_ = NewKeyResource()
+}
+
+func TestNewKeyEncryptorFunctionWillReturn(t *testing.T) {
+	f := NewKeyEncryptorFunction()
+	assert.NotNil(t, f)
+}
+
+// ----------------------------------
+// Testing various methods of acquiring a JWT key.
+
+func Test_CAzVKR_AcquireKey_PemNoPassword(t *testing.T) {
+	key, err := AcquireJWT(testkeymaterial.EphemeralRsaKeyText, "")
+	assert.NoError(t, err)
+	_, ok := key.(jwk.RSAPrivateKey)
+	assert.True(t, ok)
+}
+
+func Test_CAzVKR_AcquireKey_PemWrongPassword(t *testing.T) {
+	_, err := AcquireJWT(testkeymaterial.EphemeralEncryptedRsaKeyText, "")
+	assert.Error(t, err)
+
+}
+
+func Test_CAzVKR_AcquireKey_PemEncryptedCorrectPassword(t *testing.T) {
+	key, err := AcquireJWT(testkeymaterial.EphemeralEncryptedRsaKeyText, "s1cr3t")
+	assert.NoError(t, err)
+	_, ok := key.(jwk.RSAPrivateKey)
+	assert.True(t, ok)
+}
+
+func Test_CAzVKR_AcquireKey_PemEncryptedWrongPassword(t *testing.T) {
+	_, err := AcquireJWT(testkeymaterial.EphemeralEncryptedRsaKeyDERForm, "")
+	assert.Error(t, err)
+}
+
+func Test_CAzVKR_AcquireKey_DEREncryptedCorrectPassword(t *testing.T) {
+	key, err := AcquireJWT(testkeymaterial.EphemeralEncryptedRsaKeyDERForm, "s1cr3t")
+	assert.NoError(t, err)
+	_, ok := key.(jwk.RSAPrivateKey)
+	assert.True(t, ok)
+}
+
+func Test_CreateKeyEncryptedMessage_NonLocking(t *testing.T) {
+	reqMd := core.SecondaryProtectionParameters{
+		CreateLimit:         100,
+		Expiry:              200,
+		ProviderConstraints: []core.ProviderConstraint{"acceptance"},
+		NumUses:             300,
+	}
+
+	privKey, privKeyErr := AcquireJWT(testkeymaterial.EphemeralRsaKeyText, "")
+	assert.NoError(t, privKeyErr)
+
+	rsaKey, err := core.LoadPublicKeyFromData(testkeymaterial.EphemeralRsaPublicKey)
+	assert.NoError(t, err)
+
+	_, md, err := CreateKeyEncryptedMessage(privKey, nil, reqMd, rsaKey)
+	assert.NoError(t, err)
+	assert.True(t, reqMd.SameAs(md))
+}
+
+func Test_CreateKeyEncryptedMessage_Locking(t *testing.T) {
+	reqMd := core.SecondaryProtectionParameters{
+		CreateLimit:         100,
+		Expiry:              200,
+		ProviderConstraints: []core.ProviderConstraint{"acceptance"},
+		NumUses:             300,
+	}
+
+	lockCoord := &core.AzKeyVaultObjectCoordinate{
+		VaultName: "vaultName",
+		Name:      "key",
+		Type:      "keys",
+	}
+
+	privKey, privKeyErr := AcquireJWT(testkeymaterial.EphemeralRsaKeyText, "")
+	assert.NoError(t, privKeyErr)
+
+	rsaKey, err := core.LoadPublicKeyFromData(testkeymaterial.EphemeralRsaPublicKey)
+	assert.NoError(t, err)
+
+	_, md, err := CreateKeyEncryptedMessage(privKey, lockCoord, reqMd, rsaKey)
+	assert.NoError(t, err)
+	assert.False(t, reqMd.SameAs(md))
+	assert.Equal(t, 1, len(md.PlacementConstraints))
+	assert.Equal(t,
+		"az-c-keyvault://vaultName@keys=key",
+		string(md.PlacementConstraints[0]))
+}
+
+func Test_CreateKeyEncryptedMessage_EncryptedMessage_Pem(t *testing.T) {
+	exerciseCreateKeyEncryptedMessageCycle(
+		t,
+		testkeymaterial.EphemeralRsaKeyText,
+		"",
+		func(i interface{}) bool { _, ok := i.(jwk.RSAPrivateKey); return ok },
+	)
+}
+
+func Test_CreateKeyEncryptedMessage_EncryptedMessage_PemPassword(t *testing.T) {
+	exerciseCreateKeyEncryptedMessageCycle(
+		t,
+		testkeymaterial.EphemeralEncryptedRsaKeyText,
+		"s1cr3t",
+		func(i interface{}) bool { _, ok := i.(jwk.RSAPrivateKey); return ok },
+	)
+}
+
+func Test_CreateKeyEncryptedMessage_EncryptedMessage_DER(t *testing.T) {
+	exerciseCreateKeyEncryptedMessageCycle(
+		t,
+		testkeymaterial.EphemeralRsaKeyDERForm,
+		"",
+		func(i interface{}) bool { _, ok := i.(jwk.RSAPrivateKey); return ok },
+	)
+}
+
+func Test_CreateKeyEncryptedMessage_EncryptedMessage_DEREncrypted(t *testing.T) {
+	exerciseCreateKeyEncryptedMessageCycle(
+		t,
+		testkeymaterial.EphemeralRsaKeyDERForm,
+		"s1cr3t",
+		func(i interface{}) bool { _, ok := i.(jwk.RSAPrivateKey); return ok },
+	)
+}
+
+func Test_CreateKeyEncryptedMessage_EncryptedMessage_EC(t *testing.T) {
+	exerciseCreateKeyEncryptedMessageCycle(
+		t,
+		testkeymaterial.Prime256v1EcPrivateKey,
+		"",
+		func(i interface{}) bool { _, ok := i.(jwk.ECDSAPrivateKey); return ok },
+	)
+}
+
+func exerciseCreateKeyEncryptedMessageCycle(t *testing.T, key []byte, password string, typeChecker core.Mapper[interface{}, bool]) {
+	reqMd := core.SecondaryProtectionParameters{
+		CreateLimit:         100,
+		Expiry:              200,
+		ProviderConstraints: []core.ProviderConstraint{"acceptance"},
+		NumUses:             300,
+	}
+
+	lockCoord := &core.AzKeyVaultObjectCoordinate{
+		VaultName: "vaultName",
+		Name:      "key",
+		Type:      "keys",
+	}
+
+	privKey, privKeyErr := AcquireJWT(key, password)
+	assert.NoError(t, privKeyErr)
+
+	rsaKey, err := core.LoadPublicKeyFromData(testkeymaterial.EphemeralRsaPublicKey)
+	assert.NoError(t, err)
+
+	rsaPrivKey, err := core.PrivateKeyFromData(testkeymaterial.EphemeralRsaKeyText)
+	assert.NoError(t, err)
+
+	em, _, err := CreateKeyEncryptedMessage(privKey, lockCoord, reqMd, rsaKey)
+	assert.NoError(t, err)
+
+	ciphertext := em.ToBase64PEM()
+	rbEm := core.EncryptedMessage{}
+
+	err = rbEm.FromBase64PEM(ciphertext)
+	assert.NoError(t, err)
+
+	hdr, rbKey, err := DecryptKeyMessage(
+		em,
+		func(bytes []byte) ([]byte, error) {
+			return core.RsaDecryptBytes(rsaPrivKey.(*rsa.PrivateKey), bytes, nil)
+		},
+	)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, rbKey)
+
+	isRsaKey := typeChecker(rbKey)
+	assert.True(t, isRsaKey)
+
+	assert.Equal(t, int64(100), hdr.CreateLimit)
+	assert.Equal(t, int64(200), hdr.Expiry)
+	assert.Equal(t, 300, hdr.NumUses)
+	assert.True(t, core.SameBag(
+		func(a, b core.ProviderConstraint) bool { return a == b },
+		[]core.ProviderConstraint{"acceptance"},
+		hdr.ProviderConstraints,
+	))
+	assert.Equal(t,
+		core.PlacementConstraint("az-c-keyvault://vaultName@keys=key"),
+		hdr.PlacementConstraints[0],
+	)
 }

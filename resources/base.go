@@ -404,6 +404,7 @@ func (d *CommonConfidentialResource) ExtractConfidentialModelPlainText(ctx conte
 		return nil
 	}
 
+	// TODO: this method mayh be moved into GetDecrypterFor.
 	// To create a secret, a coordinate of the wrapping key needs to be established and known
 	wrappingKeyCoordinate := d.Factory.GetMergedWrappingKeyCoordinate(ctx, mdl.WrappingKeyCoordinate, diagnostics)
 	if diagnostics.HasError() {

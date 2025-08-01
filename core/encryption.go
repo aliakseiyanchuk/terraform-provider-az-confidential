@@ -65,6 +65,7 @@ func Sha256Of(value string) string {
 type EncryptedMessage struct {
 	secretText           []byte
 	contentEncryptionKey []byte
+	headers              map[string]string
 }
 
 func (em *EncryptedMessage) EncryptPlainText(payload []byte, rsaKey *rsa.PublicKey) error {
@@ -157,7 +158,7 @@ func (em *EncryptedMessage) ToPEM() []byte {
 
 	textBlock := pem.Block{
 		Type:    "CONTENT",
-		Headers: map[string]string{},
+		Headers: em.headers,
 		Bytes:   em.secretText,
 	}
 
@@ -211,6 +212,7 @@ func (em *EncryptedMessage) FromPEM(data []byte) error {
 
 	if secretBlock := FindPEMBlock(pemBloks, "CONTENT"); secretBlock != nil {
 		em.secretText = secretBlock.Bytes
+		em.headers = secretBlock.Headers
 	} else {
 		return errors.New("provided input must contain at least CONTENT block")
 	}

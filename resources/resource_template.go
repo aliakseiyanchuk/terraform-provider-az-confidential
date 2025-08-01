@@ -364,6 +364,9 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 
 func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) GetRawVersionedConfidentialDataMessage(ctx context.Context, confMat ConfidentialMaterialModel, dg *diag.Diagnostics) core.ConfidentialDataMessageJson {
 	rawMsg := core.ConfidentialDataMessageJson{}
+
+	// TODO: this one can also be simplified by moving most of the logic
+	// into the encrypted message.
 	plainTextGzip := d.ExtractConfidentialModelPlainText(ctx, confMat, dg)
 	if dg.HasError() {
 		return rawMsg
