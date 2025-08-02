@@ -19,7 +19,7 @@ func Test_Key_OutputSecretTerraformCode_Renders(t *testing.T) {
 	jwkKey, jwkImportErr := jwk.Import(testkeymaterial.EphemeralRsaKeyText)
 	assert.Nil(t, jwkImportErr)
 
-	v, err := OutputKeyTerraformCode(
+	v, _, err := OutputKeyTerraformCode(
 		mdl,
 		&kwp,
 		jwkKey)
@@ -80,7 +80,7 @@ func Test_Key_ConvertSymmetricKey(t *testing.T) {
 }
 
 func assertGeneratorFunctionRendersSuccessfully(t *testing.T, cwp model.ContentWrappingParams, fn model.SubCommandExecution, readerMock *io.InputReaderMock) {
-	tfCode, tfCodeErr := fn(readerMock.ReadInput, false)
+	tfCode, _, tfCodeErr := fn(readerMock.ReadInput)
 	assert.Nil(t, tfCodeErr)
 	assert.True(t, len(tfCode) > 100)
 
@@ -94,7 +94,7 @@ func assertGeneratorFunctionRendersSuccessfully(t *testing.T, cwp model.ContentW
 }
 
 func assertGeneratorFunctionErrs(t *testing.T, cwp model.ContentWrappingParams, fn model.SubCommandExecution, readerMock *io.InputReaderMock) error {
-	tfCode, tfCodeErr := fn(readerMock.ReadInput, false)
+	tfCode, _, tfCodeErr := fn(readerMock.ReadInput)
 	assert.NotNil(t, tfCodeErr)
 	assert.Equal(t, 0, len(tfCode))
 

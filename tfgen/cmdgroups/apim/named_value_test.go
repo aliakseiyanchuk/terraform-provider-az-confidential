@@ -43,7 +43,7 @@ func givenTypicalNamedValueWrappingParameters(t *testing.T) (NamedValueTerraform
 
 func TestNamedValueWillProduceOutput(t *testing.T) {
 	mdl, kwp := givenTypicalNamedValueWrappingParameters(t)
-	tfCode, err := OutputNamedValueTerraformCode(mdl, &kwp, "this is a secret named value")
+	tfCode, _, err := OutputNamedValueTerraformCode(mdl, &kwp, "this is a secret named value")
 
 	fmt.Println(tfCode)
 

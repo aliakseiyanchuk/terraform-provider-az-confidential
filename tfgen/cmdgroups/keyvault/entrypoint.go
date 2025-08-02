@@ -7,23 +7,23 @@ import (
 )
 
 var subcommands = []string{
-	"secret",
-	"key",
-	"certificate",
+	SecretCommand,
+	KeyCommand,
+	CertificateCommand,
 }
 
-// EntryPoint entry point that a wrapping CLI tool should use to trigger the CLI pocessing.
+// EntryPoint entry point that a wrapping CLI tool should use to trigger the CLI processing.
 func EntryPoint(kwp *model.ContentWrappingParams, command string, args []string) (model.SubCommandExecution, error) {
 	switch command {
 	case "help":
 		PrintGroupHelp()
 		os.Exit(2)
 		return nil, nil
-	case "secret":
+	case SecretCommand:
 		return MakeSecretGenerator(kwp, args)
-	case "key":
+	case KeyCommand:
 		return MakeKeyGenerator(kwp, args...)
-	case "certificate":
+	case CertificateCommand:
 		return MakeCertGenerator(kwp, args...)
 	default:
 		return nil, fmt.Errorf("unknown subcommand: %s", command)

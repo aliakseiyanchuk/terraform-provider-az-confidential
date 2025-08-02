@@ -17,7 +17,7 @@ func EntryPoint(kwp *model.ContentWrappingParams, command string, args []string)
 		printSubcommandSelectionHelp()
 		os.Exit(2)
 		return nil, nil
-	case "content":
+	case ContentCommand:
 		return MakeContentGenerator(kwp, args)
 	default:
 		return nil, fmt.Errorf("unknown subcommand: %s", command)

@@ -42,7 +42,7 @@ func Test_Secret_OutputSecretTerraformCode_Renders(t *testing.T) {
 	secretModel.WrappingKeyCoordinate.KeyName.SetExpression("var.key_name")
 	secretModel.WrappingKeyCoordinate.KeyVersion.SetExpression("var.key_version")
 
-	v, err := OutputSecretTerraformCode(secretModel, &kwp, "this is a secret")
+	v, _, err := OutputSecretTerraformCode(secretModel, &kwp, "this is a secret")
 	assert.Nil(t, err)
 	if err != nil {
 		fmt.Println(errors.Unwrap(err))

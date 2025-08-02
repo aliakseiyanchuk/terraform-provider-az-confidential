@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"maps"
 	"time"
 )
 
@@ -19,14 +20,92 @@ func (pkv *PublicKeyValidator) ValidateParameterString(_ context.Context, req fu
 	}
 }
 
-type ProtectionParams struct {
-	CreateLimit         types.String `tfsdk:"create_limit"`
-	ExpiresIn           types.Int32  `tfsdk:"expires_in"`
-	NumUses             types.Int32  `tfsdk:"num_uses"`
-	ProviderConstraints types.Set    `tfsdk:"provider_constraints"`
+type AttributeTyped interface {
+	GetAttributeTypes() map[string]attr.Type
 }
 
-func (p *ProtectionParams) Into(c *core.SecondaryProtectionParameters) error {
+type Exportable interface {
+	Into(ctx context.Context, c *core.SecondaryProtectionParameters) error
+}
+
+type ProtectionParameterized interface {
+	AttributeTyped
+	Exportable
+}
+
+type ProtectionParams struct {
+	ExpiresIn           types.Int32 `tfsdk:"expires_in"`
+	NumUses             types.Int32 `tfsdk:"num_uses"`
+	ProviderConstraints types.Set   `tfsdk:"provider_constraints"`
+}
+
+func (p ProtectionParams) GetAttributeTypes() map[string]attr.Type {
+	return map[string]attr.Type{
+		"num_uses":   types.Int32Type,
+		"expires_in": types.Int32Type,
+		"provider_constraints": types.SetType{
+			ElemType: types.StringType,
+		},
+	}
+}
+
+type LimitedCreateProtectionParam struct {
+	CreateLimit types.String `tfsdk:"create_limit"`
+}
+
+func (p LimitedCreateProtectionParam) GetAttributeTypes() map[string]attr.Type {
+	return map[string]attr.Type{
+		"create_limit": types.StringType,
+	}
+}
+
+type ResourceProtectionParams struct {
+	ProtectionParams
+	LimitedCreateProtectionParam
+}
+
+func (p ResourceProtectionParams) GetAttributeTypes() map[string]attr.Type {
+	rv := map[string]attr.Type{}
+	maps.Copy(p.ProtectionParams.GetAttributeTypes(), rv)
+	maps.Copy(p.LimitedCreateProtectionParam.GetAttributeTypes(), rv)
+
+	return rv
+}
+
+func (p ResourceProtectionParams) Into(ctx context.Context, c *core.SecondaryProtectionParameters) error {
+	if err := p.ProtectionParams.Into(ctx, c); err != nil {
+		return err
+	}
+	if err := p.LimitedCreateProtectionParam.Into(c); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p ProtectionParams) Into(ctx context.Context, c *core.SecondaryProtectionParameters) error {
+	if !p.ExpiresIn.IsUnknown() && !p.ExpiresIn.IsNull() {
+		c.Expiry = time.Now().Add(time.Hour * time.Duration(24*int(p.ExpiresIn.ValueInt32()))).Unix()
+	}
+
+	if !p.NumUses.IsUnknown() && !p.NumUses.IsNull() {
+		c.NumUses = int(p.NumUses.ValueInt32())
+	}
+
+	if len(p.ProviderConstraints.Elements()) > 0 {
+		var elems []string
+		p.ProviderConstraints.ElementsAs(ctx, &elems, true)
+
+		c.ProviderConstraints = make([]core.ProviderConstraint, len(elems))
+		for i, elem := range elems {
+			c.ProviderConstraints[i] = core.ProviderConstraint(elem)
+		}
+	}
+
+	return nil
+
+}
+func (p LimitedCreateProtectionParam) Into(c *core.SecondaryProtectionParameters) error {
 	if !p.CreateLimit.IsUnknown() && !p.CreateLimit.IsNull() && len(p.CreateLimit.ValueString()) > 0 {
 		d, durErr := time.ParseDuration(p.CreateLimit.ValueString())
 		if durErr != nil {
@@ -36,33 +115,26 @@ func (p *ProtectionParams) Into(c *core.SecondaryProtectionParameters) error {
 		c.CreateLimit = time.Now().Unix() + int64(d.Seconds())
 	}
 
-	if !p.ExpiresIn.IsUnknown() && !p.ExpiresIn.IsNull() {
-		c.Expiry = time.Now().Add(time.Hour * time.Duration(24*int(p.ExpiresIn.ValueInt32()))).Unix()
-	}
-
-	if !p.NumUses.IsUnknown() && !p.NumUses.IsNull() {
-		c.NumUses = int(p.NumUses.ValueInt32())
-	}
-
 	return nil
 }
 
-type FunctionTemplate[TMdl, DestMdl any] struct {
-	Name                      string
-	Summary                   string
-	MarkdownDescription       string
-	DataParameter             function.Parameter
-	DestinationParameter      function.Parameter
-	ConfidentialModelSupplier core.Supplier[TMdl]
-	DestinationModelSupplier  core.Supplier[*DestMdl]
-	CreatEncryptedMessage     func(confidentialModel TMdl, dest *DestMdl, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error)
+type FunctionTemplate[TMdl any, TProtection ProtectionParameterized, DestMdl any] struct {
+	Name                        string
+	Summary                     string
+	MarkdownDescription         string
+	DataParameter               function.Parameter
+	ProtectionParameterSupplier core.Supplier[TProtection]
+	DestinationParameter        function.Parameter
+	ConfidentialModelSupplier   core.Supplier[TMdl]
+	DestinationModelSupplier    core.Supplier[*DestMdl]
+	CreatEncryptedMessage       func(confidentialModel TMdl, dest *DestMdl, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error)
 }
 
-func (f *FunctionTemplate[TMdl, DestMdl]) Metadata(_ context.Context, _ function.MetadataRequest, resp *function.MetadataResponse) {
+func (f *FunctionTemplate[TMdl, TProtection, DestMdl]) Metadata(_ context.Context, _ function.MetadataRequest, resp *function.MetadataResponse) {
 	resp.Name = f.Name
 }
 
-func (f *FunctionTemplate[TMdl, DestMdl]) Definition(_ context.Context, _ function.DefinitionRequest, resp *function.DefinitionResponse) {
+func (f *FunctionTemplate[TMdl, TProtection, DestMdl]) Definition(_ context.Context, _ function.DefinitionRequest, resp *function.DefinitionResponse) {
 	funcParams := []function.Parameter{
 		f.DataParameter,
 	}
@@ -70,20 +142,15 @@ func (f *FunctionTemplate[TMdl, DestMdl]) Definition(_ context.Context, _ functi
 		funcParams = append(funcParams, f.DestinationParameter)
 	}
 
+	protectionParam := f.ProtectionParameterSupplier()
+
 	funcParams = append(funcParams,
 		function.ObjectParameter{
 			Name:           "content_protection",
-			Description:    "Secondary content protection parameters to be embedded into  output ciphertext",
+			Description:    "Secondary content protection parameters to be embedded into the output ciphertext",
 			AllowNullValue: true,
 
-			AttributeTypes: map[string]attr.Type{
-				"create_limit": types.StringType,
-				"num_uses":     types.Int32Type,
-				"expires_in":   types.Int32Type,
-				"provider_constraints": types.SetType{
-					ElemType: types.StringType,
-				},
-			},
+			AttributeTypes: protectionParam.GetAttributeTypes(),
 		},
 		function.StringParameter{
 			Name:        "public_key",
@@ -103,10 +170,10 @@ func (f *FunctionTemplate[TMdl, DestMdl]) Definition(_ context.Context, _ functi
 	}
 }
 
-func (f *FunctionTemplate[TMdl, DestMdl]) Run(ctx context.Context, req function.RunRequest, resp *function.RunResponse) {
+func (f *FunctionTemplate[TMdl, TProtection, DestMdl]) Run(ctx context.Context, req function.RunRequest, resp *function.RunResponse) {
 	confidentialModel := f.ConfidentialModelSupplier()
 	destinationModel := f.DestinationModelSupplier()
-	var headerParams *ProtectionParams
+	var headerParams *TProtection
 	var publicKey string
 
 	if f.DestinationParameter != nil {
@@ -127,7 +194,7 @@ func (f *FunctionTemplate[TMdl, DestMdl]) Run(ctx context.Context, req function.
 
 	md := core.SecondaryProtectionParameters{}
 	if headerParams != nil {
-		if copyErr := headerParams.Into(&md); copyErr != nil {
+		if copyErr := (*headerParams).Into(ctx, &md); copyErr != nil {
 			resp.Error = function.ConcatFuncErrors(resp.Error, function.NewFuncError(fmt.Sprintf("incorrect content protection parameters: %s", copyErr.Error())))
 			return
 		}

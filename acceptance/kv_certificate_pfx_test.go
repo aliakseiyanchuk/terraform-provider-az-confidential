@@ -39,12 +39,12 @@ func generatePFXCertificateResource(t *testing.T) string {
 		CertificateDataPassword: "s1cr3t",
 	}
 
-	if rv, tfErr := keyvault.OutputCertificateTerraformCode(mdl, &kwp, &confData); tfErr != nil {
+	if rv, _, tfErr := keyvault.OutputCertificateTerraformCode(mdl, &kwp, &confData); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
-		return rv
+		return rv.String()
 	} else {
 		//print(rv)
-		return rv
+		return rv.String()
 	}
 }
 

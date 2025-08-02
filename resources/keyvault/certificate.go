@@ -521,7 +521,7 @@ func DecryptCertificateMessage(em core.EncryptedMessage, decrypted core.RSADecry
 }
 
 func NewCertificateEncryptorFunction() function.Function {
-	rv := resources.FunctionTemplate[CertificateDataFunctionParameter, core.AzKeyVaultObjectCoordinateModel]{
+	rv := resources.FunctionTemplate[CertificateDataFunctionParameter, resources.ResourceProtectionParams, core.AzKeyVaultObjectCoordinateModel]{
 		Name:                "encrypt_keyvault_certificate",
 		Summary:             "Produces a ciphertext string suitable for use with az-confidential_certificate resource",
 		MarkdownDescription: "Encrypts a certificate data without the use of the `tfgen` tool",
@@ -539,6 +539,7 @@ func NewCertificateEncryptorFunction() function.Function {
 				&AzKvCertificateParamValidator{},
 			},
 		},
+		ProtectionParameterSupplier: func() resources.ResourceProtectionParams { return resources.ResourceProtectionParams{} },
 		DestinationParameter: function.ObjectParameter{
 			Name:               "destination_certificate",
 			Description:        "Destination vault and certificate name",

@@ -176,10 +176,11 @@ func NewConfidentialPasswordDataSource() datasource.DataSource {
 }
 
 func NewPasswordEncryptionFunction() function.Function {
-	rv := resources.FunctionTemplate[string, int]{
-		Name:                "encrypt_content",
-		Summary:             "Encrypts a content",
-		MarkdownDescription: "Encrypts a content string to be used with az-confidential_content data source",
+	rv := resources.FunctionTemplate[string, resources.ProtectionParams, int]{
+		Name:                        "encrypt_content",
+		Summary:                     "Encrypts a content",
+		MarkdownDescription:         "Encrypts a content string to be used with az-confidential_content data source",
+		ProtectionParameterSupplier: func() resources.ProtectionParams { return resources.ProtectionParams{} },
 		DataParameter: function.StringParameter{
 			Name:        "password",
 			Description: "Password value that should appear in the key vault",
@@ -188,6 +189,8 @@ func NewPasswordEncryptionFunction() function.Function {
 		DestinationModelSupplier:  func() *int { return nil },
 
 		CreatEncryptedMessage: func(confidentialContent string, _ *int, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error) {
+			// Content is never created; it's limit is always set to zero. Content can only expire.
+			md.CreateLimit = 0
 			return CreateContentEncryptedMessage(confidentialContent, md, pubKey)
 		},
 	}

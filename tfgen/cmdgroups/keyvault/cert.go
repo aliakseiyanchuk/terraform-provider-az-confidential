@@ -7,7 +7,6 @@ import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/keyvault"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
-	"strings"
 )
 
 //go:embed cert_template.tmpl
@@ -51,12 +50,12 @@ func CreateCertArgsParser() (*CertTFGenParams, *flag.FlagSet) {
 		"Do not try parsing DER-encode files")
 
 	certCmd.StringVar(&certParams.vaultName,
-		"destination-vault",
+		DestinationVaultCliOption.String(),
 		"",
 		"Destination vault name")
 
 	certCmd.StringVar(&certParams.vaultObjectName,
-		"destination-cert-name",
+		DestinationVaultCertificateCliOption.String(),
 		"",
 		"Destination certificate name")
 
@@ -90,23 +89,13 @@ func MakeCertGenerator(kwp *model.ContentWrappingParams, args ...string) (model.
 		NotAfterExample:  model.NotAfterExample(),
 	}
 
-	return func(inputReader model.InputReader, onlyCiphertext bool) (string, error) {
+	return func(inputReader model.InputReader) (model.TerraformCode, core.EncryptedMessage, error) {
 		certData, certDataErr := AcquireCertificateData(certParams, inputReader)
 		if certDataErr != nil {
-			return "", certDataErr
+			return "", core.EncryptedMessage{}, certDataErr
 		}
 
-		if onlyCiphertext {
-			em, _, err := makeCertificateEncryptedMessage(mdl, kwp, certData)
-			if err != nil {
-				return "", err
-			}
-
-			fld := model.FoldString(em.ToBase64PEM(), 80)
-			return strings.Join(fld, "\n"), nil
-		} else {
-			return OutputCertificateTerraformCode(mdl, kwp, certData)
-		}
+		return OutputCertificateTerraformCode(mdl, kwp, certData)
 	}, nil
 }
 
@@ -123,7 +112,7 @@ func CertificateNeedsPassword(certData []byte) bool {
 }
 
 func AcquireCertificateData(certParams *CertTFGenParams, inputReader model.InputReader) (core.ConfidentialCertificateData, error) {
-	certData, readErr := inputReader("Enter certificate data (hit Enter twice to end input)",
+	certData, readErr := inputReader(CertificateDataPrompt,
 		certParams.inputFile,
 		certParams.inputIsBase64,
 		true)
@@ -134,7 +123,7 @@ func AcquireCertificateData(certParams *CertTFGenParams, inputReader model.Input
 
 	password := ""
 	if CertificateNeedsPassword(certData) {
-		if p, passReadErr := inputReader("This certificate is password protected; kindly supply it", certParams.certPasswordFile, false, false); passReadErr != nil {
+		if p, passReadErr := inputReader(CertificatePasswordPrompt, certParams.certPasswordFile, false, false); passReadErr != nil {
 			return nil, passReadErr
 		} else {
 			password = string(p)
@@ -145,17 +134,18 @@ func AcquireCertificateData(certParams *CertTFGenParams, inputReader model.Input
 
 }
 
-func OutputCertificateTerraformCode(mdl TerraformCodeModel, kwp *model.ContentWrappingParams, data core.ConfidentialCertificateData) (string, error) {
+func OutputCertificateTerraformCode(mdl TerraformCodeModel, kwp *model.ContentWrappingParams, data core.ConfidentialCertificateData) (model.TerraformCode, core.EncryptedMessage, error) {
 	em, params, err := makeCertificateEncryptedMessage(mdl, kwp, data)
 	if err != nil {
-		return "", err
+		return "", em, err
 	}
 
-	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
+	mdl.EncryptedContent.SetValue(model.Ciphertext(em.ToBase64PEM()))
 	mdl.EncryptedContentMetadata = kwp.GetMetadataForTerraformFor(params, "keyvault certificate", "destination_certificate")
 	mdl.EncryptedContentMetadata.ResourceHasDestination = true
 
-	return model.Render("cert", certTFTemplate, &mdl)
+	tfCode, tfCodeErr := model.Render("cert", certTFTemplate, &mdl)
+	return tfCode, em, tfCodeErr
 }
 
 func makeCertificateEncryptedMessage(mdl TerraformCodeModel, kwp *model.ContentWrappingParams, data core.ConfidentialCertificateData) (core.EncryptedMessage, core.SecondaryProtectionParameters, error) {
@@ -169,6 +159,7 @@ func makeCertificateEncryptedMessage(mdl TerraformCodeModel, kwp *model.ContentW
 		lockCoord = &core.AzKeyVaultObjectCoordinate{
 			VaultName: mdl.DestinationCoordinate.VaultName.Value,
 			Name:      mdl.DestinationCoordinate.ObjectName.Value,
+			Type:      "certificates",
 		}
 	}
 

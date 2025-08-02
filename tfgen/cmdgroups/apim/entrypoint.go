@@ -7,11 +7,11 @@ import (
 )
 
 var subcommands = []string{
-	"named_value",
-	"subscription",
+	NamedValueCommand,
+	SubscriptionCommand,
 }
 
-// EntryPoint entry point that a wrapping CLI tool should use to trigger the CLI pocessing.
+// EntryPoint entry point that a wrapping CLI tool should use to trigger the CLI processing.
 func EntryPoint(kwp *model.ContentWrappingParams, command string, args []string) (model.SubCommandExecution, error) {
 
 	switch command {
@@ -19,9 +19,9 @@ func EntryPoint(kwp *model.ContentWrappingParams, command string, args []string)
 		printSubcommandSelectionHelp()
 		os.Exit(2)
 		return nil, nil
-	case "named_value":
+	case NamedValueCommand:
 		return MakeNamedValueGenerator(kwp, args)
-	case "subscription":
+	case SubscriptionCommand:
 		return MakeSubscriptionGenerator(kwp, args)
 	default:
 		return nil, fmt.Errorf("unknown subcommand: %s", command)

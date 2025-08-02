@@ -58,15 +58,15 @@ func generatePEMEncodedRsaKeyResource(t *testing.T) string {
 		assert.Fail(t, "Imported key is not RSA; the subsequent test should fail")
 	}
 
-	if rv, tfErr := keyvault.OutputKeyTerraformCode(keyModel,
+	if rv, _, tfErr := keyvault.OutputKeyTerraformCode(keyModel,
 		&kwp,
 		jwwKey,
 	); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
-		return rv
+		return rv.String()
 	} else {
 		//print(rv)
-		return rv
+		return rv.String()
 	}
 }
 

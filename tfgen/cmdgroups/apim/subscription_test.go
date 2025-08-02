@@ -38,7 +38,7 @@ func TestWillRenderFullSubscriptionModel(t *testing.T) {
 		),
 	}
 
-	v, err := OutputSubscriptionTerraformCode(mdl, &kwp, "a", "b")
+	v, _, err := OutputSubscriptionTerraformCode(mdl, &kwp, "a", "b")
 	assert.Nil(t, err)
 	if err != nil {
 		fmt.Println(errors.Unwrap(err))

@@ -4,10 +4,10 @@ import (
 	_ "embed"
 	"errors"
 	"flag"
+	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/keyvault"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
-	"strings"
 )
 
 //go:embed secret_template.tmpl
@@ -24,12 +24,12 @@ func CreateSecretArgParser() (*KeyVaultGroupCLIParams, *flag.FlagSet) {
 		"Read secret from specified file")
 
 	secretCmd.StringVar(&secretParams.vaultName,
-		"destination-vault",
+		DestinationVaultCliOption.String(),
 		"",
 		"Destination vault name")
 
 	secretCmd.StringVar(&secretParams.vaultObjectName,
-		"destination-secret-name",
+		DestinationVaultSecretCliOption.String(),
 		"",
 		"Destination secret name")
 
@@ -48,7 +48,11 @@ func MakeSecretGenerator(kwp *model.ContentWrappingParams, args []string) (model
 		return nil, parseErr
 	}
 	if kwp.LockPlacement && !secretParams.SpecifiesVault() {
-		return nil, errors.New("options -destination-vault and -destination-secret-name must be supplied where ciphertext must be labelled with its intended destination")
+		return nil, errors.New(fmt.Sprintf(
+			"options %s and %s must be supplied where ciphertext must be labelled with its intended destination",
+			DestinationVaultCliOption,
+			DestinationVaultSecretCliOption,
+		))
 	}
 
 	mdl := TerraformCodeModel{
@@ -67,43 +71,34 @@ func MakeSecretGenerator(kwp *model.ContentWrappingParams, args []string) (model
 		DestinationCoordinate: NewObjectCoordinateModel(secretParams.vaultName, secretParams.vaultObjectName),
 	}
 
-	return func(inputReader model.InputReader, onlyCiphertext bool) (string, error) {
-		secretData, readErr := inputReader("Enter secret data",
+	return func(inputReader model.InputReader) (model.TerraformCode, core.EncryptedMessage, error) {
+		secretData, readErr := inputReader(SecretContentPrompt,
 			secretParams.inputFile,
 			secretParams.inputIsBase64,
 			false)
 
 		if readErr != nil {
-			return "", readErr
+			return "", core.EncryptedMessage{}, readErr
 		}
 		secretDataAsStr := string(secretData)
-
-		if onlyCiphertext {
-			em, _, err := makeSecretEncryptedMessage(mdl, kwp, secretDataAsStr)
-			if err != nil {
-				return "", err
-			}
-
-			fld := model.FoldString(em.ToBase64PEM(), 80)
-			return strings.Join(fld, "\n"), nil
-		}
 
 		return OutputSecretTerraformCode(mdl, kwp, secretDataAsStr)
 
 	}, nil
 }
 
-func OutputSecretTerraformCode(mdl TerraformCodeModel, kwp *model.ContentWrappingParams, secretDataAsStr string) (string, error) {
+func OutputSecretTerraformCode(mdl TerraformCodeModel, kwp *model.ContentWrappingParams, secretDataAsStr string) (model.TerraformCode, core.EncryptedMessage, error) {
 	em, params, err := makeSecretEncryptedMessage(mdl, kwp, secretDataAsStr)
 	if err != nil {
-		return "", err
+		return "", em, err
 	}
 
-	mdl.BaseTerraformCodeModel.EncryptedContentMetadata = kwp.GetMetadataForTerraformFor(params, "keyvault secret", "destination_secret")
-	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
+	mdl.BaseTerraformCodeModel.EncryptedContentMetadata = kwp.GetMetadataForTerraformFor(params, "key vault secret", "destination_secret")
+	mdl.EncryptedContent.SetValue(model.Ciphertext(em.ToBase64PEM()))
 	mdl.EncryptedContentMetadata.ResourceHasDestination = true
 
-	return model.Render("secret", secretTFTemplate, &mdl)
+	tfCode, tfCodeErr := model.Render("secret", secretTFTemplate, &mdl)
+	return tfCode, em, tfCodeErr
 }
 
 func makeSecretEncryptedMessage(mdl TerraformCodeModel, kwp *model.ContentWrappingParams, secretDataAsStr string) (core.EncryptedMessage, core.SecondaryProtectionParameters, error) {
@@ -117,6 +112,7 @@ func makeSecretEncryptedMessage(mdl TerraformCodeModel, kwp *model.ContentWrappi
 		lockCoord = &core.AzKeyVaultObjectCoordinate{
 			VaultName: mdl.DestinationCoordinate.VaultName.Value,
 			Name:      mdl.DestinationCoordinate.ObjectName.Value,
+			Type:      "secrets",
 		}
 	}
 

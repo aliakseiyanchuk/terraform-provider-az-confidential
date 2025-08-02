@@ -691,7 +691,7 @@ func DecryptKeyMessage(em core.EncryptedMessage, decrypter core.RSADecrypter) (c
 }
 
 func NewKeyEncryptorFunction() function.Function {
-	rv := resources.FunctionTemplate[KeyDataFunctionParameter, core.AzKeyVaultObjectCoordinateModel]{
+	rv := resources.FunctionTemplate[KeyDataFunctionParameter, resources.ResourceProtectionParams, core.AzKeyVaultObjectCoordinateModel]{
 		Name:                "encrypt_keyvault_key",
 		Summary:             "Produces a ciphertext string suitable for use with az-confidential_key resource",
 		MarkdownDescription: "Encrypts an RSA or elliptic curve key without the use of the `tfgen` tool",
@@ -709,6 +709,7 @@ func NewKeyEncryptorFunction() function.Function {
 				&AzKvPrivateKeyParamValidator{},
 			},
 		},
+		ProtectionParameterSupplier: func() resources.ResourceProtectionParams { return resources.ResourceProtectionParams{} },
 		DestinationParameter: function.ObjectParameter{
 			Name:               "destination_key",
 			Description:        "Destination vault and key name",

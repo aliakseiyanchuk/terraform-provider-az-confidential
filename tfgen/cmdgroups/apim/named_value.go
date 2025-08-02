@@ -2,13 +2,12 @@ package apim
 
 import (
 	_ "embed"
-	"errors"
 	"flag"
+	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	res_apim "github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/apim"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"strings"
 )
 
 //go:embed named_value.tmpl
@@ -52,22 +51,22 @@ func CreateNamedValuedArgParser() (*NamedValueCLIParams, *flag.FlagSet) {
 		"Input is base-64 encoded")
 
 	nvCmd.StringVar(&nvParms.AzSubscriptionId,
-		"az-subscription-id",
+		AzSubscriptionIdOptionCliOption.String(),
 		"",
 		"Subscription Id where target APIM service resides")
 
 	nvCmd.StringVar(&nvParms.ResourceGroupName,
-		"resource-group-name",
+		ResourceGroupNameCliOption.String(),
 		"",
 		"Resource group name where target APIM service resides")
 
 	nvCmd.StringVar(&nvParms.ServiceName,
-		"service-name",
+		ServiceNameCliOption.String(),
 		"",
 		"APIM service name")
 
 	nvCmd.StringVar(&nvParms.namedValueName,
-		"named-value",
+		NamedValueCliOption.String(),
 		"",
 		"Named value identifier")
 
@@ -139,7 +138,13 @@ func MakeNamedValueGenerator(kwp *model.ContentWrappingParams, args []string) (m
 	}
 
 	if kwp.LockPlacement && !namedValueParams.SpecifiesTarget() {
-		return nil, errors.New("options -az-subscription-id, -resource-group-name, -service-name, and -named-value must be supplied where ciphertext is labelled with its intended destination")
+		return nil, fmt.Errorf(
+			"options %s, %s, %s, and %s must be supplied where ciphertext is labelled with its intended destination",
+			AzSubscriptionIdOptionCliOption,
+			ResourceGroupNameCliOption,
+			ServiceNameCliOption,
+			NamedValueCliOption,
+		)
 	}
 
 	mdl := NamedValueTerraformCodeModel{
@@ -157,45 +162,34 @@ func MakeNamedValueGenerator(kwp *model.ContentWrappingParams, args []string) (m
 		),
 	}
 
-	return func(inputReader model.InputReader, onlyCiphertext bool) (string, error) {
-		namedValue, readErr := inputReader("Enter named value data",
+	return func(inputReader model.InputReader) (model.TerraformCode, core.EncryptedMessage, error) {
+
+		namedValue, readErr := inputReader(NamedValueContentPrompt,
 			namedValueParams.inputFile,
 			namedValueParams.inputFileBase64,
 			false)
 
 		if readErr != nil {
-			return "", readErr
+			return "", core.EncryptedMessage{}, readErr
 		}
 
-		namedValueAsStr := string(namedValue)
-
-		if onlyCiphertext {
-			em, _, err := makeNamedValueEncryptedMessage(mdl, kwp, namedValueAsStr)
-			if err != nil {
-				return "", err
-			}
-
-			fld := model.FoldString(em.ToBase64PEM(), 80)
-			return strings.Join(fld, "\n"), nil
-
-		} else {
-			return OutputNamedValueTerraformCode(mdl, kwp, namedValueAsStr)
-		}
-
+		return OutputNamedValueTerraformCode(mdl, kwp, string(namedValue))
 	}, nil
 
 }
 
-func OutputNamedValueTerraformCode(mdl NamedValueTerraformCodeModel, kwp *model.ContentWrappingParams, namedValueDataAsStr string) (string, error) {
+func OutputNamedValueTerraformCode(mdl NamedValueTerraformCodeModel, kwp *model.ContentWrappingParams, namedValueDataAsStr string) (model.TerraformCode, core.EncryptedMessage, error) {
 	em, params, err := makeNamedValueEncryptedMessage(mdl, kwp, namedValueDataAsStr)
 	if err != nil {
-		return "", err
+		return "", em, err
 	}
 
-	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
+	mdl.EncryptedContent.SetValue(model.Ciphertext(em.ToBase64PEM()))
 	mdl.EncryptedContentMetadata = kwp.GetMetadataForTerraformFor(params, "api management named value", "destination_named_value")
 	mdl.EncryptedContentMetadata.ResourceHasDestination = true
-	return model.Render("apim/namedValue", namedValueTFTemplate, &mdl)
+
+	tfCode, tfCodeErr := model.Render("apim/namedValue", namedValueTFTemplate, &mdl)
+	return tfCode, em, tfCodeErr
 }
 
 func makeNamedValueEncryptedMessage(mdl NamedValueTerraformCodeModel, kwp *model.ContentWrappingParams, namedValueDataAsStr string) (core.EncryptedMessage, core.SecondaryProtectionParameters, error) {

@@ -81,11 +81,11 @@ func NewStringTerraformFieldExpression() TerraformFieldExpression[string] {
 	return rv
 }
 
-func NewStringTerraformFieldHeredocExpression() TerraformFieldExpression[string] {
-	rv := TerraformFieldExpression[string]{
+func NewStringTerraformFieldHeredocExpression() TerraformFieldExpression[Ciphertext] {
+	rv := TerraformFieldExpression[Ciphertext]{
 		IsNil:     true,
 		isDefined: false,
-		Mapper:    func(s string) string { return s },
+		Mapper:    func(s Ciphertext) string { return s.String() },
 	}
 	return rv
 }

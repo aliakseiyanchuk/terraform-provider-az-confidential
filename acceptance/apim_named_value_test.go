@@ -54,12 +54,12 @@ func generateApimNamedValueResource(t *testing.T) string {
 		},
 	}
 
-	if rv, tfErr := apim.OutputNamedValueTerraformCode(nvModel, &kwp, "this is a very sensitive named value"); tfErr != nil {
+	if rv, _, tfErr := apim.OutputNamedValueTerraformCode(nvModel, &kwp, "this is a very sensitive named value"); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
-		return rv
+		return rv.String()
 	} else {
 		//print(rv)
-		return rv
+		return rv.String()
 	}
 }
 

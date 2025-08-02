@@ -9,6 +9,8 @@ import (
 	"os"
 )
 
+// TODO This needs to be removed; makes no sense to have it around.
+
 type LocalFileTracker struct {
 	ObjectHashTracker
 

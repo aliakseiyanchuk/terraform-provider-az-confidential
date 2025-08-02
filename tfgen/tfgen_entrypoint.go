@@ -2,6 +2,7 @@ package tfgen
 
 import (
 	"crypto/rsa"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
@@ -16,7 +17,34 @@ import (
 	"time"
 )
 
-var commandGroups []string
+const (
+	PublicKeyPrompt = "Please provide public key of the key wrapping key"
+)
+
+const (
+	ApimGroup     = "apim"
+	GeneralGroup  = "general"
+	KeyVaultGroup = "kv"
+)
+
+const (
+	WrappingKeyVaultCliOption    model.CLIOption = "wrapping-key-vault"
+	WrappingKeyNameCliOption     model.CLIOption = "wrapping-key-name"
+	WrappingKeyVersion           model.CLIOption = "wrapping-key-version"
+	PublicKeyCliOption           model.CLIOption = "pubkey"
+	ProviderConstraintsCliOption model.CLIOption = "provider-constraints"
+	LockDestinationCliOption     model.CLIOption = "lock-destination"
+	TimeToCreateCliOption        model.CLIOption = "time-to-create"
+	NoCreateLimitCliOption       model.CLIOption = "no-create-limit"
+	DaysToExpireCliOption        model.CLIOption = "days-to-expire"
+	NoExpiryLimitCliOption       model.CLIOption = "no-expiry-limit"
+	NumberOfTimesUsesOption      model.CLIOption = "num-uses"
+	CreateOnceOption             model.CLIOption = "create-once"
+	NoUsageLimitOption           model.CLIOption = "no-usage-limit"
+	CiphertextOnlyOption         model.CLIOption = "ciphertext-only"
+)
+
+var CommandGroups []string
 
 type EntryPointCLIArgs struct {
 	WrappingKeyCoordinate core.WrappingKeyCoordinate
@@ -37,13 +65,6 @@ type EntryPointCLIArgs struct {
 	NoUsageLimit  bool
 }
 
-func init() {
-	commandGroups = []string{
-		"kv",
-		"apim",
-	}
-}
-
 func CreateCommonCLIArgs() (*EntryPointCLIArgs, *flag.FlagSet) {
 	rv := &EntryPointCLIArgs{}
 
@@ -51,34 +72,34 @@ func CreateCommonCLIArgs() (*EntryPointCLIArgs, *flag.FlagSet) {
 	baseFlags.SetOutput(os.Stdout)
 
 	baseFlags.StringVar(&rv.WrappingKeyCoordinate.VaultName,
-		"wrapping-key-vault",
+		WrappingKeyVaultCliOption.String(),
 		"",
 		"Vault containing the wrapping key")
 
 	baseFlags.StringVar(&rv.WrappingKeyCoordinate.KeyName,
-		"wrapping-key-name",
+		WrappingKeyNameCliOption.String(),
 		"",
 		"Wrapping/encrypting key name")
 
 	baseFlags.StringVar(&rv.WrappingKeyCoordinate.KeyVersion,
-		"wrapping-key-version",
+		WrappingKeyVersion.String(),
 		"",
 		"Wrapping/encrypting key version")
 
 	baseFlags.StringVar(&rv.RSAPublicKeyFile,
-		"pubkey",
+		PublicKeyCliOption.String(),
 		"",
 		"RSA public key to encrypt secrets/content encryption keys",
 	)
 
 	baseFlags.StringVar(&rv.ProviderConstraints,
-		"provider-constraints",
+		ProviderConstraintsCliOption.String(),
 		"",
 		"Require the provider deploying a resource from the ciphertext to be configured with the specified provider label. Use comma to separate individual labels",
 	)
 
 	baseFlags.BoolVar(&rv.ConstraintTarget,
-		"lock-destination",
+		LockDestinationCliOption.String(),
 		false,
 		"The ciphertext may only be used to create an Azure resource with the configuration "+
 			"specified when the ciphertext is created. For example, when creating a kv key resource, you can specify a specific "+
@@ -86,49 +107,49 @@ func CreateCommonCLIArgs() (*EntryPointCLIArgs, *flag.FlagSet) {
 	)
 
 	baseFlags.DurationVar(&rv.CreateLimit,
-		"time-to-create",
+		TimeToCreateCliOption.String(),
 		time.Hour*24*3,
 		"Time before a resource can be created. Defaults to 3 calendar days. Use -no-create-limit to remove this limit.",
 	)
 
 	baseFlags.BoolVar(&rv.NoCreateLimit,
-		"no-create-limit",
+		NoCreateLimitCliOption.String(),
 		false,
 		"Removes the timing limit on create from the ciphertext",
 	)
 
 	baseFlags.IntVar(&rv.ExpiryDays,
-		"days-to-expire",
+		DaysToExpireCliOption.String(),
 		365,
 		"Days the ciphertext remains valid. Defaults to 365 days. Use -no-expiry-limit to remove this limit",
 	)
 
 	baseFlags.BoolVar(&rv.NoExpireLimit,
-		"no-expiry-limit",
+		NoExpiryLimitCliOption.String(),
 		false,
 		"Removes the expiry date from  ciphertext. The ciphertext will be perpetually valid.",
 	)
 
 	baseFlags.IntVar(&rv.NumUses,
-		"num-uses",
+		NumberOfTimesUsesOption.String(),
 		10,
 		"Number of times this ciphertext can be used to create object. Defaults to 10. Set to zero to disable this limit",
 	)
 
 	baseFlags.BoolVar(&rv.CreateOnce,
-		"create-once",
+		CreateOnceOption.String(),
 		false,
 		"Create this resource once. A shortcut for `-num-uses 1`",
 	)
 
 	baseFlags.BoolVar(&rv.NoUsageLimit,
-		"no-usage-limit",
+		NoUsageLimitOption.String(),
 		false,
 		"Removes the limit on ciphertext usages. The ciphertext can be used any number of times.",
 	)
 
 	baseFlags.BoolVar(&rv.PrintCiphertextOnly,
-		"ciphertext-only",
+		CiphertextOnlyOption.String(),
 		false,
 		"Output only ciphertext (i.e. do not output associated Terraform code template)",
 	)
@@ -136,7 +157,7 @@ func CreateCommonCLIArgs() (*EntryPointCLIArgs, *flag.FlagSet) {
 	return rv, baseFlags
 }
 
-func buildContentWrappingParams(cliArgs *EntryPointCLIArgs) (*model.ContentWrappingParams, error) {
+func buildContentWrappingParams(ioReader model.InputReader, cliArgs *EntryPointCLIArgs) (*model.ContentWrappingParams, error) {
 
 	var providerConstraints []core.ProviderConstraint
 	if len(cliArgs.ProviderConstraints) > 0 {
@@ -172,7 +193,8 @@ func buildContentWrappingParams(cliArgs *EntryPointCLIArgs) (*model.ContentWrapp
 		},
 		WrappingKeyCoordinate: model.NewWrappingKey(),
 		LoadRsaPublicKey: sync.OnceValues(func() (*rsa.PublicKey, error) {
-			pubKeyData, pubKeyReadErr := io.ReadInput("Please provide public key of the key wrapping key", cliArgs.RSAPublicKeyFile, false, true)
+
+			pubKeyData, pubKeyReadErr := ioReader(PublicKeyPrompt, cliArgs.RSAPublicKeyFile, false, true)
 			if pubKeyReadErr != nil {
 				return nil, fmt.Errorf("cannot read public key: %s", pubKeyReadErr.Error())
 			}
@@ -202,28 +224,26 @@ func buildContentWrappingParams(cliArgs *EntryPointCLIArgs) (*model.ContentWrapp
 	return rv, nil
 }
 
-// MainEntryPoint entry point that a wrapping CLI tool should use to trigger the CLI pocessing.
-func MainEntryPoint() {
-
+func MainEntryPointDispatch(inputReader model.InputReader, allCmdArgs ...string) (*EntryPointCLIArgs, model.TerraformCode, core.EncryptedMessage, error) {
 	cliArgs, baseFlags := CreateCommonCLIArgs()
 
-	if parseErr := baseFlags.Parse(os.Args[1:]); parseErr != nil {
+	if parseErr := baseFlags.Parse(allCmdArgs); parseErr != nil {
 		_, _ = fmt.Printf("Invalid command line: %s", parseErr.Error())
 		flag.PrintDefaults()
-		os.Exit(1)
+		return nil, "", core.EncryptedMessage{}, parseErr
 	}
 
 	if len(baseFlags.Args()) < 2 {
 		fmt.Println("Missing command group and command")
 		printSubcommandSelectionHelp(baseFlags)
-		os.Exit(1)
+		return nil, "", core.EncryptedMessage{}, errors.New("missing command")
 	}
 
-	kwp, kwpErr := buildContentWrappingParams(cliArgs)
+	kwp, kwpErr := buildContentWrappingParams(inputReader, cliArgs)
 	if kwpErr != nil {
 		fmt.Printf("Error in base arguments: %s\n", kwpErr.Error())
 		printSubcommandSelectionHelp(baseFlags)
-		os.Exit(1)
+		return nil, "", core.EncryptedMessage{}, errors.New("invalid base arguments")
 	}
 
 	cmdGroup := baseFlags.Args()[0]
@@ -234,11 +254,11 @@ func MainEntryPoint() {
 	var generatorInitErr error
 
 	switch cmdGroup {
-	case "general":
+	case GeneralGroup:
 		generator, generatorInitErr = general.EntryPoint(kwp, cmd, cmdArgs)
-	case "kv":
+	case KeyVaultGroup:
 		generator, generatorInitErr = keyvault.EntryPoint(kwp, cmd, cmdArgs)
-	case "apim":
+	case ApimGroup:
 		generator, generatorInitErr = apim.EntryPoint(kwp, cmd, cmdArgs)
 	default:
 		_, _ = fmt.Printf("Unknown subcommand: %s", cmdGroup)
@@ -253,26 +273,53 @@ func MainEntryPoint() {
 		os.Exit(2)
 	}
 
-	tfCode, err := generator(io.ReadInput, cliArgs.PrintCiphertextOnly)
+	tfCode, en, err := generator(inputReader)
 	if err != nil {
 		// Error message must be printed by the sub-command
 		fmt.Println("Cannot produce template:")
 		fmt.Println(err.Error())
-		os.Exit(2)
 	}
 
-	fmt.Println(tfCode)
-	// End of program
+	return cliArgs, tfCode, en, err
 }
 
 func printSubcommandSelectionHelp(f *flag.FlagSet) {
 	fmt.Println("Usage: tfgen [<standard options>] <group> <subcommand> [<args>]")
 	fmt.Println("Possible command groups are:")
-	for _, cmd := range commandGroups {
+	for _, cmd := range CommandGroups {
 		fmt.Printf("- %s", cmd)
 		fmt.Println()
 	}
 	fmt.Println("Running tfgen <group> help will print further information about this command")
 	fmt.Println()
 	f.PrintDefaults()
+}
+
+func init() {
+	CommandGroups = []string{
+		"kv",
+		"apim",
+	}
+}
+
+// MainEntryPoint entry point that a wrapping CLI tool should use to trigger the CLI processing.
+func MainEntryPoint() {
+
+	allCmdArgs := os.Args[1:]
+
+	cliArgs, tfCode, en, err := MainEntryPointDispatch(io.ReadInput, allCmdArgs...)
+	if err != nil {
+		os.Exit(1)
+	}
+
+	if cliArgs.PrintCiphertextOnly {
+		fld := model.FoldString(en.ToBase64PEM(), 80)
+		for _, v := range strings.Join(fld, "\n") {
+			fmt.Println(v)
+		}
+	} else {
+		fmt.Println(tfCode)
+	}
+
+	// End of program
 }

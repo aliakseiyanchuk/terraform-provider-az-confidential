@@ -39,12 +39,12 @@ func generateApimSubscriptionResourceForAllApis(t *testing.T) string {
 		},
 	}
 
-	if rv, tfErr := apim.OutputSubscriptionTerraformCode(mdl, &kwp, "allApiA", "allApiB"); tfErr != nil {
+	if rv, _, tfErr := apim.OutputSubscriptionTerraformCode(mdl, &kwp, "allApiA", "allApiB"); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
-		return rv
+		return rv.String()
 	} else {
 		//print(rv)
-		return rv
+		return rv.String()
 	}
 }
 

@@ -410,7 +410,7 @@ func DecryptSecretMessage(em core.EncryptedMessage, decrypted core.RSADecrypter)
 }
 
 func NewSecretEncryptorFunction() function.Function {
-	rv := resources.FunctionTemplate[string, core.AzKeyVaultObjectCoordinateModel]{
+	rv := resources.FunctionTemplate[string, resources.ResourceProtectionParams, core.AzKeyVaultObjectCoordinateModel]{
 		Name:                "encrypt_keyvault_secret",
 		Summary:             "Produces a ciphertext string suitable for use with az-confidential_secret resource",
 		MarkdownDescription: "Encrypts a secret string without the use of the `tfgen` tool",
@@ -419,6 +419,7 @@ func NewSecretEncryptorFunction() function.Function {
 			Name:        "secret",
 			Description: "Secret value that should appear in the key vault",
 		},
+		ProtectionParameterSupplier: func() resources.ResourceProtectionParams { return resources.ResourceProtectionParams{} },
 		DestinationParameter: function.ObjectParameter{
 			Name:               "destination_secret",
 			Description:        "Destination vault and secret name",

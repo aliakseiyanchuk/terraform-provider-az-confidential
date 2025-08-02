@@ -32,12 +32,12 @@ func generateSecretResourceNoTags(t *testing.T) string {
 		DestinationCoordinate: keyvault.NewObjectCoordinateModel("", "acceptance-test-secret-notags"),
 	}
 
-	if rv, tfErr := keyvault.OutputSecretTerraformCode(secretModel, &kwp, "this is a very secret string"); tfErr != nil {
+	if rv, _, tfErr := keyvault.OutputSecretTerraformCode(secretModel, &kwp, "this is a very secret string"); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
-		return rv
+		return rv.String()
 	} else {
 		//print(rv)
-		return rv
+		return rv.String()
 	}
 }
 

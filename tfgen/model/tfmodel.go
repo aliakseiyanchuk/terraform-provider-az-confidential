@@ -65,7 +65,7 @@ func (p *KeylessTagsModel) TerraformValueTags() []string {
 type BaseTerraformCodeModel struct {
 	TFBlockName string
 
-	EncryptedContent         TerraformFieldExpression[string]
+	EncryptedContent         TerraformFieldExpression[Ciphertext]
 	EncryptedContentMetadata VersionedConfidentialMetadataTFCode
 
 	WrappingKeyCoordinate WrappingKey
@@ -83,7 +83,7 @@ func NewBaseTerraformCodeModel(kwp *ContentWrappingParams, blockName, objectName
 	}
 }
 
-func Render(templateName, templateStr string, obj interface{}) (string, error) {
+func Render(templateName, templateStr string, obj interface{}) (TerraformCode, error) {
 	funcMap := template.FuncMap{
 		"fold80":            func(s string) []string { return FoldString(s, 80) },
 		"formatEpochRFC822": func(t int64) string { return core.FormatUnixSecondsRFC822(t) },
@@ -97,7 +97,7 @@ func Render(templateName, templateStr string, obj interface{}) (string, error) {
 	var rv bytes.Buffer
 	err := tmpl.Execute(&rv, obj)
 
-	return rv.String(), err
+	return TerraformCode(rv.String()), err
 }
 
 func NotBeforeExample() string {

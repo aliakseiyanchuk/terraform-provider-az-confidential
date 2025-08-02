@@ -20,6 +20,6 @@ func (md *VersionedConfidentialMetadataTFCode) CiphertextAppraisal() string {
 	if err != nil {
 		return err.Error()
 	} else {
-		return rv
+		return rv.String()
 	}
 }

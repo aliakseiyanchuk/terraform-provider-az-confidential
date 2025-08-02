@@ -29,6 +29,17 @@ type ConfidentialDataJsonHeader struct {
 	ModelReference       string                `json:"mrf,omitempty"`
 }
 
+func (c ConfidentialDataJsonHeader) Equal(other ConfidentialDataJsonHeader) bool {
+	return c.Uuid == other.Uuid &&
+		c.Type == other.Type &&
+		c.CreateLimit == other.CreateLimit &&
+		c.Expiry == other.Expiry &&
+		c.NumUses == other.NumUses &&
+		SameBag[ProviderConstraint](func(a, b ProviderConstraint) bool { return a == b }, c.ProviderConstraints, other.ProviderConstraints) &&
+		SameBag[PlacementConstraint](func(a, b PlacementConstraint) bool { return a == b }, c.PlacementConstraints, other.PlacementConstraints) &&
+		c.ModelReference == other.ModelReference
+}
+
 type ConfidentialDataMessageJson struct {
 	Header           ConfidentialDataJsonHeader `json:"header"`
 	ConfidentialData json.RawMessage            `json:"data"`

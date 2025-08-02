@@ -11,7 +11,6 @@ import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/keyvault"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 	"github.com/lestrrat-go/jwx/v3/jwk"
-	"strings"
 )
 
 //go:embed key_template.tmpl
@@ -50,12 +49,12 @@ func CreateKeyArgsParser() (*KeyTFGenParams, *flag.FlagSet) {
 		"Create symmetric key")
 
 	keyCmd.StringVar(&keyParams.vaultName,
-		"destination-vault",
+		DestinationVaultCliOption.String(),
 		"",
 		"Destination vault name")
 
 	keyCmd.StringVar(&keyParams.vaultObjectName,
-		"destination-key-name",
+		DestinationVaultKeyCliOption.String(),
 		"",
 		"Destination key name")
 
@@ -92,26 +91,16 @@ func MakeKeyGenerator(kwp *model.ContentWrappingParams, args ...string) (model.S
 		KeyOperations: nil,
 	}
 
-	return func(inputReader model.InputReader, onlyCiphertext bool) (string, error) {
+	return func(inputReader model.InputReader) (model.TerraformCode, core.EncryptedMessage, error) {
 		jwkKey, acquireErr := AcquireKey(keyParams, inputReader)
 		if acquireErr != nil {
-			return "", acquireErr
+			return "", core.EncryptedMessage{}, acquireErr
 		}
 
 		mdl.AddDefaultKeyOperationsFor(jwkKey)
 
-		if onlyCiphertext {
-			em, _, err := makeKeyEncryptedMessage(mdl, kwp, jwkKey)
-			if err != nil {
-				return "", err
-			}
-
-			fld := model.FoldString(em.ToBase64PEM(), 80)
-			return strings.Join(fld, "\n"), nil
-		} else {
-			mdl.AddDefaultKeyOperationsFor(jwkKey)
-			return OutputKeyTerraformCode(mdl, kwp, jwkKey)
-		}
+		mdl.AddDefaultKeyOperationsFor(jwkKey)
+		return OutputKeyTerraformCode(mdl, kwp, jwkKey)
 	}, nil
 }
 
@@ -133,7 +122,8 @@ func PrivateKeyNeedsPassword(keyData []byte) bool {
 }
 
 func AcquireKey(keyParams *KeyTFGenParams, inputReader model.InputReader) (interface{}, error) {
-	keyData, readErr := inputReader("Enter key data (hit Enter twice to end input)",
+
+	keyData, readErr := inputReader(PrivateKeyPrompt,
 		keyParams.inputFile,
 		keyParams.inputIsBase64,
 		true)
@@ -158,7 +148,7 @@ func AcquireKey(keyParams *KeyTFGenParams, inputReader model.InputReader) (inter
 		}
 	} else {
 		if PrivateKeyNeedsPassword(keyData) {
-			if pwd, pwdErr := inputReader("Private key requires password", keyParams.passwordFromFile, false, false); pwdErr != nil {
+			if pwd, pwdErr := inputReader(PrivateKeyPasswordPrompt, keyParams.passwordFromFile, false, false); pwdErr != nil {
 				return nil, pwdErr
 			} else {
 				password = string(pwd)
@@ -208,17 +198,18 @@ func (g *KeyResourceTerraformModel) AddDefaultKeyOperationsFor(jwkKey interface{
 	}
 }
 
-func OutputKeyTerraformCode(mdl KeyResourceTerraformModel, kwp *model.ContentWrappingParams, jwkKey interface{}) (string, error) {
+func OutputKeyTerraformCode(mdl KeyResourceTerraformModel, kwp *model.ContentWrappingParams, jwkKey interface{}) (model.TerraformCode, core.EncryptedMessage, error) {
 	em, params, err := makeKeyEncryptedMessage(mdl, kwp, jwkKey)
 	if err != nil {
-		return "", err
+		return "", em, err
 	}
 
-	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
+	mdl.EncryptedContent.SetValue(model.Ciphertext(em.ToBase64PEM()))
 	mdl.EncryptedContentMetadata = kwp.GetMetadataForTerraformFor(params, "keyvault key", "destination_key")
 	mdl.EncryptedContentMetadata.ResourceHasDestination = true
 
-	return model.Render("key", keyTFTemplate, &mdl)
+	tfCode, tfCodeErr := model.Render("key", keyTFTemplate, &mdl)
+	return tfCode, em, tfCodeErr
 }
 
 func makeKeyEncryptedMessage(mdl KeyResourceTerraformModel, kwp *model.ContentWrappingParams, jwkKey interface{}) (core.EncryptedMessage, core.SecondaryProtectionParameters, error) {
@@ -232,6 +223,7 @@ func makeKeyEncryptedMessage(mdl KeyResourceTerraformModel, kwp *model.ContentWr
 		lockCoord = &core.AzKeyVaultObjectCoordinate{
 			VaultName: mdl.DestinationCoordinate.VaultName.Value,
 			Name:      mdl.DestinationCoordinate.ObjectName.Value,
+			Type:      "keys",
 		}
 	}
 

@@ -23,12 +23,12 @@ func generateContentDataSource(t *testing.T) string {
 		TFBlockName: "content",
 	}
 
-	if rv, tfErr := general.OutputDatasourceContentTerraformCode(mdl, &kwp, "this is a very secret string"); tfErr != nil {
+	if rv, _, tfErr := general.OutputDatasourceContentTerraformCode(mdl, &kwp, "this is a very secret string"); tfErr != nil {
 		assert.Fail(t, tfErr.Error())
-		return rv
+		return rv.String()
 	} else {
 		//print(rv)
-		return rv
+		return rv.String()
 	}
 }
 

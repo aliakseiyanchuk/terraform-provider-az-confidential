@@ -8,7 +8,6 @@ import (
 	res_apim "github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/apim"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"strings"
 )
 
 //go:embed subscrription.tmpl
@@ -88,37 +87,37 @@ func CreateSubscriptionArgParser() (*SubscriptionCLIParams, *flag.FlagSet) {
 		"Read the primary subscription key from the specified file")
 
 	nvCmd.StringVar(&nvParms.AzSubscriptionId,
-		"az-subscription-id",
+		AzSubscriptionIdOptionCliOption.String(),
 		"",
 		"Subscription Id where target APIM service resides")
 
 	nvCmd.StringVar(&nvParms.ResourceGroupName,
-		"resource-group-name",
+		ResourceGroupNameCliOption.String(),
 		"",
 		"Resource group name where target APIM service resides")
 
 	nvCmd.StringVar(&nvParms.ServiceName,
-		"service-name",
+		ServiceNameCliOption.String(),
 		"",
 		"APIM service name")
 
 	nvCmd.StringVar(&nvParms.subscriptionId,
-		"subscription-id",
+		SubscriptionIdCliOption.String(),
 		"",
 		"Subscription Id")
 
 	nvCmd.StringVar(&nvParms.apiScope,
-		"api",
+		ApiIdCliOption.String(),
 		"",
 		"Scope the subscription to the specified API")
 
-	nvCmd.StringVar(&nvParms.apiScope,
-		"product",
+	nvCmd.StringVar(&nvParms.productScope,
+		ProductIdCliOption.String(),
 		"",
 		"Scope the subscription to the specified product")
 
-	nvCmd.StringVar(&nvParms.apiScope,
-		"owner",
+	nvCmd.StringVar(&nvParms.owner,
+		OwnerIdCliOption.String(),
 		"",
 		"Associate the subscription with the specified used")
 
@@ -165,58 +164,50 @@ func MakeSubscriptionGenerator(kwp *model.ContentWrappingParams, args []string) 
 		),
 	}
 
-	return func(inputReader model.InputReader, onlyCiphertext bool) (string, error) {
-		primaryKey, readErr := inputReader("Enter primary subscription key",
+	return func(inputReader model.InputReader) (model.TerraformCode, core.EncryptedMessage, error) {
+
+		primaryKey, readErr := inputReader(SubscriptionPrimaryKeyPrompt,
 			subscriptionParam.primaryKeyFile,
 			false,
 			false)
 
 		if readErr != nil {
-			return "", readErr
+			return "", core.EncryptedMessage{}, readErr
 		}
 
-		secondaryKey, readErr := inputReader("Enter secondary subscription key",
+		secondaryKey, readErr := inputReader(SubscriptionSecondaryKeyPrompt,
 			subscriptionParam.secondaryKeyFile,
 			false,
 			false)
 
 		if readErr != nil {
-			return "", readErr
+			return "", core.EncryptedMessage{}, readErr
 		}
 
 		pkStr := string(primaryKey)
 		skStr := string(secondaryKey)
 
 		if pkStr == skStr {
-			return "", errors.New("the primary subscription key is the same as the secondary subscription key")
+			return "", core.EncryptedMessage{}, errors.New("the primary subscription key is the same as the secondary subscription key")
 		}
 
-		if onlyCiphertext {
-			em, _, emErr := makeSubscriptionEncryptedMessage(mdl, kwp, pkStr, skStr)
-			if emErr != nil {
-				return "", emErr
-			}
-
-			fld := model.FoldString(em.ToBase64PEM(), 80)
-			return strings.Join(fld, "\n"), nil
-
-		} else {
-			return OutputSubscriptionTerraformCode(mdl, kwp, pkStr, skStr)
-		}
+		return OutputSubscriptionTerraformCode(mdl, kwp, pkStr, skStr)
 
 	}, nil
 }
 
-func OutputSubscriptionTerraformCode(mdl SubscriptionTerraformCodeModel, kwp *model.ContentWrappingParams, primary, secondary string) (string, error) {
+func OutputSubscriptionTerraformCode(mdl SubscriptionTerraformCodeModel, kwp *model.ContentWrappingParams, primary, secondary string) (model.TerraformCode, core.EncryptedMessage, error) {
 	em, params, err := makeSubscriptionEncryptedMessage(mdl, kwp, primary, secondary)
 	if err != nil {
-		return "", err
+		return "", em, err
 	}
 
-	mdl.EncryptedContent.SetValue(em.ToBase64PEM())
+	mdl.EncryptedContent.SetValue(model.Ciphertext(em.ToBase64PEM()))
 	mdl.EncryptedContentMetadata = kwp.GetMetadataForTerraformFor(params, "api management subscription", "destination_subscription")
 	mdl.EncryptedContentMetadata.ResourceHasDestination = true
-	return model.Render("apim/subscription", subscriptionTerraformTemplate, &mdl)
+	tfCode, tfCodeErr := model.Render("apim/subscription", subscriptionTerraformTemplate, &mdl)
+
+	return tfCode, em, tfCodeErr
 }
 
 func makeSubscriptionEncryptedMessage(mdl SubscriptionTerraformCodeModel, kwp *model.ContentWrappingParams, primary string, secondary string) (core.EncryptedMessage, core.SecondaryProtectionParameters, error) {

@@ -473,6 +473,13 @@ func CreateSubscriptionEncryptedMessage(subscriptionKeys SubscriptionDataFunctio
 	return em, md, err
 }
 
+func DecryptSubscriptionMessage(em core.EncryptedMessage, decrypted core.RSADecrypter) (core.ConfidentialDataJsonHeader, ConfidentialSubscriptionData, error) {
+	helper := NewConfidentialSubscriptionHelper(SubscriptionObjectType)
+
+	err := helper.FromEncryptedMessage(em, decrypted)
+	return helper.Header, helper.KnowValue, err
+}
+
 func NewSubscriptionResource() resource.Resource {
 	modelAttributes := map[string]schema.Attribute{
 		"subscription_id": schema.StringAttribute{
@@ -660,7 +667,7 @@ func (n *SubscriptionDestinationFunctionParmaValidator) ValidateParameterObject(
 }
 
 func NewSubscriptionEncryptorFunction() function.Function {
-	rv := resources.FunctionTemplate[SubscriptionDataFunctionParameter, DestinationSubscriptionCoordinateModel]{
+	rv := resources.FunctionTemplate[SubscriptionDataFunctionParameter, resources.ResourceProtectionParams, DestinationSubscriptionCoordinateModel]{
 		Name:                "encrypt_apim_subscription",
 		Summary:             "Produces a ciphertext string suitable for use with az-confidential_apim_subnscription resource",
 		MarkdownDescription: "Encrypts an APIM subscription keys without the use of the `tfgen` tool",
@@ -680,6 +687,7 @@ func NewSubscriptionEncryptorFunction() function.Function {
 				&SubscriptionDataFunctionParameterValidator{},
 			},
 		},
+		ProtectionParameterSupplier: func() resources.ResourceProtectionParams { return resources.ResourceProtectionParams{} },
 		DestinationParameter: function.ObjectParameter{
 			Name:               "destination_subscription",
 			Description:        "Destination API management subscription",
