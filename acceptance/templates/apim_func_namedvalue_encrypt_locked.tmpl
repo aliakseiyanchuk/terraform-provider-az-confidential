@@ -1,0 +1,30 @@
+locals {
+  public_key = <<-PUBLIC_KEY
+               {{- range $l := linesOf .PublicKey }}
+               {{ $l }}
+               {{- end -}}
+               PUBLIC_KEY
+}
+
+output "encrypted_named_value" {
+  value = provider::az-confidential::encrypt_apim_named_value(
+    "named value content",
+    {
+      az_subscription_id = "{{ .AzSubscriptionId }}"
+      resource_group = "{{ .ResourceGroup }}"
+      api_management_name =  "{{ .ServiceName }}"
+      name: "{{ .NamedValue }}",
+    },
+    {
+      create_limit = "{{ .CreateLimit }}"
+      expires_in = {{ .ExpiresIn }}
+      num_uses = {{ .NumUses }}
+      provider_constraints = toset([
+      {{- range $value := .ProviderConstraints }}
+        "{{ $value }}",
+      {{- end }}
+      ])
+    },
+    local.public_key
+  )
+}

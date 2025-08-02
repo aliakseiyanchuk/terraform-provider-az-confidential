@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"strings"
 	"text/template"
 	"time"
 )
@@ -87,6 +88,7 @@ func Render(templateName, templateStr string, obj interface{}) (TerraformCode, e
 	funcMap := template.FuncMap{
 		"fold80":            func(s string) []string { return FoldString(s, 80) },
 		"formatEpochRFC822": func(t int64) string { return core.FormatUnixSecondsRFC822(t) },
+		"linesOf":           func(t string) []string { return strings.Split(t, "\n") },
 	}
 
 	tmpl, templErr := template.New(templateName).Funcs(funcMap).Parse(templateStr)

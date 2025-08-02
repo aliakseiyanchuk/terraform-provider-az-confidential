@@ -1,0 +1,36 @@
+locals {
+  public_key = <<-PUBLIC_KEY
+               {{- range $l := linesOf .PublicKey }}
+               {{ $l }}
+               {{- end -}}
+               PUBLIC_KEY
+}
+
+output "encrypted_subscription_value" {
+  value = provider::az-confidential::encrypt_apim_subscription(
+    {
+      primary_key = "{{ .PrimaryKey }}"
+      secondary_key = "{{ .SecondaryKey }}"
+    },
+    {
+      az_subscription_id = "{{ .AzSubscriptionId }}"
+      resource_group = "{{ .ResourceGroup }}"
+      api_management_name =  "{{ .ServiceName }}"
+      apim_subscription_id: "{{ .SubscriptionId }}",
+      api_id = "{{ .ApiId }}",
+      product_id="{{ .ProductId }}"
+      user_id="{{ .UserId }}"
+    },
+    {
+      create_limit = "{{ .CreateLimit }}"
+      expires_in = {{ .ExpiresIn }}
+      num_uses = {{ .NumUses }}
+      provider_constraints = toset([
+      {{- range $value := .ProviderConstraints }}
+        "{{ $value }}",
+      {{- end }}
+      ])
+    },
+    local.public_key
+  )
+}

@@ -66,8 +66,8 @@ type ResourceProtectionParams struct {
 
 func (p ResourceProtectionParams) GetAttributeTypes() map[string]attr.Type {
 	rv := map[string]attr.Type{}
-	maps.Copy(p.ProtectionParams.GetAttributeTypes(), rv)
-	maps.Copy(p.LimitedCreateProtectionParam.GetAttributeTypes(), rv)
+	maps.Copy(rv, p.ProtectionParams.GetAttributeTypes())
+	maps.Copy(rv, p.LimitedCreateProtectionParam.GetAttributeTypes())
 
 	return rv
 }
