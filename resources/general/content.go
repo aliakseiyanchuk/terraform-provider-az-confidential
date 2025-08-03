@@ -177,13 +177,13 @@ func NewConfidentialPasswordDataSource() datasource.DataSource {
 
 func NewPasswordEncryptionFunction() function.Function {
 	rv := resources.FunctionTemplate[string, resources.ProtectionParams, int]{
-		Name:                        "encrypt_content",
+		Name:                        "encrypt_general_content",
 		Summary:                     "Encrypts a content",
 		MarkdownDescription:         "Encrypts a content string to be used with az-confidential_content data source",
 		ProtectionParameterSupplier: func() resources.ProtectionParams { return resources.ProtectionParams{} },
 		DataParameter: function.StringParameter{
-			Name:        "password",
-			Description: "Password value that should appear in the key vault",
+			Name:        "content",
+			Description: "Content value that should unpacked into the provider's state",
 		},
 		ConfidentialModelSupplier: func() string { return "" },
 		DestinationModelSupplier:  func() *int { return nil },

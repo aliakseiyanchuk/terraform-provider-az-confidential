@@ -24,7 +24,7 @@ output "encrypted_kv_key" {
     },
     {
       create_limit = "{{ .CreateLimit }}"
-      expires_in = {{ .ExpiresIn }}
+      expires_after = {{ .ExpiresAfterDays }}
       num_uses = {{ .NumUses }}
       provider_constraints = toset([
       {{- range $value := .ProviderConstraints }}

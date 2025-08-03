@@ -32,10 +32,10 @@ func TestAccEncryptKvCertWithPlacementLock(t *testing.T) {
 
 	params := EncryptKvCertParams{
 		BaseEncryptFunctionParameters: BaseEncryptFunctionParameters{
-			PublicKey:   string(testkeymaterial.EphemeralRsaPublicKey),
-			CreateLimit: "72h",
-			ExpiresIn:   365,
-			NumUses:     10,
+			PublicKey:        string(testkeymaterial.EphemeralRsaPublicKey),
+			CreateLimit:      "72h",
+			ExpiresAfterDays: 365,
+			NumUses:          10,
 			ProviderConstraints: []core.ProviderConstraint{
 				"test",
 			},
@@ -110,10 +110,10 @@ func TestAccEncryptKvCertWithoutLock(t *testing.T) {
 
 	params := EncryptKvCertParams{
 		BaseEncryptFunctionParameters: BaseEncryptFunctionParameters{
-			PublicKey:   string(testkeymaterial.EphemeralRsaPublicKey),
-			CreateLimit: "72h",
-			ExpiresIn:   365,
-			NumUses:     10,
+			PublicKey:        string(testkeymaterial.EphemeralRsaPublicKey),
+			CreateLimit:      "72h",
+			ExpiresAfterDays: 365,
+			NumUses:          10,
 			ProviderConstraints: []core.ProviderConstraint{
 				"test", "acceptance",
 			},

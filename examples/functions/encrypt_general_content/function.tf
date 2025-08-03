@@ -18,12 +18,15 @@ locals {
 }
 
 output "encrypted_password" {
-  value = provider::az-confidential::encrypt_password(
-    "This is a secret password",
+  value = provider::az-confidential::encrypt_general_content(
+    "This is a secret content",
     {
-      create_limit = ""
-      expires_in = 200
-      num_uses = 0
+      # Create limit does not apply for the content, because it will be unpacked
+      # only into the state file. The lifespan of the ciphertext can be controlled
+      # by limiting validity using the `expires_in` and `num_uses` limiting the
+      # number of times this content may be read.
+      expire_after = 200
+      num_uses = 50
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -32,7 +35,7 @@ output "encrypted_password" {
 
 output "encrypted_unprotected_password" {
   value = provider::az-confidential::encrypt_password(
-    "This is a secret password",
+    "This is a secret content",
     null,
     local.public_key
   )

@@ -23,7 +23,7 @@ output "encrypted_subscription_value" {
     },
     {
       create_limit = "{{ .CreateLimit }}"
-      expires_in = {{ .ExpiresIn }}
+      expires_after = {{ .ExpiresAfterDays }}
       num_uses = {{ .NumUses }}
       provider_constraints = toset([
       {{- range $value := .ProviderConstraints }}

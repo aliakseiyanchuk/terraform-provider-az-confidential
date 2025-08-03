@@ -34,15 +34,15 @@ type ProtectionParameterized interface {
 }
 
 type ProtectionParams struct {
-	ExpiresIn           types.Int32 `tfsdk:"expires_in"`
+	ExpiresAfterDays    types.Int32 `tfsdk:"expires_after"`
 	NumUses             types.Int32 `tfsdk:"num_uses"`
 	ProviderConstraints types.Set   `tfsdk:"provider_constraints"`
 }
 
 func (p ProtectionParams) GetAttributeTypes() map[string]attr.Type {
 	return map[string]attr.Type{
-		"num_uses":   types.Int32Type,
-		"expires_in": types.Int32Type,
+		"num_uses":      types.Int32Type,
+		"expires_after": types.Int32Type,
 		"provider_constraints": types.SetType{
 			ElemType: types.StringType,
 		},
@@ -84,8 +84,8 @@ func (p ResourceProtectionParams) Into(ctx context.Context, c *core.SecondaryPro
 }
 
 func (p ProtectionParams) Into(ctx context.Context, c *core.SecondaryProtectionParameters) error {
-	if !p.ExpiresIn.IsUnknown() && !p.ExpiresIn.IsNull() {
-		c.Expiry = time.Now().Add(time.Hour * time.Duration(24*int(p.ExpiresIn.ValueInt32()))).Unix()
+	if !p.ExpiresAfterDays.IsUnknown() && !p.ExpiresAfterDays.IsNull() {
+		c.Expiry = time.Now().Add(time.Hour * time.Duration(24*int(p.ExpiresAfterDays.ValueInt32()))).Unix()
 	}
 
 	if !p.NumUses.IsUnknown() && !p.NumUses.IsNull() {
