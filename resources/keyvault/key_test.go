@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/base64"
-	"encoding/json"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
@@ -451,15 +450,10 @@ func givenTypicalKeyModel() KeyModel {
 	return mdl
 }
 
-func givenVersionedConfidentialDataFromEphemeralKey() core.ConfidentialBinaryData {
+func givenLoadedJWKKey() jwk.Key {
 	//rsaPrivateKey, _ := core.GenerateEphemeralKeyPair()
 	jwkKey, _ := jwk.Import(testkeymaterial.EphemeralRsaKeyText)
-	jsonBytes, _ := json.Marshal(jwkKey)
-
-	md := core.SecondaryProtectionParameters{}
-
-	helper := core.NewVersionedBinaryConfidentialDataHelper(KeyObjectType)
-	return helper.CreateConfidentialBinaryData(jsonBytes, md).Data
+	return jwkKey
 }
 
 func givenVersionedBinaryConfidentialDataFromString(s string) core.ConfidentialBinaryData {
@@ -481,7 +475,7 @@ func givenVersionedBinaryConfidentialDataFromString(s string) core.ConfidentialB
 
 func Test_CAzVKR_DoCreate_IfKeyClientCannotConnect(t *testing.T) {
 	mdl := givenTypicalKeyModel()
-	confidentialData := givenVersionedConfidentialDataFromEphemeralKey()
+	confidentialData := givenLoadedJWKKey()
 
 	factoryMock := AZClientsFactoryMock{}
 	factoryMock.GivenGetDestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
@@ -500,7 +494,7 @@ func Test_CAzVKR_DoCreate_IfKeyClientCannotConnect(t *testing.T) {
 
 func Test_CAzVKR_DoCreate_IfKeyClientWillBeNil(t *testing.T) {
 	mdl := givenTypicalKeyModel()
-	confidentialData := givenVersionedConfidentialDataFromEphemeralKey()
+	confidentialData := givenLoadedJWKKey()
 
 	factoryMock := AZClientsFactoryMock{}
 	factoryMock.GivenGetDestinationVaultObjectCoordinate("unit-test-vault", "keys", "keyName")
@@ -518,22 +512,10 @@ func Test_CAzVKR_DoCreate_IfKeyClientWillBeNil(t *testing.T) {
 	factoryMock.AssertExpectations(t)
 }
 
-func Test_CAzVKR_DoCreate_IfJWKDataIsInvalid(t *testing.T) {
-	mdl := givenTypicalKeyModel()
-	// JWK data needs binary elements initialized
-	confidentialData := givenVersionedBinaryConfidentialDataFromString("this is not a JSON Key data")
-
-	ks := AzKeyVaultKeyResourceSpecializer{}
-
-	_, dg := ks.DoCreate(context.Background(), &mdl, confidentialData)
-	assert.True(t, dg.HasError())
-	assert.Equal(t, "Cannot read JSON Web Key data", dg[0].Summary())
-}
-
 func Test_CAzVKR_DoCreate_IfImportFails(t *testing.T) {
 	mdl := givenTypicalKeyModel()
 	// JWK data needs binary elements initialized
-	confidentialData := givenVersionedConfidentialDataFromEphemeralKey()
+	confidentialData := givenLoadedJWKKey()
 
 	clientMock := KeysClientMock{}
 	clientMock.GivenImportKeyReturnsError("keyName", "unit-test-error-message")
@@ -557,7 +539,7 @@ func Test_CAzVKR_DoCreate_IfImportFails(t *testing.T) {
 func Test_CAzVKR_DoCreate(t *testing.T) {
 	mdl := givenTypicalKeyModel()
 	// JWK data needs binary elements initialized
-	confidentialData := givenVersionedConfidentialDataFromEphemeralKey()
+	confidentialData := givenLoadedJWKKey()
 
 	clientMock := KeysClientMock{}
 	clientMock.GivenImportKey("keyName")

@@ -159,8 +159,8 @@ func (a *AzKeyVaultCertificateResourceSpecializer) GetConfidentialMaterialFrom(m
 	return mdl.ConfidentialMaterialModel
 }
 
-func (a *AzKeyVaultCertificateResourceSpecializer) GetSupportedConfidentialMaterialTypes() []string {
-	return []string{CertificateObjectType}
+func (a *AzKeyVaultCertificateResourceSpecializer) Decrypt(_ context.Context, em core.EncryptedMessage, decr core.RSADecrypter) (core.ConfidentialDataJsonHeader, core.ConfidentialCertificateData, error) {
+	return DecryptCertificateMessage(em, decr)
 }
 
 func (a *AzKeyVaultCertificateResourceSpecializer) CheckPlacement(ctx context.Context, pc []core.ProviderConstraint, pl []core.PlacementConstraint, tfModel *CertificateModel) diag.Diagnostics {

@@ -374,7 +374,7 @@ func ConvertJWKSToAzJWK(set jwk.Set, key *azkeys.JSONWebKey) error {
 	}
 }
 
-func ConvertJWKToAzJWK(jwkKey interface{}, outKey *azkeys.JSONWebKey) error {
+func ConvertJWKToAzJWK(jwkKey jwk.Key, outKey *azkeys.JSONWebKey) error {
 	if rsaKey, ok := jwkKey.(jwk.RSAPrivateKey); ok {
 		outKey.Kty = to.Ptr(azkeys.KeyTypeRSA)
 		port(&outKey.D, rsaKey.D)

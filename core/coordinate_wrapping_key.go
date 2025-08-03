@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
-	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"strings"
@@ -56,30 +55,29 @@ func (w *WrappingKeyCoordinate) DefiesKeyAlgorithm() bool {
 	return len(w.Algorithm) > 0
 }
 
-func (w *WrappingKeyCoordinate) FillDefaults(ctx context.Context, client AzKeyClientAbstraction, diag *diag.Diagnostics) {
+func (w *WrappingKeyCoordinate) FillDefaults(ctx context.Context, client AzKeyClientAbstraction) error {
 	if len(w.KeyVersion) == 0 {
 		tflog.Trace(ctx, fmt.Sprintf("Attempting establish the latest version of the key %s in vault %s", w.KeyName, w.VaultName))
 
 		if keyResp, readKeyErr := client.GetKey(ctx, w.KeyName, "", nil); readKeyErr != nil {
-			diag.AddError("Was unable to retrieve the latest version of key", fmt.Sprintf("%s", readKeyErr.Error()))
-			return
+			return fmt.Errorf("was unable to retrieve the latest version of key: %s", readKeyErr.Error())
 		} else {
 			w.KeyVersion = keyResp.Key.KID.Version()
 		}
 	} else {
 		if _, readKeyErr := client.GetKey(ctx, w.KeyName, w.KeyVersion, nil); readKeyErr != nil {
-			diag.AddError("Was unable to retrieve the specified version of key", fmt.Sprintf("%s", readKeyErr.Error()))
-			return
+			return fmt.Errorf("was unable to retrieve the specified version of key %s", readKeyErr.Error())
 		}
 	}
 
 	azAlg, algDetectError := w.GetAzEncryptionAlgorithm()
 	if algDetectError != nil {
-		diag.AddError("Missing decryption algorithm", "The algorithm supplied doesn't match any supported decryption algorithms")
-		return
+		return fmt.Errorf("the algorithm supplied (%s) doesn't match any supported decryption algorithms", w.Algorithm)
 	} else {
 		w.AzEncryptionAlg = azAlg
 	}
+
+	return nil
 }
 
 func (w *WrappingKeyCoordinate) GetAzEncryptionAlgorithm() (azkeys.EncryptionAlgorithm, error) {
@@ -105,12 +103,8 @@ func (w *WrappingKeyCoordinate) AddressesKey() bool {
 	return len(w.VaultName) > 0 && len(w.KeyName) > 0
 }
 
-func (w *WrappingKeyCoordinate) Validate() diag.Diagnostics {
-	var rv diag.Diagnostics
-
+func (w *WrappingKeyCoordinate) Validate() error {
 	if !w.AddressesKey() {
-		summary := "Incomplete wrapping key address"
-
 		detail := strings.Builder{}
 		detail.WriteString("To unwrap a key, a at least vault name and wrapping key name must be supplied.")
 		if len(w.VaultName) == 0 {
@@ -120,8 +114,8 @@ func (w *WrappingKeyCoordinate) Validate() diag.Diagnostics {
 			detail.WriteString(" Wrapping key name is not provided for this resource.")
 		}
 
-		rv = append(rv, diag.NewErrorDiagnostic(summary, detail.String()))
+		return errors.New(detail.String())
 	}
 
-	return rv
+	return nil
 }

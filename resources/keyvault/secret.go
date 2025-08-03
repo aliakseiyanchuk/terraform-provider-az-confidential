@@ -108,24 +108,17 @@ func (a *AzKeyVaultSecretResourceSpecializer) NewTerraformModel() SecretModel {
 	return SecretModel{}
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) AssignIdTo(secret azsecrets.Secret, tfModel *SecretModel) {
-	idVal := secret.ID
-	if idVal != nil {
-		tfModel.Id = types.StringValue(string(*idVal))
-	}
-}
-
 func (a *AzKeyVaultSecretResourceSpecializer) ConvertToTerraform(secret azsecrets.Secret, tfModel *SecretModel) diag.Diagnostics {
 	tfModel.Accept(secret)
 	return nil
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) GetConfidentialMaterialFrom(mdl SecretModel) resources.ConfidentialMaterialModel {
-	return mdl.ConfidentialMaterialModel
+func (a *AzKeyVaultSecretResourceSpecializer) Decrypt(_ context.Context, em core.EncryptedMessage, decr core.RSADecrypter) (core.ConfidentialDataJsonHeader, core.ConfidentialStringData, error) {
+	return DecryptSecretMessage(em, decr)
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) GetSupportedConfidentialMaterialTypes() []string {
-	return []string{SecretObjectType}
+func (a *AzKeyVaultSecretResourceSpecializer) GetConfidentialMaterialFrom(mdl SecretModel) resources.ConfidentialMaterialModel {
+	return mdl.ConfidentialMaterialModel
 }
 
 func (a *AzKeyVaultSecretResourceSpecializer) CheckPlacement(ctx context.Context, pc []core.ProviderConstraint, pl []core.PlacementConstraint, tfModel *SecretModel) diag.Diagnostics {

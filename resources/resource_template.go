@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -10,7 +9,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"regexp"
-	"slices"
 	"strings"
 )
 
@@ -44,7 +42,7 @@ func (t ResourceExistenceCheck) String() string {
 	}
 }
 
-// APIObjectToStateImporter an API object into th state
+// APIObjectToStateImporter an API object into the state
 type APIObjectToStateImporter[TMdl, AZAPIObject any] func(azObj AZAPIObject, tfModel *TMdl)
 type IdAssigner[TMdl, AZAPIObject any] func(azObj AZAPIObject, tfModel *TMdl)
 
@@ -55,9 +53,8 @@ type CommonConfidentialResourceSpecialization[TMdl any, TConfData any, AZAPIObje
 	NewTerraformModel() TMdl
 	ConvertToTerraform(azObj AZAPIObject, tfModel *TMdl) diag.Diagnostics
 	GetConfidentialMaterialFrom(mdl TMdl) ConfidentialMaterialModel
-	GetSupportedConfidentialMaterialTypes() []string
+	Decrypt(ctx context.Context, em core.EncryptedMessage, decr core.RSADecrypter) (core.ConfidentialDataJsonHeader, TConfData, error)
 	CheckPlacement(ctx context.Context, providerConstraints []core.ProviderConstraint, placementConstraints []core.PlacementConstraint, tfModel *TMdl) diag.Diagnostics
-	GetJsonDataImporter() core.ObjectJsonImportSupport[TConfData]
 
 	DoCreate(ctx context.Context, planData *TMdl, plainData TConfData) (AZAPIObject, diag.Diagnostics)
 	DoDelete(ctx context.Context, planData *TMdl) diag.Diagnostics
@@ -139,7 +136,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 
 	var azObj AZAPIObject
 	var resourceExistenceCheck = ResourceCheckNotAttempted
-	var dg diag.Diagnostics
+	dg := diag.Diagnostics{}
 
 	if d.ImmutableRU != nil {
 		// Immutable read/update does not require decryption
@@ -154,25 +151,32 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 			return
 		}
 
-		rawMsg := d.GetRawVersionedConfidentialDataMessage(ctx, confMdl, resp.Diagnostics)
+		em := core.EncryptedMessage{}
+		if emImportErr := em.FromBase64PEM(confMdl.EncryptedSecret.ValueString()); emImportErr != nil {
+			dg.AddError(
+				"Confidential content does not conform to the expected format",
+				fmt.Sprintf("Received this error while trying to parse the confidential message: %s. Confidential content shoud be produced either by tfgen tool or vai appropriate function", emImportErr.Error()),
+			)
+			return
+		}
+
+		rsaDecrypter := d.Factory.GetDecrypterFor(ctx, confMdl.WrappingKeyCoordinate)
+
+		header, confData, err := d.Specializer.Decrypt(ctx, em, rsaDecrypter)
+		if err != nil {
+			dg.AddError(
+				"Cannot decrypt ciphertext",
+				fmt.Sprintf("Received this error while trying to decrypt the confidential message: %s. Confidential content shoud be produced either by tfgen tool or vai appropriate function and encrypted with the public key that this provider is using.", err.Error()),
+			)
+			return
+		}
+
+		d.CheckCiphertextExpiry(header, resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
 
-		d.CheckCiphertextExpiry(rawMsg, resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-
-		if !slices.Contains(d.Specializer.GetSupportedConfidentialMaterialTypes(), rawMsg.Header.Type) {
-			resp.Diagnostics.AddError("Unexpected object type", fmt.Sprintf(
-				"Expected %s, got %s",
-				d.Specializer.GetSupportedConfidentialMaterialTypes(),
-				rawMsg.Header.Type))
-			return
-		}
-
-		placementDiags := d.Specializer.CheckPlacement(ctx, rawMsg.Header.ProviderConstraints, rawMsg.Header.PlacementConstraints, &data)
+		placementDiags := d.Specializer.CheckPlacement(ctx, header.ProviderConstraints, header.PlacementConstraints, &data)
 		resp.Diagnostics.Append(placementDiags...)
 		if resp.Diagnostics.HasError() {
 			tflog.Error(ctx, "checking possibility to place this object raised an error")
@@ -187,13 +191,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 		// A recommended solution to use strict target labeling to counter the risk of copying an update.
 		//
 		// The update operation will track the object to make sure that new creations would not be possible.
-
-		confidentialMaterial := d.RehydrateConfidentialDataFromRawMessage(rawMsg, resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-
-		azObj, resourceExistenceCheck, dg = d.MutableRU.DoRead(ctx, &data, confidentialMaterial)
+		azObj, resourceExistenceCheck, dg = d.MutableRU.DoRead(ctx, &data, confData)
 	} else {
 		resp.Diagnostics.AddError("Incomplete resource configuration", "This resource does not define read/update methods")
 		return
@@ -259,32 +257,40 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		return
 	}
 
-	rawMsg := d.GetRawVersionedConfidentialDataMessage(ctx, d.Specializer.GetConfidentialMaterialFrom(data), resp.Diagnostics)
+	confMdl := d.Specializer.GetConfidentialMaterialFrom(data)
+	em := core.EncryptedMessage{}
+	if emImportErr := em.FromBase64PEM(confMdl.EncryptedSecret.ValueString()); emImportErr != nil {
+		resp.Diagnostics.AddError(
+			"Confidential content does not conform to the expected format",
+			fmt.Sprintf("Received this error while trying to parse the confidential message: %s. Confidential content shoud be produced either by tfgen tool or vai appropriate function", emImportErr.Error()),
+		)
+		return
+	}
+
+	rsaDecrypter := d.Factory.GetDecrypterFor(ctx, confMdl.WrappingKeyCoordinate)
+
+	header, confData, err := d.Specializer.Decrypt(ctx, em, rsaDecrypter)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Cannot decrypt ciphertext",
+			fmt.Sprintf("Received this error while trying to decrypt the confidential message: %s. Confidential content shoud be produced either by tfgen tool or vai appropriate function and encrypted with the public key that this provider is using.", err.Error()),
+		)
+		return
+	}
+
+	d.CheckCiphertextExpiry(header, resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	d.CheckCiphertextExpiry(rawMsg, resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if !slices.Contains(d.Specializer.GetSupportedConfidentialMaterialTypes(), rawMsg.Header.Type) {
-		resp.Diagnostics.AddError("Unexpected object type", fmt.Sprintf(
-			"Expected %s, got %s",
-			d.Specializer.GetSupportedConfidentialMaterialTypes(),
-			rawMsg.Header.Type))
-		return
-	}
-
-	placementDiags := d.Specializer.CheckPlacement(ctx, rawMsg.Header.ProviderConstraints, rawMsg.Header.PlacementConstraints, &data)
+	placementDiags := d.Specializer.CheckPlacement(ctx, header.ProviderConstraints, header.PlacementConstraints, &data)
 	resp.Diagnostics.Append(placementDiags...)
 	if resp.Diagnostics.HasError() {
 		tflog.Error(ctx, "checking possibility to place this object raised an error")
 		return
 	}
 
-	if rawMsg.Header.NumUses > 0 && !d.Factory.IsObjectTrackingEnabled() {
+	if header.NumUses > 0 && !d.Factory.IsObjectTrackingEnabled() {
 		resp.Diagnostics.AddError(
 			"Insecure provider configuration",
 			"The ciphertext of this resource requires tracking the number of times this object is created, while this provider is not configured to do so. Please configure the provider to track objects",
@@ -292,15 +298,15 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		return
 	}
 
-	if rawMsg.Header.NumUses > 0 {
+	if header.NumUses > 0 {
 		// In case a ciphertext may be used several times, the usage is allowed to this limit
-		if numTracked, ntErr := d.Factory.GetTackedObjectUses(ctx, rawMsg.Header.Uuid); ntErr != nil {
+		if numTracked, ntErr := d.Factory.GetTackedObjectUses(ctx, header.Uuid); ntErr != nil {
 			resp.Diagnostics.AddError(
 				"Cannot assert the number of times this ciphertext was used",
 				fmt.Sprintf("Attempt to check how many times the ciphertext was previously used to create a resource erred: %s", ntErr.Error()),
 			)
 			return
-		} else if numTracked >= rawMsg.Header.NumUses {
+		} else if numTracked >= header.NumUses {
 			resp.Diagnostics.AddError(
 				"Ciphertext has been used all time it was allowed to do so",
 				fmt.Sprintf("The use of this ciphertext to create Azure objects has been exhaused. Re-encrypt and replace the ciphertext to continue."),
@@ -309,12 +315,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		}
 	}
 
-	confidentialMaterial := d.RehydrateConfidentialDataFromRawMessage(rawMsg, resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	azObj, dg := d.Specializer.DoCreate(ctx, &data, confidentialMaterial)
+	azObj, dg := d.Specializer.DoCreate(ctx, &data, confData)
 	resp.Diagnostics.Append(dg...)
 	if dg.HasError() {
 		return
@@ -327,68 +328,26 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 
 	resp.Diagnostics.Append(resp.Set(ctx, &data)...)
 
-	if rawMsg.Header.NumUses > 0 {
-		if trackErr := d.Factory.TrackObjectId(ctx, rawMsg.Header.Uuid); trackErr != nil {
+	if header.NumUses > 0 {
+		if trackErr := d.Factory.TrackObjectId(ctx, header.Uuid); trackErr != nil {
 			errMsg := fmt.Sprintf("could not track the object entered into the state: %s", trackErr.Error())
 			tflog.Error(ctx, errMsg)
 			resp.Diagnostics.AddError("Incomplete object tracking", errMsg)
 		}
 
-		if numTracked, ntErr := d.Factory.GetTackedObjectUses(ctx, rawMsg.Header.Uuid); ntErr != nil {
+		if numTracked, ntErr := d.Factory.GetTackedObjectUses(ctx, header.Uuid); ntErr != nil {
 			resp.Diagnostics.AddError(
 				"Cannot assert the number of times this ciphertext was used",
 				fmt.Sprintf("Attempt to check how many times the ciphertext was previously used to create a resource erred: %s", ntErr.Error()),
 			)
 			return
-		} else if numTracked == rawMsg.Header.NumUses && rawMsg.Header.NumUses > 1 {
+		} else if numTracked == header.NumUses && header.NumUses > 1 {
 			resp.Diagnostics.AddWarning(
 				"No more resource create are possible",
 				"The ciphertext allows limited number of times to create Azure objects. No further users are possible. Please recreate ciphertext of this resource ",
 			)
 		}
 	}
-}
-
-func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) RehydrateConfidentialDataFromRawMessage(rawMsg core.ConfidentialDataMessageJson, dg *diag.Diagnostics) TConfData {
-	importer := d.Specializer.GetJsonDataImporter()
-	confidentialMaterial, importErr := importer.Import(rawMsg.ConfidentialData, rawMsg.Header.ModelReference)
-	if importErr != nil {
-		dg.AddError(
-			"Cannot parse confidential data",
-			fmt.Sprintf("Plain text could not be parsed for further processing due to this error: %s. Are you specifying correct ciphertext for this resource?", importErr.Error()),
-		)
-		return importer.DefaultValue()
-	}
-	return confidentialMaterial
-}
-
-func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) GetRawVersionedConfidentialDataMessage(ctx context.Context, confMat ConfidentialMaterialModel, dg *diag.Diagnostics) core.ConfidentialDataMessageJson {
-	rawMsg := core.ConfidentialDataMessageJson{}
-
-	// TODO: this one can also be simplified by moving most of the logic
-	// into the encrypted message.
-	plainTextGzip := d.ExtractConfidentialModelPlainText(ctx, confMat, dg)
-	if dg.HasError() {
-		return rawMsg
-	}
-
-	plainText, gzipErr := core.GZipDecompress(plainTextGzip)
-	if gzipErr != nil {
-		dg.AddError(
-			"Plain-text data structure message is not gzip-compressed",
-			fmt.Sprintf("Plain-text data structure must be gzip compressed; attempting to perfrom gunzip returend this error: %s. This is an error on the ciphertext preparation. Please use tfgen tool or provider's function to compute the ciphertext", gzipErr.Error()),
-		)
-		return rawMsg
-	}
-
-	if jsonErr := json.Unmarshal(plainText, &rawMsg); jsonErr != nil {
-		dg.AddError(
-			"Cannot process plain-text data",
-			fmt.Sprintf("The plain-text data does not conform to the minimal expected data structure requirements: %s", jsonErr.Error()),
-		)
-	}
-
-	return rawMsg
 }
 
 func CreateDriftMessage(tkn string) string {
@@ -419,21 +378,33 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) U
 		// Mutable read/update requires decryption. This process is simplified compared to create because
 		// read operation should have done all the necessary checks.
 
-		rawMsg := d.GetRawVersionedConfidentialDataMessage(ctx, d.Specializer.GetConfidentialMaterialFrom(data), &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
+		confMdl := d.Specializer.GetConfidentialMaterialFrom(data)
+
+		em := core.EncryptedMessage{}
+		if emImportErr := em.FromBase64PEM(confMdl.EncryptedSecret.ValueString()); emImportErr != nil {
+			resp.Diagnostics.AddError(
+				"Confidential content does not conform to the expected format",
+				fmt.Sprintf("Received this error while trying to parse the confidential message: %s. Confidential content shoud be produced either by tfgen tool or vai appropriate function", emImportErr.Error()),
+			)
 			return
 		}
 
-		confidentialMaterial := d.RehydrateConfidentialDataFromRawMessage(rawMsg, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
+		rsaDecrypter := d.Factory.GetDecrypterFor(ctx, confMdl.WrappingKeyCoordinate)
+
+		header, confData, err := d.Specializer.Decrypt(ctx, em, rsaDecrypter)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Cannot decrypt ciphertext",
+				fmt.Sprintf("Received this error while trying to decrypt the confidential message: %s. Confidential content shoud be produced either by tfgen tool or vai appropriate function and encrypted with the public key that this provider is using.", err.Error()),
+			)
 			return
 		}
 
-		azObj, dg = d.MutableRU.DoUpdate(ctx, &data, confidentialMaterial)
+		azObj, dg = d.MutableRU.DoUpdate(ctx, &data, confData)
 
 		// Track the object use
 		if d.Factory.IsObjectTrackingEnabled() {
-			objTracked, objTrackErr := d.Factory.IsObjectIdTracked(ctx, rawMsg.Header.Uuid)
+			objTracked, objTrackErr := d.Factory.IsObjectIdTracked(ctx, header.Uuid)
 			if objTrackErr != nil {
 				resp.Diagnostics.AddError(
 					"Could not verify object tracking status after update",
@@ -441,7 +412,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) U
 				)
 			}
 			if !objTracked {
-				if trackErr := d.Factory.TrackObjectId(ctx, rawMsg.Header.Uuid); trackErr != nil {
+				if trackErr := d.Factory.TrackObjectId(ctx, header.Uuid); trackErr != nil {
 					resp.Diagnostics.AddError(
 						"Could not track the ciphertext use at update",
 						trackErr.Error(),

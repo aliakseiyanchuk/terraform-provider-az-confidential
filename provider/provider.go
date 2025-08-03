@@ -213,19 +213,23 @@ func (f *AZClientsFactoryImpl) AzKeyVaultRSADecrypt(ctx context.Context, input [
 	return decrResp.Result, nil
 }
 
-func (f *AZClientsFactoryImpl) GetDecrypterFor(ctx context.Context, coord core.WrappingKeyCoordinate) core.RSADecrypter {
+func (f *AZClientsFactoryImpl) GetDecrypterFor(ctx context.Context, coord *core.WrappingKeyCoordinateModel) core.RSADecrypter {
+	wrappingKeyCoordinate, coordErr := f.GetMergedWrappingKeyCoordinate(ctx, coord)
 	return func(input []byte) ([]byte, error) {
-		return f.AzKeyVaultRSADecrypt(ctx, input, coord)
+		if coordErr != nil {
+			return []byte{}, coordErr
+		}
+
+		return f.AzKeyVaultRSADecrypt(ctx, input, wrappingKeyCoordinate)
 	}
 }
 
-func (f *AZClientsFactoryImpl) GetMergedWrappingKeyCoordinate(ctx context.Context, param *core.WrappingKeyCoordinateModel, diag *diag.Diagnostics) core.WrappingKeyCoordinate {
+func (f *AZClientsFactoryImpl) GetMergedWrappingKeyCoordinate(ctx context.Context, param *core.WrappingKeyCoordinateModel) (core.WrappingKeyCoordinate, error) {
 
-	if f.DisallowResourceSpecifiedWrappingKey {
+	if f.DisallowResourceSpecifiedWrappingKey && param != nil {
 		pc := param.AsCoordinate()
 		if !pc.IsEmpty() {
-			diag.AddError("Inadmissible configuration", "Provider configuration explicitly prohibits the use of resource-level wrapping keys")
-			return pc
+			return core.WrappingKeyCoordinate{}, errors.New("provider configuration explicitly prohibits the use of resource-level wrapping keys")
 		}
 	}
 
@@ -242,23 +246,24 @@ func (f *AZClientsFactoryImpl) GetMergedWrappingKeyCoordinate(ctx context.Contex
 
 		if f.keysCache != nil {
 			if rv, ok := f.keysCache[cacheKey]; ok {
-				return rv
+				return rv, nil
 			}
 		}
 
 		if kClient, err := f.GetKeysClient(base.VaultName); err != nil {
-			diag.AddError("cannot obtain key client", err.Error())
+			return core.WrappingKeyCoordinate{}, fmt.Errorf("cannot obtain key client: %s", err.Error())
 		} else {
-			base.FillDefaults(ctx, kClient, diag)
-			f.CacheWrappingKeyCoordinate(cacheKey, base)
+			if fillDefaultsErr := base.FillDefaults(ctx, kClient); fillDefaultsErr == nil {
+				f.CacheWrappingKeyCoordinate(cacheKey, base)
+			} else {
+				return core.WrappingKeyCoordinate{}, fillDefaultsErr
+			}
 		}
 	} else {
-		diag.AddError("incomplete coordinate of a wrapping key", "at least vault and key name are required")
+		return core.WrappingKeyCoordinate{}, errors.New("incomplete coordinate of a wrapping key; at least vault and key name are required")
 	}
 
-	diag.Append(base.Validate()...)
-
-	return base
+	return base, base.Validate()
 }
 
 func (cm *AZClientsFactoryImpl) GetDestinationVaultObjectCoordinate(coord core.AzKeyVaultObjectCoordinateModel, objType string) core.AzKeyVaultObjectCoordinate {

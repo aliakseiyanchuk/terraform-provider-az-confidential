@@ -350,11 +350,11 @@ type CommonConfidentialResource struct {
 	Factory core.AZClientsFactory
 }
 
-func (d *CommonConfidentialResource) CheckCiphertextExpiry(rawMsg core.ConfidentialDataMessageJson, dg *diag.Diagnostics) {
-	if rawMsg.Header.Expiry > 0 {
+func (d *CommonConfidentialResource) CheckCiphertextExpiry(header core.ConfidentialDataJsonHeader, dg *diag.Diagnostics) {
+	if header.Expiry > 0 {
 		now := time.Now()
 
-		if now.Unix() > rawMsg.Header.Expiry {
+		if now.Unix() > header.Expiry {
 			dg.AddError(
 				"Ciphertext has expired",
 				"The ciphertext may no longer be used. Re-encrypt and replace the ciphertext of this resource",
@@ -363,7 +363,7 @@ func (d *CommonConfidentialResource) CheckCiphertextExpiry(rawMsg core.Confident
 		}
 
 		warningDuration := time.Hour * 24 * 30
-		expiryTime := time.Unix(rawMsg.Header.Expiry, 0)
+		expiryTime := time.Unix(header.Expiry, 0)
 		diff := expiryTime.Sub(time.Now())
 		if diff < warningDuration {
 			dg.AddWarning(
@@ -396,35 +396,6 @@ func (d *CommonConfidentialResource) CheckCiphertextCreateLimit(rawMsg core.Conf
 			)
 		}
 	}
-}
-
-func (d *CommonConfidentialResource) ExtractConfidentialModelPlainText(ctx context.Context, mdl ConfidentialMaterialModel, diagnostics *diag.Diagnostics) []byte {
-	if d.Factory == nil {
-		diagnostics.AddError("incomplete provider configuration", "provider does no have an initialized Azure objects Factory")
-		return nil
-	}
-
-	// TODO: this method mayh be moved into GetDecrypterFor.
-	// To create a secret, a coordinate of the wrapping key needs to be established and known
-	wrappingKeyCoordinate := d.Factory.GetMergedWrappingKeyCoordinate(ctx, mdl.WrappingKeyCoordinate, diagnostics)
-	if diagnostics.HasError() {
-		tflog.Error(ctx, "Wrapping key coordinate resulted in error diagnostics; this is probably incomplete/inconsistent configuration")
-		return nil
-	}
-
-	em := core.EncryptedMessage{}
-	if emErr := em.FromBase64PEM(mdl.EncryptedSecret.ValueString()); emErr != nil {
-		diagnostics.AddError("Invalid encrypted message", fmt.Sprintf("Encrypted message cannot be read from input: %s", emErr.Error()))
-		return nil
-	}
-
-	payloadBytes, pbErr := em.ExtractPlainText(d.Factory.GetDecrypterFor(ctx, wrappingKeyCoordinate))
-	if pbErr != nil {
-		diagnostics.AddError("Failed to decrypt message", fmt.Sprintf("Encrypted message cannot be decrypted: %s", pbErr.Error()))
-		return nil
-	}
-
-	return payloadBytes
 }
 
 type ConfidentialDatasourceBase struct {

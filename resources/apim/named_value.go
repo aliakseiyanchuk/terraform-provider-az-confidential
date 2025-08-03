@@ -136,8 +136,8 @@ func (n *NamedValueSpecializer) GetConfidentialMaterialFrom(mdl NamedValueModel)
 	return mdl.ConfidentialMaterialModel
 }
 
-func (n *NamedValueSpecializer) GetSupportedConfidentialMaterialTypes() []string {
-	return []string{NamedValueObjectType}
+func (n *NamedValueSpecializer) Decrypt(_ context.Context, em core.EncryptedMessage, decr core.RSADecrypter) (core.ConfidentialDataJsonHeader, core.ConfidentialStringData, error) {
+	return DecryptNamedValueMessage(em, decr)
 }
 
 func (n *NamedValueSpecializer) CheckPlacement(ctx context.Context, pc []core.ProviderConstraint, pl []core.PlacementConstraint, tfModel *NamedValueModel) diag.Diagnostics {

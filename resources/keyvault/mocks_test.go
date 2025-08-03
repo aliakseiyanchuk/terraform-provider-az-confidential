@@ -153,7 +153,7 @@ func (m *AZClientsFactoryMock) GetTackedObjectUses(ctx context.Context, id strin
 	return rv.Get(0).(int), rv.Error(1)
 }
 
-func (m *AZClientsFactoryMock) GetDecrypterFor(ctx context.Context, coord core.WrappingKeyCoordinate) core.RSADecrypter {
+func (m *AZClientsFactoryMock) GetDecrypterFor(ctx context.Context, coord *core.WrappingKeyCoordinateModel) core.RSADecrypter {
 	rv := m.Mock.Called(ctx, coord)
 	return rv.Get(0).(core.RSADecrypter)
 }

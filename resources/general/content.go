@@ -6,7 +6,6 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
@@ -108,63 +107,43 @@ func (d *ConfidentialContentDataSource) Read(ctx context.Context, req datasource
 		return
 	}
 
-	plainTextGzip := d.ExtractConfidentialModelPlainText(ctx, data.ConfidentialMaterialModel, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	plainText, gzipErr := core.GZipDecompress(plainTextGzip)
-	if gzipErr != nil {
+	em := core.EncryptedMessage{}
+	if emImportErr := em.FromBase64PEM(data.EncryptedSecret.ValueString()); emImportErr != nil {
 		resp.Diagnostics.AddError(
-			"Plain-text data structure message is not gzip-compressed",
-			fmt.Sprintf("Plain-text data structure must be gzip compressed; attempting to perfrom gunzip returend this error: %s. This is an error on the ciphertext preparation. Please use tfgen tool or provider's function to compute the ciphertext", gzipErr.Error()),
+			"Confidential content does not conform to the expected format",
+			fmt.Sprintf("Received this error while trying to parse the confidential message: %s. Confidential content shoud be produced either by tfgen tool or vai appropriate function", emImportErr.Error()),
 		)
 		return
 	}
 
-	rawMsg := core.ConfidentialDataMessageJson{}
-	if jsonErr := json.Unmarshal(plainText, &rawMsg); jsonErr != nil {
+	header, content, err := DecryptContentMessage(em, d.Factory.GetDecrypterFor(ctx, data.WrappingKeyCoordinate))
+	if err != nil {
 		resp.Diagnostics.AddError(
 			"Cannot process plain-text data",
-			fmt.Sprintf("The plain-text data does not conform to the minimal expected data structure requirements: %s", jsonErr.Error()),
+			fmt.Sprintf("The plain-text data does not conform to the minimal expected data structure requirements: %s", err.Error()),
 		)
 
 		return
 	}
 
-	if rawMsg.Header.Type != ContentObjectType {
-		resp.Diagnostics.AddError("Mismatching confidential object type", fmt.Sprintf("Expected `password`, received `%s`", rawMsg.Header.Type))
-	}
-
-	d.CheckCiphertextExpiry(rawMsg, &resp.Diagnostics)
+	d.CheckCiphertextExpiry(header, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	// TODO: also control the number of uses
 
-	d.Factory.EnsureCanPlaceLabelledObjectAt(ctx, rawMsg.Header.ProviderConstraints, nil, "password", nil, &resp.Diagnostics)
+	d.Factory.EnsureCanPlaceLabelledObjectAt(ctx, header.ProviderConstraints, nil, "password", nil, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		tflog.Error(ctx, "checking possibility to place this object raised an error")
 		return
 	}
 
-	helper := core.NewVersionedStringConfidentialDataHelper(ContentObjectType)
-	confidentialData, importErr := helper.Import(rawMsg.ConfidentialData, rawMsg.Header.ModelReference)
-	if importErr != nil {
-		tflog.Error(ctx, "diagnostics contain error after unwrapping the ciphertext; cannot continue")
-		resp.Diagnostics.AddError(
-			"Cannot parse plain text",
-			fmt.Sprintf("Plain text could not be parsed for further processing due to this error: %s. Are you specifying correct ciphertext for this datasource?", importErr.Error()),
-		)
-		return
-	}
-
-	if len(confidentialData.GetStingData()) == 0 {
+	if len(content.GetStingData()) == 0 {
 		resp.Diagnostics.AddWarning("Empty confidential data", "Confidential data that this password encrypts seems to be empty")
 	}
 
-	data.Accept(rawMsg.Header.Uuid, confidentialData)
+	data.Accept(header.Uuid, content)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 

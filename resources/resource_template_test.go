@@ -40,7 +40,7 @@ func (azm *AZClientsFactoryMock) GetMergedWrappingKeyCoordinate(ctx context.Cont
 	return args.Get(0).(core.WrappingKeyCoordinate)
 }
 
-func (azm *AZClientsFactoryMock) GetDecrypterFor(ctx context.Context, coord core.WrappingKeyCoordinate) core.RSADecrypter {
+func (azm *AZClientsFactoryMock) GetDecrypterFor(ctx context.Context, coord *core.WrappingKeyCoordinateModel) core.RSADecrypter {
 	args := azm.Called(ctx, coord)
 	return args.Get(0).(core.RSADecrypter)
 }
@@ -155,6 +155,25 @@ type SpecializerMock[TMdl any, TConfData any, AZAPIObject any] struct {
 	Factory core.AZClientsFactory
 }
 
+func (sm *SpecializerMock[TMdl, TConfData, AZAPIObject]) Decrypt(ctx context.Context, em core.EncryptedMessage, decr core.RSADecrypter) (core.ConfidentialDataJsonHeader, TConfData, error) {
+	args := sm.Mock.Called(ctx, em, decr)
+	return args.Get(0).(core.ConfidentialDataJsonHeader), args.Get(1).(TConfData), nil
+}
+
+func (sm *SpecializerMock[TMdl, TConfData, AZAPIObject]) GivenDecryptErrs(defaultValue TConfData, msg string) {
+	sm.On("Decrypt", mock.Anything, mock.Anything, mock.Anything).Return(
+		core.ConfidentialDataJsonHeader{},
+		defaultValue,
+		errors.New(msg))
+}
+
+func (sm *SpecializerMock[TMdl, TConfData, AZAPIObject]) GivenDecrypt(header core.ConfidentialDataJsonHeader, decryptedValue TConfData) {
+	sm.On("Decrypt", mock.Anything, mock.Anything, mock.Anything).Return(
+		header,
+		decryptedValue,
+		nil)
+}
+
 func (sm *SpecializerMock[TMdl, TConfData, AZAPIObject]) GivenCreateErrs(mdl, msg string) {
 	sm.On("DoCreate",
 		mock.Anything,
@@ -197,11 +216,6 @@ func (sm *SpecializerMock[TMdl, TConfData, AzAPIObject]) GetConfidentialMaterial
 func (sm *SpecializerMock[TMdl, TConfData, AzAPIObject]) GetSupportedConfidentialMaterialTypes() []string {
 	args := sm.Called()
 	return args.Get(0).([]string)
-}
-
-func (sm *SpecializerMock[TMdl, TConfData, AzAPIObject]) GetJsonDataImporter() core.ObjectJsonImportSupport[TConfData] {
-	args := sm.Called()
-	return args.Get(0).(core.ObjectJsonImportSupport[TConfData])
 }
 
 func (sm *SpecializerMock[TMdl, TConfData, AzAPIObject]) DoCreate(ctx context.Context, planData *TMdl, plainData TConfData) (AzAPIObject, diag.Diagnostics) {
@@ -311,14 +325,6 @@ func (grtc *GenericResourceTestContext) GivenImmutableRUReturnsErrorWithoutDiagn
 
 const UnitTestObjectType = "unitTest/string"
 
-func (grtc *GenericResourceTestContext) GivenCiphertextMatchesObjectType() {
-	grtc.SpecializerMock.On("GetSupportedConfidentialMaterialTypes").Return([]string{UnitTestObjectType})
-}
-
-func (grtc *GenericResourceTestContext) GivenCiphertextDoesNotMatchObjectType() {
-	grtc.SpecializerMock.On("GetSupportedConfidentialMaterialTypes").Return([]string{"unexpected object type"})
-}
-
 func (grtc *GenericResourceTestContext) GivenObjectCanBePlacedAsRequested() {
 	grtc.SpecializerMock.On("CheckPlacement",
 		mock.Anything,
@@ -337,11 +343,6 @@ func (grtc *GenericResourceTestContext) GivenObjectCannotBePlacedAsRequested(msg
 	).Once().Return(diag.Diagnostics{
 		diag.NewErrorDiagnostic(msg, "unit-test-detail"),
 	})
-}
-
-func (grtc *GenericResourceTestContext) GivenJsonDataImporter() {
-	var importer core.ObjectJsonImportSupport[core.ConfidentialStringData] = core.NewVersionedStringConfidentialDataHelper(UnitTestObjectType)
-	grtc.SpecializerMock.On("GetJsonDataImporter").Once().Return(importer)
 }
 
 func (grtc *GenericResourceTestContext) GivenExpiredCiphertext(t *testing.T, mdl string) {
@@ -433,8 +434,11 @@ func (grtc *GenericResourceTestContext) givenCiphertextOperations(t *testing.T, 
 	rsaDecrypter = func(input []byte) ([]byte, error) { return core.RsaDecryptBytes(privKey.(*rsa.PrivateKey), input, nil) }
 
 	grtc.SpecializerMock.On("GetConfidentialMaterialFrom", mdl).Return(cmm)
-	grtc.FactoryMock.On("GetMergedWrappingKeyCoordinate", mock.Anything, mock.Anything, mock.Anything).Return(core.WrappingKeyCoordinate{})
-	grtc.FactoryMock.On("GetDecrypterFor", mock.Anything, mock.Anything).Return(rsaDecrypter)
+	grtc.SpecializerMock.
+		On("Decrypt", mock.Anything, em, mock.AnythingOfType("core.RSADecrypter")).
+		Return(helper.Header, helper.KnowValue, nil)
+
+	grtc.FactoryMock.On("GetDecrypterFor", mock.Anything, mock.Anything).Return(rsaDecrypter).Maybe()
 }
 
 func (grtc *GenericResourceTestContext) GivenImmutableRUReturns(v string, state ResourceExistenceCheck) {
@@ -679,10 +683,8 @@ func Test_Template_ReadMURU_IfCiphertextAlmostExpired(t *testing.T) {
 
 	testCtx.RequestMock.GivenGet()
 	testCtx.GivenExpiringCiphertext(t, "InitialModelValue")
-	testCtx.GivenCiphertextMatchesObjectType()
 	testCtx.GivenMutableRUReturns("InitialModelValue", ResourceExists)
 	testCtx.GivenObjectCanBePlacedAsRequested()
-	testCtx.GivenJsonDataImporter()
 
 	testCtx.SpecializerMock.ThenAzValueIsConvertedToTerraform("OkayModel", "InitialModelValue", StringComparator)
 	testCtx.ResponseMock.ThenTerraformModelIsSet("InitialModelValue")
@@ -701,10 +703,8 @@ func Test_Template_ReadMURU_IfCiphertextBeyondExpiry(t *testing.T) {
 
 	testCtx.RequestMock.GivenGet()
 	testCtx.GivenCiphertextExpiringIn3Months(t, "InitialModelValue")
-	testCtx.GivenCiphertextMatchesObjectType()
 	testCtx.GivenMutableRUReturns("InitialModelValue", ResourceExists)
 	testCtx.GivenObjectCanBePlacedAsRequested()
-	testCtx.GivenJsonDataImporter()
 
 	testCtx.SpecializerMock.ThenAzValueIsConvertedToTerraform("OkayModel", "InitialModelValue", StringComparator)
 	testCtx.ResponseMock.ThenTerraformModelIsSet("InitialModelValue")
@@ -718,34 +718,11 @@ func Test_Template_ReadMURU_IfCiphertextBeyondExpiry(t *testing.T) {
 	assert.Equal(t, 0, len(*testCtx.ResponseMock.Diagnostic))
 }
 
-func Test_Template_ReadMURU_IfCiphertextIsOfUnexpectedObjectType(t *testing.T) {
-	testCtx := givenSetup()
-
-	testCtx.RequestMock.GivenGet()
-	testCtx.GivenCiphertextExpiringIn3Months(t, "InitialModelValue")
-	testCtx.GivenCiphertextDoesNotMatchObjectType()
-	//testCtx.GivenMutableRUReturns("InitialModelValue", ResourceExists)
-	//testCtx.GivenObjectCanBePlacedAsRequested()
-	//testCtx.GivenJsonDataImporter()
-	//
-	//testCtx.SpecializerMock.ThenAzValueIsConvertedToTerraform("OkayModel", "InitialModelValue", StringComparator)
-	//testCtx.ResponseMock.ThenTerraformModelIsSet("InitialModelValue")
-
-	testCtx.ResourceUnderTest.ReadT(
-		context.Background(),
-		testCtx.RequestMock.AsRequestAbstraction(),
-		testCtx.ResponseMock.AsResponseAbstraction())
-
-	testCtx.AssertExpectations(t)
-	testCtx.AssertResponseHasError(t, "Unexpected object type")
-}
-
 func Test_Template_ReadMURU_IfCiphertextCannotBePlaced(t *testing.T) {
 	testCtx := givenSetup()
 
 	testCtx.RequestMock.GivenGet()
 	testCtx.GivenCiphertextExpiringIn3Months(t, "InitialModelValue")
-	testCtx.GivenCiphertextMatchesObjectType()
 	testCtx.GivenObjectCannotBePlacedAsRequested("NonPlaceableObject")
 	//testCtx.GivenMutableRUReturns("InitialModelValue", ResourceExists)
 	//testCtx.GivenJsonDataImporter()
@@ -767,9 +744,7 @@ func Test_Template_ReadMURU_IfResourceIsNotFound(t *testing.T) {
 
 	testCtx.RequestMock.GivenGet()
 	testCtx.GivenCiphertextExpiringIn3Months(t, "InitialModelValue")
-	testCtx.GivenCiphertextMatchesObjectType()
 	testCtx.GivenObjectCanBePlacedAsRequested()
-	testCtx.GivenJsonDataImporter()
 	testCtx.GivenMutableRUReturns("InitialModelValue", ResourceNotFound)
 	//
 	//testCtx.SpecializerMock.ThenAzValueIsConvertedToTerraform("OkayModel", "InitialModelValue", StringComparator)
@@ -790,9 +765,7 @@ func Test_Template_ReadMURU_IfResourceMatchesConfidentialData(t *testing.T) {
 
 	testCtx.RequestMock.GivenGet()
 	testCtx.GivenCiphertextExpiringIn3Months(t, "InitialModelValue")
-	testCtx.GivenCiphertextMatchesObjectType()
 	testCtx.GivenObjectCanBePlacedAsRequested()
-	testCtx.GivenJsonDataImporter()
 	testCtx.GivenMutableRUReturns("InitialModelValue", ResourceExists)
 
 	testCtx.SpecializerMock.ThenAzValueIsConvertedToTerraform("OkayModel", "InitialModelValue", StringComparator)
@@ -812,9 +785,7 @@ func Test_Template_ReadMURU_IfResourceDriftsFromConfidentialData(t *testing.T) {
 
 	testCtx.RequestMock.GivenGet()
 	testCtx.GivenCiphertextExpiringIn3Months(t, "InitialModelValue")
-	testCtx.GivenCiphertextMatchesObjectType()
 	testCtx.GivenObjectCanBePlacedAsRequested()
-	testCtx.GivenJsonDataImporter()
 	testCtx.GivenMutableRUReturns("InitialModelValue", ResourceConfidentialDataDrift)
 
 	testCtx.SpecializerMock.ThenAzValueIsConvertedToTerraform("OkayModel", "InitialModelValue", StringComparator)
@@ -851,7 +822,6 @@ func Test_Template_Create_IfCiphertextCannotBePlaced(t *testing.T) {
 
 	testCtx.RequestMock.GivenGet()
 	testCtx.GivenCiphertextExpiringIn3Months(t, "InitialModelValue")
-	testCtx.GivenCiphertextMatchesObjectType()
 	testCtx.GivenObjectCannotBePlacedAsRequested("NonPlaceableObject")
 
 	testCtx.ResourceUnderTest.CreateT(
@@ -863,28 +833,11 @@ func Test_Template_Create_IfCiphertextCannotBePlaced(t *testing.T) {
 	testCtx.AssertResponseHasError(t, "NonPlaceableObject")
 }
 
-func Test_Template_Create_IfCiphertextIsOfUnexpectedObjectType(t *testing.T) {
-	testCtx := givenSetup()
-
-	testCtx.RequestMock.GivenGet()
-	testCtx.GivenCiphertextExpiringIn3Months(t, "InitialModelValue")
-	testCtx.GivenCiphertextDoesNotMatchObjectType()
-
-	testCtx.ResourceUnderTest.CreateT(
-		context.Background(),
-		testCtx.RequestMock.AsRequestAbstraction(),
-		testCtx.ResponseMock.AsResponseAbstraction())
-
-	testCtx.AssertExpectations(t)
-	testCtx.AssertResponseHasError(t, "Unexpected object type")
-}
-
 func Test_Template_Create_UseLimitedCiphertextDeployedOverNonTrackingProvider(t *testing.T) {
 	testCtx := givenSetup()
 
 	testCtx.RequestMock.GivenGet()
 	testCtx.GivenUseLimitedCiphertext(t, "InitialModelValue", 10)
-	testCtx.GivenCiphertextMatchesObjectType()
 	testCtx.GivenObjectCanBePlacedAsRequested()
 	testCtx.FactoryMock.GivenObjectTrackingConfigured(false)
 
@@ -902,7 +855,6 @@ func Test_Template_Create_UseLimitedCiphertextIfTrackingCheckFails(t *testing.T)
 
 	testCtx.RequestMock.GivenGet()
 	testCtx.GivenUseLimitedCiphertext(t, "InitialModelValue", 10)
-	testCtx.GivenCiphertextMatchesObjectType()
 	testCtx.GivenObjectCanBePlacedAsRequested()
 	testCtx.FactoryMock.GivenObjectTrackingConfigured(true)
 	testCtx.FactoryMock.GivenGetTackedObjectUsesErrs("unit-test-tracking-check")
@@ -921,7 +873,6 @@ func Test_Template_Create_UseLimitedCiphertextIfCreatesOverused(t *testing.T) {
 
 	testCtx.RequestMock.GivenGet()
 	testCtx.GivenUseLimitedCiphertext(t, "InitialModelValue", 10)
-	testCtx.GivenCiphertextMatchesObjectType()
 	testCtx.GivenObjectCanBePlacedAsRequested()
 	testCtx.FactoryMock.GivenObjectTrackingConfigured(true)
 	testCtx.FactoryMock.GivenGetTackedObjectUses(10)
@@ -940,11 +891,9 @@ func Test_Template_Create_AzObjectCreateErrs(t *testing.T) {
 
 	testCtx.RequestMock.GivenGet()
 	testCtx.GivenUseLimitedCiphertext(t, "InitialModelValue", 10)
-	testCtx.GivenCiphertextMatchesObjectType()
 	testCtx.GivenObjectCanBePlacedAsRequested()
 	testCtx.FactoryMock.GivenObjectTrackingConfigured(true)
 	testCtx.FactoryMock.GivenGetTackedObjectUses(0)
-	testCtx.GivenJsonDataImporter()
 	testCtx.SpecializerMock.GivenCreateErrs("InitialModelValue", "az-create-err")
 
 	testCtx.ResourceUnderTest.CreateT(
@@ -961,12 +910,10 @@ func Test_Template_Create_AzObjectCreatedWithUnlimitedTracking(t *testing.T) {
 
 	testCtx.RequestMock.GivenGet()
 	testCtx.GivenUseLimitedCiphertext(t, "InitialModelValue", 0)
-	testCtx.GivenCiphertextMatchesObjectType()
 	testCtx.GivenObjectCanBePlacedAsRequested()
 	// Note: these would not be checked if usage is unlimited.
 	//testCtx.FactoryMock.GivenObjectTrackingConfigured(true)
 	//testCtx.FactoryMock.GivenGetTackedObjectUses(0)
-	testCtx.GivenJsonDataImporter()
 	testCtx.SpecializerMock.GivenCreate("InitialModelValue")
 
 	// Then part
@@ -987,12 +934,10 @@ func Test_Template_Create_AzObjectCreatedWithLimitedUseAndTrackingFails(t *testi
 
 	testCtx.RequestMock.GivenGet()
 	testCtx.GivenUseLimitedCiphertext(t, "InitialModelValue", 10)
-	testCtx.GivenCiphertextMatchesObjectType()
 	testCtx.GivenObjectCanBePlacedAsRequested()
 
 	testCtx.FactoryMock.GivenObjectTrackingConfigured(true)
 	testCtx.FactoryMock.GivenGetTackedObjectUses(0)
-	testCtx.GivenJsonDataImporter()
 	testCtx.SpecializerMock.GivenCreate("InitialModelValue")
 
 	// Then part
@@ -1015,12 +960,10 @@ func Test_Template_Create_AzObjectCreatedWithSingleUse(t *testing.T) {
 
 	testCtx.RequestMock.GivenGet()
 	testCtx.GivenUseLimitedCiphertext(t, "InitialModelValue", 1)
-	testCtx.GivenCiphertextMatchesObjectType()
 	testCtx.GivenObjectCanBePlacedAsRequested()
 
 	testCtx.FactoryMock.GivenObjectTrackingConfigured(true)
 	testCtx.FactoryMock.GivenGetTackedObjectUses(0)
-	testCtx.GivenJsonDataImporter()
 	testCtx.SpecializerMock.GivenCreate("InitialModelValue")
 
 	// Then part
@@ -1044,12 +987,10 @@ func Test_Template_Create_AzObjectCreatedWithUsageRemaining(t *testing.T) {
 
 	testCtx.RequestMock.GivenGet()
 	testCtx.GivenUseLimitedCiphertext(t, "InitialModelValue", 10)
-	testCtx.GivenCiphertextMatchesObjectType()
 	testCtx.GivenObjectCanBePlacedAsRequested()
 
 	testCtx.FactoryMock.GivenObjectTrackingConfigured(true)
 	testCtx.FactoryMock.GivenGetTackedObjectUses(6)
-	testCtx.GivenJsonDataImporter()
 	testCtx.SpecializerMock.GivenCreate("InitialModelValue")
 
 	// Then part
@@ -1073,12 +1014,10 @@ func Test_Template_Create_AzObjectCreatedWithWarningOnLastUse(t *testing.T) {
 
 	testCtx.RequestMock.GivenGet()
 	testCtx.GivenUseLimitedCiphertext(t, "InitialModelValue", 2)
-	testCtx.GivenCiphertextMatchesObjectType()
 	testCtx.GivenObjectCanBePlacedAsRequested()
 
 	testCtx.FactoryMock.GivenObjectTrackingConfigured(true)
 	testCtx.FactoryMock.GivenGetTackedObjectUses(1)
-	testCtx.GivenJsonDataImporter()
 	testCtx.SpecializerMock.GivenCreate("InitialModelValue")
 
 	// Then part

@@ -9,20 +9,21 @@ func Test_WKC_Validate(t *testing.T) {
 	wkc := WrappingKeyCoordinate{}
 
 	dg := wkc.Validate()
-	assert.True(t, dg.HasError())
+	assert.Error(t, dg)
 
 	wkc.VaultName = "vault"
 	dg = wkc.Validate()
-	assert.True(t, dg.HasError())
+	assert.Error(t, dg)
 
 	wkc.VaultName = ""
 	wkc.KeyName = "secret"
 	dg = wkc.Validate()
-	assert.True(t, dg.HasError())
+	assert.Error(t, dg)
 
 	wkc.VaultName = "vault"
+	wkc.KeyName = "secret"
 	dg = wkc.Validate()
-	assert.False(t, dg.HasError())
+	assert.NoError(t, dg)
 }
 
 func Test_AzKVOVC_SameAs(t *testing.T) {

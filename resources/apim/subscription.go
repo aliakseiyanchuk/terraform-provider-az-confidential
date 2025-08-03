@@ -191,11 +191,11 @@ func (s *SubscriptionSpecializer) GetConfidentialMaterialFrom(mdl SubscriptionMo
 	return mdl.ConfidentialMaterialModel
 }
 
-const SubscriptionObjectType = "api management/subscription"
-
-func (s *SubscriptionSpecializer) GetSupportedConfidentialMaterialTypes() []string {
-	return []string{SubscriptionObjectType}
+func (s *SubscriptionSpecializer) Decrypt(_ context.Context, em core.EncryptedMessage, decr core.RSADecrypter) (core.ConfidentialDataJsonHeader, ConfidentialSubscriptionData, error) {
+	return DecryptSubscriptionMessage(em, decr)
 }
+
+const SubscriptionObjectType = "api management/subscription"
 
 func (s *SubscriptionSpecializer) CheckPlacement(ctx context.Context, pc []core.ProviderConstraint, pl []core.PlacementConstraint, tfModel *SubscriptionModel) diag.Diagnostics {
 	rv := diag.Diagnostics{}

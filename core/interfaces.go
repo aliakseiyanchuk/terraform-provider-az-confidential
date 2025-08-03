@@ -58,10 +58,6 @@ type AZClientsFactory interface {
 	GetApimNamedValueClient(subscriptionId string) (ApimNamedValueClientAbstraction, error)
 	GetCertificateClient(vaultName string) (AzCertificateClientAbstraction, error)
 
-	// GetMergedWrappingKeyCoordinate get merged wrapping key coordinate providing
-	// the values the parameter doesn't specify from the provider's default settings
-	GetMergedWrappingKeyCoordinate(ctx context.Context, param *WrappingKeyCoordinateModel, diag *diag.Diagnostics) WrappingKeyCoordinate
-
 	// GetDestinationVaultObjectCoordinate GetDestinationSecretCoordinate retrieve the target coordinate where the
 	//object needs to be created. This
 	// method will append the default destination vault to the coordinate if a given model does not explicitly
@@ -87,7 +83,7 @@ type AZClientsFactory interface {
 	GetTackedObjectUses(ctx context.Context, id string) (int, error)
 	TrackObjectId(ctx context.Context, id string) error
 
-	GetDecrypterFor(ctx context.Context, coord WrappingKeyCoordinate) RSADecrypter
+	GetDecrypterFor(ctx context.Context, coord *WrappingKeyCoordinateModel) RSADecrypter
 }
 
 // TODO Probaaby this model needs to be deleted as not useful

@@ -248,13 +248,6 @@ func (a *AzKeyVaultKeyResourceSpecializer) NewTerraformModel() KeyModel {
 	return KeyModel{}
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) AssignIdTo(azObj azkeys.KeyBundle, tfModel *KeyModel) {
-	kid := azObj.Key.KID
-	if kid != nil {
-		tfModel.Id = types.StringValue(string(*kid))
-	}
-}
-
 func (a *AzKeyVaultKeyResourceSpecializer) ConvertToTerraform(azObj azkeys.KeyBundle, tfModel *KeyModel) diag.Diagnostics {
 	dg := diag.Diagnostics{}
 	tfModel.Accept(azObj, &dg)
@@ -265,8 +258,8 @@ func (a *AzKeyVaultKeyResourceSpecializer) GetConfidentialMaterialFrom(mdl KeyMo
 	return mdl.ConfidentialMaterialModel
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) GetSupportedConfidentialMaterialTypes() []string {
-	return []string{KeyObjectType}
+func (a *AzKeyVaultKeyResourceSpecializer) Decrypt(_ context.Context, em core.EncryptedMessage, decr core.RSADecrypter) (core.ConfidentialDataJsonHeader, jwk.Key, error) {
+	return DecryptKeyMessage(em, decr)
 }
 
 func (a *AzKeyVaultKeyResourceSpecializer) CheckPlacement(ctx context.Context, pc []core.ProviderConstraint, pl []core.PlacementConstraint, tfModel *KeyModel) diag.Diagnostics {
@@ -332,23 +325,12 @@ func (a *AzKeyVaultKeyResourceSpecializer) DoRead(ctx context.Context, data *Key
 	return keyState.KeyBundle, resources.ResourceExists, rv
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) DoCreate(ctx context.Context, data *KeyModel, confidentialData core.ConfidentialBinaryData) (azkeys.KeyBundle, diag.Diagnostics) {
+func (a *AzKeyVaultKeyResourceSpecializer) DoCreate(ctx context.Context, data *KeyModel, jwkKey jwk.Key) (azkeys.KeyBundle, diag.Diagnostics) {
 	rvDiag := diag.Diagnostics{}
-
-	//gunzip, gunzipErr := core.GZipDecompress(confidentialData.GetBinaryData())
-	//if gunzipErr != nil {
-	//	rvDiag.AddError("Binary data is not GZip-compressed", gunzipErr.Error())
-	//	return azkeys.KeyBundle{}, rvDiag
-	//}
 
 	params := data.ConvertToImportKeyParam(ctx)
 
-	jwkSet, jwkErr := jwk.Parse(confidentialData.GetBinaryData())
-	if jwkErr != nil {
-		rvDiag.AddError("Cannot read JSON Web Key data", jwkErr.Error())
-		return azkeys.KeyBundle{}, rvDiag
-	}
-	if convertErr := core.ConvertJWKSToAzJWK(jwkSet, params.Key); convertErr != nil {
+	if convertErr := core.ConvertJWKToAzJWK(jwkKey, params.Key); convertErr != nil {
 		rvDiag.AddError("Cannot convert supplied JSON Web Key to required Azure data structure; please use supplied conversion tool or provider method", convertErr.Error())
 		return azkeys.KeyBundle{}, rvDiag
 	}
@@ -552,7 +534,7 @@ func NewKeyResource() resource.Resource {
 
 	kvKeySpecializer := &AzKeyVaultKeyResourceSpecializer{}
 
-	return &resources.ConfidentialGenericResource[KeyModel, int, core.ConfidentialBinaryData, azkeys.KeyBundle]{
+	return &resources.ConfidentialGenericResource[KeyModel, int, jwk.Key, azkeys.KeyBundle]{
 		Specializer:    kvKeySpecializer,
 		ImmutableRU:    kvKeySpecializer,
 		ResourceName:   "key",
@@ -670,7 +652,7 @@ func CreateKeyEncryptedMessage(jwtKey interface{}, destLock *core.AzKeyVaultObje
 	return em, md, emErr
 }
 
-func DecryptKeyMessage(em core.EncryptedMessage, decrypter core.RSADecrypter) (core.ConfidentialDataJsonHeader, interface{}, error) {
+func DecryptKeyMessage(em core.EncryptedMessage, decrypter core.RSADecrypter) (core.ConfidentialDataJsonHeader, jwk.Key, error) {
 	helper := core.NewVersionedBinaryConfidentialDataHelper(KeyObjectType)
 	err := helper.FromEncryptedMessage(em, decrypter)
 	if err != nil {
