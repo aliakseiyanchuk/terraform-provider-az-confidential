@@ -573,7 +573,7 @@ func NewCertificateEncryptorFunction() function.Function {
 			}
 
 			var certByte []byte
-			if b64, b64Err := base64.StdEncoding.DecodeString(confidentialModel.Certificate.ValueString()); b64Err != nil {
+			if b64, b64Err := base64.StdEncoding.DecodeString(confidentialModel.Certificate.ValueString()); b64Err == nil {
 				certByte = b64
 			} else {
 				certByte = []byte(confidentialModel.Certificate.ValueString())
