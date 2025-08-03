@@ -1,0 +1,37 @@
+locals {
+  public_key = <<-PUBLIC_KEY
+               {{- range $l := linesOf .PublicKey }}
+               {{ $l }}
+               {{- end -}}
+               PUBLIC_KEY
+
+  private_key = <<-PRIVATE_KEY
+                {{- range $l := linesOf .PrivateKey }}
+                {{ $l }}
+                {{- end -}}
+                PRIVATE_KEY
+}
+
+output "encrypted_kv_key" {
+  value = provider::az-confidential::encrypt_keyvault_key (
+    {
+        key = local.private_key
+        password = "{{ .Password }}"
+    },
+    {
+      vault_name = "{{ .VaultName }}"
+      name = "{{ .ObjectName }}"
+    },
+    {
+      create_limit = "{{ .CreateLimit }}"
+      expires_in = {{ .ExpiresIn }}
+      num_uses = {{ .NumUses }}
+      provider_constraints = toset([
+      {{- range $value := .ProviderConstraints }}
+        "{{ $value }}",
+      {{- end }}
+      ])
+    },
+    local.public_key
+  )
+}

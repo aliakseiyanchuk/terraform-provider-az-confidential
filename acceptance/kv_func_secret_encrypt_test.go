@@ -25,10 +25,10 @@ type EncryptKvSecretParams struct {
 }
 
 //go:embed templates/kv_func_secret_encrypt_locked.tmpl
-var kvEncryptTemplate string
+var kvSecretEncryptTemplate string
 
 //go:embed templates/kv_func_secret_encrypt_unlocked.tmpl
-var kvEncryptNoLockTemplate string
+var kvSecretEncryptNoLockTemplate string
 
 func TestAccEncryptKvSecretWithPlacementLock(t *testing.T) {
 
@@ -51,7 +51,7 @@ func TestAccEncryptKvSecretWithPlacementLock(t *testing.T) {
 	privateKey, err := core.PrivateKeyFromData(testkeymaterial.EphemeralRsaKeyText)
 	assert.NoError(t, err)
 
-	tfCode, err := model.Render("encrypt_kv_secret", kvEncryptTemplate, &params)
+	tfCode, err := model.Render("encrypt_kv_secret", kvSecretEncryptTemplate, &params)
 	assert.NoError(t, err)
 
 	resource.UnitTest(t, resource.TestCase{
@@ -121,7 +121,7 @@ func TestAccEncryptKvSecretWithoutLock(t *testing.T) {
 	privateKey, err := core.PrivateKeyFromData(testkeymaterial.EphemeralRsaKeyText)
 	assert.NoError(t, err)
 
-	tfCode, err := model.Render("encrypt_kv_secret", kvEncryptNoLockTemplate, &params)
+	tfCode, err := model.Render("encrypt_kv_secret", kvSecretEncryptNoLockTemplate, &params)
 	assert.NoError(t, err)
 
 	resource.UnitTest(t, resource.TestCase{

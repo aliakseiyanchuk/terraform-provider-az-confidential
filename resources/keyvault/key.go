@@ -743,7 +743,7 @@ func NewKeyEncryptorFunction() function.Function {
 			}
 
 			var keyData []byte
-			if b64, b64Err := base64.StdEncoding.DecodeString(confidentialModel.Key.ValueString()); b64Err != nil {
+			if b64, b64Err := base64.StdEncoding.DecodeString(confidentialModel.Key.ValueString()); b64Err == nil {
 				keyData = b64
 			} else {
 				keyData = []byte(confidentialModel.Key.ValueString())
