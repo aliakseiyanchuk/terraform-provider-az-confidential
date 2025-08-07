@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 	"crypto/rsa"
+	_ "embed"
 	"fmt"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -22,6 +23,7 @@ func (pkv *PublicKeyValidator) ValidateParameterString(_ context.Context, req fu
 
 type AttributeTyped interface {
 	GetAttributeTypes() map[string]attr.Type
+	GetMarkdownDescription() string
 }
 
 type Exportable interface {
@@ -37,6 +39,13 @@ type ProtectionParams struct {
 	ExpiresAfterDays    types.Int32 `tfsdk:"expires_after"`
 	NumUses             types.Int32 `tfsdk:"num_uses"`
 	ProviderConstraints types.Set   `tfsdk:"provider_constraints"`
+}
+
+//go:embed protection_params.md
+var protectionParamsMarkdown string
+
+func (p ProtectionParams) GetMarkdownDescription() string {
+	return protectionParamsMarkdown
 }
 
 func (p ProtectionParams) GetAttributeTypes() map[string]attr.Type {
@@ -70,6 +79,13 @@ func (p ResourceProtectionParams) GetAttributeTypes() map[string]attr.Type {
 	maps.Copy(rv, p.LimitedCreateProtectionParam.GetAttributeTypes())
 
 	return rv
+}
+
+//go:embed resource_template.go
+var resourceProtectionParamsMarkdown string
+
+func (p ResourceProtectionParams) GetMarkdownDescription() string {
+	return resourceProtectionParamsMarkdown
 }
 
 func (p ResourceProtectionParams) Into(ctx context.Context, c *core.SecondaryProtectionParameters) error {
@@ -147,7 +163,7 @@ func (f *FunctionTemplate[TMdl, TProtection, DestMdl]) Definition(_ context.Cont
 	funcParams = append(funcParams,
 		function.ObjectParameter{
 			Name:           "content_protection",
-			Description:    "Secondary content protection parameters to be embedded into the output ciphertext",
+			Description:    "Secondary content protection parameters to be embedded into the output ciphertext. See the details about the object fields above.",
 			AllowNullValue: true,
 
 			AttributeTypes: protectionParam.GetAttributeTypes(),
@@ -163,7 +179,7 @@ func (f *FunctionTemplate[TMdl, TProtection, DestMdl]) Definition(_ context.Cont
 
 	resp.Definition = function.Definition{
 		Summary:             f.Summary,
-		MarkdownDescription: f.MarkdownDescription,
+		MarkdownDescription: f.MarkdownDescription + "\n" + protectionParam.GetMarkdownDescription(),
 		Return:              function.StringReturn{},
 
 		Parameters: funcParams,

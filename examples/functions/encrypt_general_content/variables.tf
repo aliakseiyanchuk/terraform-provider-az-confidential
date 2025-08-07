@@ -27,3 +27,8 @@ variable "az_default_wrapping_key" {
 variable "az_default_wrapping_key_version" {
   type = string
 }
+
+variable "content" {
+  type        = string
+  description = "Content that needs to be wrapped"
+}

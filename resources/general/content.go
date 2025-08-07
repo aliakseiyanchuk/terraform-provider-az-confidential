@@ -158,7 +158,7 @@ func NewPasswordEncryptionFunction() function.Function {
 	rv := resources.FunctionTemplate[string, resources.ProtectionParams, int]{
 		Name:                        "encrypt_general_content",
 		Summary:                     "Encrypts a content",
-		MarkdownDescription:         "Encrypts a content string to be used with az-confidential_content data source",
+		MarkdownDescription:         "Encrypts a content string to be used with `az-confidential_content` data source",
 		ProtectionParameterSupplier: func() resources.ProtectionParams { return resources.ProtectionParams{} },
 		DataParameter: function.StringParameter{
 			Name:        "content",

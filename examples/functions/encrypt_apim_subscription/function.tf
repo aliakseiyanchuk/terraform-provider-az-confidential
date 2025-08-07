@@ -20,22 +20,22 @@ locals {
 output "encrypted_named_value" {
   value = provider::az-confidential::encrypt_apim_subscription(
     {
-      primary_key = "a"
+      primary_key   = "a"
       secondary_key = "b"
     },
     {
-      az_subscription_id = "123421"
-      resource_group = "rg"
-      api_management_name =  "apim"
-      apim_subscription_id: "subscriptionId",
-      api_id = "",
-      product_id="productId"
-      user_id="abc-def"
+      az_subscription_id  = "123421"
+      resource_group      = "rg"
+      api_management_name = "apim"
+      apim_subscription_id : "subscriptionId",
+      api_id     = "",
+      product_id = "productId"
+      user_id    = "abc-def"
     },
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -45,14 +45,14 @@ output "encrypted_named_value" {
 output "encrypted_named_value_without_destination_lock" {
   value = provider::az-confidential::encrypt_apim_subscription(
     {
-      primary_key = "a"
+      primary_key   = "a"
       secondary_key = "b"
     },
     null,
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -62,7 +62,7 @@ output "encrypted_named_value_without_destination_lock" {
 output "encrypted_named_value_without_protection" {
   value = provider::az-confidential::encrypt_apim_subscription(
     {
-      primary_key = "a"
+      primary_key   = "a"
       secondary_key = "b"
     },
     null,
