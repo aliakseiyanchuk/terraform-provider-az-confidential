@@ -20,7 +20,7 @@ be using.
 ### Example how to create ciphertext using Terraform provider
 
 Consider the following example that creates a ciphertext that can be used for test and acceptance purposes for
-next year when the content should not be read more that 50 times:
+next year when the content should not be read more than 50 times:
 
 ```terraform
 variable "content" {

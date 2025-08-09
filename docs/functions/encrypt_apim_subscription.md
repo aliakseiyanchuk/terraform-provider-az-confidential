@@ -3,12 +3,12 @@
 page_title: "encrypt_apim_subscription function - az-confidential"
 subcategory: ""
 description: |-
-  Produces a ciphertext string suitable for use with az-confidential_apim_subnscription resource
+  Produces a ciphertext string suitable for use with az-confidential_apim_subscription resource
 ---
 
 # function: encrypt_apim_subscription
 
-Encrypts an APIM subscription keys without the use of the `tfgen` tool
+Generates the encrypted (cipher text) version of subscription primary and secondary keys which then van can be used by `az-confidential_apim_subscription` resource to create an actual subscription  in the API Management service
 # Secondary protection parameters
 The primary protection of the confidential content is achieved with RSA encryption.
 
@@ -88,8 +88,8 @@ locals {
 output "encrypted_named_value" {
   value = provider::az-confidential::encrypt_apim_subscription(
     {
-      primary_key   = "a"
-      secondary_key = "b"
+      primary_key   = "primary-key-value"
+      secondary_key = "secondary-key-value"
     },
     {
       az_subscription_id  = "123421"

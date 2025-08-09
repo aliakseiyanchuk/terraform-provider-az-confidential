@@ -5,6 +5,8 @@ import (
 	"crypto/rsa"
 	_ "embed"
 	"fmt"
+	"regexp"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
@@ -22,7 +24,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"regexp"
 )
 
 type NamedValueModel struct {
@@ -498,7 +499,7 @@ func NewNamedValueEncryptorFunction() function.Function {
 	rv := resources.FunctionTemplate[string, resources.ResourceProtectionParams, DestinationNamedValueModel]{
 		Name:                "encrypt_apim_named_value",
 		Summary:             "Encrypts a named value",
-		MarkdownDescription: "Generates the encrypted (cipher text) version of the the named value which then van can be used by `apim_named_value` resource to create an actual named value in the API Management service",
+		MarkdownDescription: "Generates the encrypted (cipher text) version of the named value which then van can be used by `az-confidential_apim_named_value` resource to create an actual named value in the API Management service",
 
 		DataParameter: function.StringParameter{
 			Name:               "named_value",

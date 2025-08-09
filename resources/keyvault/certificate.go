@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azcertificates"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
@@ -406,7 +407,7 @@ func NewCertificateResource() resource.Resource {
 	return &resources.ConfidentialGenericResource[CertificateModel, int, core.ConfidentialCertificateData, azcertificates.Certificate]{
 		Specializer:    keyVaultCertSpecializer,
 		ImmutableRU:    keyVaultCertSpecializer,
-		ResourceName:   "certificate",
+		ResourceName:   "keyvault_certificate",
 		ResourceSchema: resourceSchema,
 	}
 }
@@ -520,15 +521,20 @@ func DecryptCertificateMessage(em core.EncryptedMessage, decrypted core.RSADecry
 	return helper.Header, helper.KnowValue, err
 }
 
+//go:embed encrypt_keyvault_certificate_destparam.md
+var encryptCertificateDestinationParmaMD string
+
 func NewCertificateEncryptorFunction() function.Function {
 	rv := resources.FunctionTemplate[CertificateDataFunctionParameter, resources.ResourceProtectionParams, core.AzKeyVaultObjectCoordinateModel]{
 		Name:                "encrypt_keyvault_certificate",
 		Summary:             "Produces a ciphertext string suitable for use with az-confidential_certificate resource",
-		MarkdownDescription: "Encrypts a certificate data without the use of the `tfgen` tool",
+		MarkdownDescription: "Generates the encrypted (cipher text) version of the certificate data which then van can be used by `az-confidential_keyvault_certificate` resource to create an actual certificate in a key vault.",
 
 		DataParameter: function.ObjectParameter{
 			Name:        "certificate_data",
 			Description: "Certificate data to be encrypted",
+			MarkdownDescription: "Specifies `certificate`, a string (for PEM-encoded certificates) or base-64 (for DER-encoded certificates) and `password` " +
+				"to decrypt the private key. Where the private key is not encrypted, the field `password` should be set to an empty string.",
 
 			AttributeTypes: map[string]attr.Type{
 				"certificate": types.StringType,
@@ -555,7 +561,8 @@ func NewCertificateEncryptorFunction() function.Function {
 				&AzKVObjectCoordinateParamValidator{},
 			},
 		},
-		ConfidentialModelSupplier: func() CertificateDataFunctionParameter { return CertificateDataFunctionParameter{} },
+		DestinationParameterMarkdownDescription: encryptCertificateDestinationParmaMD,
+		ConfidentialModelSupplier:               func() CertificateDataFunctionParameter { return CertificateDataFunctionParameter{} },
 		DestinationModelSupplier: func() *core.AzKeyVaultObjectCoordinateModel {
 			var ptr *core.AzKeyVaultObjectCoordinateModel
 			return ptr

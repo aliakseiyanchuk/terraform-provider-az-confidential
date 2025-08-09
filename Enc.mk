@@ -29,25 +29,25 @@ encrypt_password_openssl_no_label:
 	  | base64 -w 0
 
 # Encrypt text secret read from the command-line
-encrypt_secret:
+encrypt_keyvault_secret:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
 	${LABELS} ${OPTIONS} \
 	kv secret \
 	-destination-vault ${OUTPUT_VAULT_NAME} -destination-secret-name ${OUTPUT_VAULT_OBJECT} \
 
 # Encrypt text secret read from the command-line
-encrypt_content:
+encrypt_general_content:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
 	${LABELS} ${OPTIONS} \
 	general content
 
-encrypt_key:
+encrypt_keyvault_key:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
 	${LABELS} ${OPTIONS}\
 	kv key \
 	-destination-vault ${OUTPUT_VAULT_NAME} -destination-key-name ${OUTPUT_VAULT_OBJECT} \
 
-encrypt_cert:
+encrypt_keyvault_certificate:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
 	${LABELS} ${OPTIONS} \
 	kv certificate \

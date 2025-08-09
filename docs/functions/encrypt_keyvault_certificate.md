@@ -8,7 +8,51 @@ description: |-
 
 # function: encrypt_keyvault_certificate
 
-Encrypts a certificate data without the use of the `tfgen` tool
+Generates the encrypted (cipher text) version of the certificate data which then van can be used by `az-confidential_keyvault_certificate` resource to create an actual certificate in a key vault.
+# Secondary protection parameters
+The primary protection of the confidential content is achieved with RSA encryption.
+
+The secondary protection parameters can be additionally embedded into the
+ciphertext that limits the usage the `az-confidential` provider
+will observe.
+Where any of these  parameters of is not met, the `az-confidential` provider
+will generate an error. Removing an error will require re-encryption of the ciphertext
+by the original confidential asset owner or a removal of the associated resource from the state.
+
+> Note that secondary protection measures are implemented only by the `az-confidential` provider
+> as a means to prevent inadvertent mix-ups and to enforce ciphertext re-encryption (which is
+> equivalent of re-authenticating a user session after a prolonged use). Secondary protection is a
+> _complimentary_ measure to RSA encryption and not a replacement thereof as any process or persona
+> with the permission to decrypt the ciphertext using the matching private key wil be able
+> to read the confidential material.
+
+If this parameter is set to `null`, this will remove all secondary protection from the
+ciphertext completely.
+
+Available secondary protection parameter options are:
+- `create_limit`: a time frame within which the object must be created. The value should
+  be a valid Golang duration expression specifying hours, mines, and seconds. For example,
+  `72h` expression limits the creation of the resource within 3 calendar days. To disable this
+  limit, set this parameter to an empty string (`""`).
+  > As a secure practice, the creation limit should be short-lived just enough to get the
+  > actual resource created in Azure for production resource. Where the practitioner seeks
+  > to recreate objects e.g., in ephemeral test environments, limiting expiry with `expirys_after`
+  > and `num_uses` offers a suitable alternative.
+- `expires_after`: number of days the before the ciphertext will be considered "expired." Set to
+  `0` to mark the ciphertext perpetually valid.
+- `num_uses`: number of times this ciphertext may be read before considered "depleted." Set to
+  `0` to mark the ciphertext as non-depletable.
+- `provider_constraints`: a set of strings indicating the tags an instance of `az-confidential`
+  provider must be configured with. The primary use of this configuration is to add environmental
+  constraints into the ciphertext to prevent production confidential material being accidentally used, 
+  e.g. in the test environments.
+## Destination parameter
+When specified, "locks" the destination key vault and certificate name into which this 
+certificate data will be unpacked. 
+
+The object has the following fields:
+  - `vault_name`  a name of Azure key vault
+  - `name` target name of the certificate
 
 ## Example Usage
 
@@ -31,9 +75,9 @@ locals {
               -----END PUBLIC KEY-----
               PUBLIC_KEY
 
-  plain_cert = file("${path.module}/ephemeral-certificate.pem")
+  plain_cert   = file("${path.module}/ephemeral-certificate.pem")
   enc_pem_cert = file("${path.module}/ephemeral-certificate-encrypted.pem")
-  der_cert = filebase64("${path.module}/cert.pkcs12", )
+  der_cert     = filebase64("${path.module}/cert.pkcs12", )
   # Note: der-encrypted files cannot be read by Terraform directly.
 }
 
@@ -41,16 +85,16 @@ output "encrypted_plain_certificate" {
   value = provider::az-confidential::encrypt_keyvault_certificate(
     {
       certificate = local.plain_cert,
-      password = "",
+      password    = "",
     },
     {
       vault_name = "vaultname123",
-      name =  "keyName123",
+      name       = "keyName123",
     },
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -61,16 +105,16 @@ output "encrypted_protected_certificate" {
   value = provider::az-confidential::encrypt_keyvault_certificate(
     {
       certificate = local.enc_pem_cert,
-      password = "s1cr3t",
+      password    = "s1cr3t",
     },
     {
       vault_name = "vaultname123",
-      name =  "keyName123",
+      name       = "keyName123",
     },
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -81,16 +125,16 @@ output "encrypted_der_certificate" {
   value = provider::az-confidential::encrypt_keyvault_certificate(
     {
       certificate = local.der_cert,
-      password = "s1cr3t",
+      password    = "s1cr3t",
     },
     {
       vault_name = "vaultname123",
-      name =  "keyName123",
+      name       = "keyName123",
     },
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -108,8 +152,8 @@ encrypt_keyvault_certificate(certificate_data object, destination_certificate ob
 ## Arguments
 
 <!-- arguments generated by tfplugindocs -->
-1. `certificate_data` (Object) Certificate data to be encrypted
+1. `certificate_data` (Object) Specifies `certificate`, a string (for PEM-encoded certificates) or base-64 (for DER-encoded certificates) and `password` to decrypt the private key. Where the private key is not encrypted, the field `password` should be set to an empty string.
 1. `destination_certificate` (Object, Nullable) Destination vault and certificate name
-1. `content_protection` (Object, Nullable) Secondary content protection parameters to be embedded into  output ciphertext
+1. `content_protection` (Object, Nullable) Secondary content protection parameters to be embedded into the output ciphertext. See the details about the object fields above.
 1. `public_key` (String) Public key of the Key-Wrapping Key
 

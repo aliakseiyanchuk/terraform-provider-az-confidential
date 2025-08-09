@@ -16,9 +16,9 @@ locals {
               -----END PUBLIC KEY-----
               PUBLIC_KEY
 
-  plain_cert = file("${path.module}/ephemeral-certificate.pem")
+  plain_cert   = file("${path.module}/ephemeral-certificate.pem")
   enc_pem_cert = file("${path.module}/ephemeral-certificate-encrypted.pem")
-  der_cert = filebase64("${path.module}/cert.pkcs12", )
+  der_cert     = filebase64("${path.module}/cert.pkcs12", )
   # Note: der-encrypted files cannot be read by Terraform directly.
 }
 
@@ -26,16 +26,16 @@ output "encrypted_plain_certificate" {
   value = provider::az-confidential::encrypt_keyvault_certificate(
     {
       certificate = local.plain_cert,
-      password = "",
+      password    = "",
     },
     {
       vault_name = "vaultname123",
-      name =  "keyName123",
+      name       = "keyName123",
     },
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -46,16 +46,16 @@ output "encrypted_protected_certificate" {
   value = provider::az-confidential::encrypt_keyvault_certificate(
     {
       certificate = local.enc_pem_cert,
-      password = "s1cr3t",
+      password    = "s1cr3t",
     },
     {
       vault_name = "vaultname123",
-      name =  "keyName123",
+      name       = "keyName123",
     },
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -66,16 +66,16 @@ output "encrypted_der_certificate" {
   value = provider::az-confidential::encrypt_keyvault_certificate(
     {
       certificate = local.der_cert,
-      password = "s1cr3t",
+      password    = "s1cr3t",
     },
     {
       vault_name = "vaultname123",
-      name =  "keyName123",
+      name       = "keyName123",
     },
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key

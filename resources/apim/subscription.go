@@ -674,8 +674,8 @@ var encryptApimSubscriptionDestinationParmaMD string
 func NewSubscriptionEncryptorFunction() function.Function {
 	rv := resources.FunctionTemplate[SubscriptionDataFunctionParameter, resources.ResourceProtectionParams, DestinationSubscriptionCoordinateModel]{
 		Name:                "encrypt_apim_subscription",
-		Summary:             "Produces a ciphertext string suitable for use with az-confidential_apim_subnscription resource",
-		MarkdownDescription: "Encrypts an APIM subscription keys without the use of the `tfgen` tool",
+		Summary:             "Produces a ciphertext string suitable for use with az-confidential_apim_subscription resource",
+		MarkdownDescription: "Generates the encrypted (cipher text) version of subscription primary and secondary keys which then van can be used by `az-confidential_apim_subscription` resource to create an actual subscription  in the API Management service",
 
 		DataParameter: function.ObjectParameter{
 			Name:               "subscription_keys",

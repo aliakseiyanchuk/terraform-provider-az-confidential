@@ -8,7 +8,7 @@ description: |-
 
 # function: encrypt_apim_named_value
 
-Generates the encrypted (cipher text) version of the the named value which then van can be used by `apim_named_value` resource to create an actual named value in the API Management service
+Generates the encrypted (cipher text) version of the named value which then van can be used by `az-confidential_apim_named_value` resource to create an actual named value in the API Management service
 # Secondary protection parameters
 The primary protection of the confidential content is achieved with RSA encryption.
 

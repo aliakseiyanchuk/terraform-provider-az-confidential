@@ -1,8 +1,19 @@
+# ----------------------------------------------------------------------------
 #
-# Minimal terraform code for your example:
+# Azure Key Vault Certificate
+#
+# The resource allows importing certificate into the key vault form the
+# encrypted (cipher-text) version of certificate private key and associated
+# certificate chain.
+#
+# The resource implement most attributes that `azurerm_key_vault_certificate`
+# resource implements. This resource does not implement `resource_manager_id`
+# and `resource_manager_versionless_id` attributes. Should the practitioner
+# require obtaining these parameters, the use of `azurerm_key_vault_certificate`
+# data source is recommended.
 # ----------------------------------------------------------------------------
 
-resource "az-confidential_certificate" "{{ .TFBlockName }}" {
+resource "az-confidential_keyvault_certificate" "{{ .TFBlockName }}" {
   content = <<-CIPHERTEXT
          {{- range $value := fold80 .EncryptedContent.TerraformExpression }}
          {{ $value }}
