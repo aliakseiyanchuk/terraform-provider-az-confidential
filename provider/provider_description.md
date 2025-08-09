@@ -1,6 +1,14 @@
 Azure Confidential provider automates importing sensitive secrets, keys, and certificates from Terraform 
-code into Azure KeyVault. To achieve the confidentiality, the sensitive materials are encrypted using RSA/AES encryption.
+code into Azure services. To achieve the confidentiality, the sensitive materials are encrypted using RSA/AES encryption.
 Furthermore, the provider never logs or stores the plain text in state.
+
+A pre-requisite to using this provider is allocating a key vault containing a master RSA key (termed key-encryption key, or KEK) 
+which  **must be adequately protected**. [This guide](https://github.com/aliakseiyanchuk/terraform-provider-az-confidential/blob/main/docs-templates/guides/setup.md)
+offers a starting point how this can be achieved.
+> The confidentiality of the encrypted data depends primarily on the tightness of controls to use decrypt the
+> ciphertext using the designated key-encryption key. It is important to ensure that all necessary controls are 
+> implemented during the initial implementation. Additionally, the practitioner may want to set up additional 
+> alerts concerning unexpected actions (such as permission changes) to detect malfeasance or breaches.
 
 ## Authenticating Provider
 
@@ -17,7 +25,7 @@ provider "az-confidential" {
   client_id       = var.az_client_id
   client_secret   = var.az_client_secret
 
-  labels              = ["demo", "test", "examples"]
+  constraints         = ["demo", "test", "examples"]
   require_label_match = "provider-labels"
 
   default_destination_vault_name = var.az_default_vault_name
@@ -28,6 +36,7 @@ provider "az-confidential" {
     version    = var.az_default_wrapping_key_version
   }
 }
+
 ```
 
 The required variables can be declared as follows:
@@ -61,43 +70,40 @@ variable "az_default_wrapping_key_version" {
 }
 ```
 
-## Labels and Tracking
-The provider has two mechanism that prevent accidental cross-environment copying or intentional duplication. These 
-are labels and object tracking.
+## Primary Protection
+The ciphertext of the resources is protected by RSA cryptography. Only the people and processes granted the
+decrypt permission on the key-encryption key (KEK). It is a recommended practice to rotate KEK at periodic intervals
+and disable historic versions.
+> Teh confidentiality of encrypted data is only as good as the controls around the KEK usage. Any person or process
+> that technically is allowed to execute decrypt operation using this key would be able to decrypt and read
+> the plain-text confidential data.
 
-### Labelling
-A label is a string associated with the encrypted data at the moment the owner of the confidential data creates
-the encrypted message. There are two types of labels that can be associated with the ciphertext:
-- A label derived from vault name and object name. It commands the provider to unpack the ciphertext **only** into
-  the specified vault and object name, even if the enclosing Terraform code will later be changed.
-- A label associated with the provider, which might be a good practice to detect and prevent confidential data used 
-  outside intended environments.
+## Secondary Protection Measure
+In addition to tightening the access to KEK and rotating it periodically, the provider 
+implements complimentary mechanism that prevent accidental cross-environment copying, intentional duplication 
+and misuse. Where any secondary protection embedded into the ciphertext will no longer be satisfied,
+the Terraform plan/apply cycle will break. The Terraform practitioner is expected
+to obtain a re-encrypted ciphertext or delete the concerned Azure resource.
 
-The labelling behaviour is controlled by two provider properties:
-- `require_label_match` controlling the degree of matching this particular provider requires; and
-- `labels` that are associated with this provider instance.
+### Provider Constraints
+Provide constraints is a set of string labels is associated with a given provider instance in the Terraform project.
+An author of the ciphertext has an option to specify the labels they expect the provider should be configured
+with at the moment an encrypted message is created. 
 
-Where `require_label_match` would be set to `target-coordinate`, a ciphertext of the object must be explicitly tagged
-with the output vault name and object name. Where `require_label_match` would be set to `provider-labels`, then the
-provider would process ciphertext tagged with either of the tags the `labels` parameter specifies.
+A practical application of this technique is to guard against accidental copying of encrypted ciphertexts across
+projects intended for different regions and environments.
 
-> It is a good practice to ask the owner of the confidential data to re-encrypt the corresponding data
-> if a mismatch is detected.
+### Ciphertext Usage Tracking
+Ciphertext tracking is a feature which, as its name implies, tracks the use of the ciphertexts and allows each 
+ciphertext to be unpacked the number of times the ciphertext author has allowed. I.e. if a resource is deleted and then 
+added again, the second deployment
+could be rejected if the parameters embedded in the ciphertext prohibit this. Internally, this feature is based on 
+UUID identifier that is cryptographically added to the ciphertext when it is created.
 
-### Object Tracking
-Object tracking is a feature which, as its name implies, tracks the use of the ciphertexts and allows each 
-ciphertext to be unpacked *exactly once*. I.e. if a resource is deleted and then added again, the second deployment
-will be rejected as it would be a duplicate. This feature is based on UUID identifier that is cryptographically 
-added to the ciphertext when it is created.
-
-The first version implements a basic, file-based tracking suitable for local testing. To enable this feature, set `file_hash_tracker` configuration
-and specify the file where the data will need to be kept. Future versions might add the support e.g. for tracking
-this data in databases.
-
-For production use, the provider supports Azure Storage Account-base tracking. This requires the 
-user of the provider:
-- to create a storage account (or designate any existing storage account);
-- to create a table within that storage account;
+The provider supports Azure Storage Account-base tracking which should be configured to track all ciphertext usages. 
+This requires:
+- creating a storage account (or designate any existing storage account);
+- creating a table within that storage account;
 - grant `Storage Table Data Contributor` role to the IAM account used by the provider.
 
 The configuration required for this could look e.g. as follows:
@@ -112,3 +118,28 @@ provider "az-confidential" {
   }
 }
 ```
+
+### Create time limiting
+It is recommended to add a limit the "shelf life" of a ciphertext before an Azure object is created using the 
+confidential material the ciphertext carries. Typically, such window would be rather short, several hours or several
+days -- depending on the typical timeline between creating the ciphertext and initial deployment.
+
+### Ciphertext expiry
+Next to limiting the creat time, a ciphertext can embed the requirement for the confidential material owner to re-encrypt
+the ciphertext periodically. This measure may be needed in certain context to ensure that the Terraform practitioner
+is actually in possession of the original confidential material. (In that respect, it is similar to re-authenticating an active user
+session periodically regardless of whether the user is still active.)
+
+As a best practice recommendation, a ciphertext should be re-encrypted at least yearly.
+
+### Number of permitted usages
+The ciphertext can additionally constrain the number of times the ciphertext can be used, i.e. the number of times
+an Azure object could be created using the encrypted confidential material. This measure allows the ciphertext author
+to designate e.g. production object to be used once. 
+
+When used in combination with create time limiting, this adds a secondary level of protection against accidental or
+deliberate copying.
+
+## Reporting issues or requesting new features
+
+Please report issues or requests for new features on the [Github project](https://github.com/aliakseiyanchuk/terraform-provider-az-confidential/issues).

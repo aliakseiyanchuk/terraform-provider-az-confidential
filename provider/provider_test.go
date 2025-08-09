@@ -173,7 +173,7 @@ func Test_AZCPIM_GetProviderLabels(t *testing.T) {
 
 	tfset, err := types.SetValue(types.StringType, values)
 	assert.Nil(t, err)
-	mdl.Labels = tfset
+	mdl.Constraints = tfset
 
 	converted := mdl.GetProviderLabels(context.Background())
 	assert.True(t, len(converted) == 3)

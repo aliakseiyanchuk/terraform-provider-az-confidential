@@ -3,6 +3,9 @@ package keyvault
 import (
 	"context"
 	"crypto/rsa"
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
@@ -11,8 +14,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/assert"
-	"testing"
-	"time"
 )
 
 func Test_CSM_ContentTypeAsPtr(t *testing.T) {
@@ -84,7 +85,7 @@ func Test_CAzVSR_Metadata(t *testing.T) {
 	resp := resource.MetadataResponse{}
 
 	r.Metadata(nil, req, &resp)
-	assert.Equal(t, "az-confidential_secret", resp.TypeName)
+	assert.Equal(t, "az-confidential_keyvault_secret", resp.TypeName)
 }
 
 func Test_CAzVSR_Schema(t *testing.T) {

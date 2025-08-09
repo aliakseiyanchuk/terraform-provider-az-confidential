@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement"
@@ -15,13 +16,11 @@ import (
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/apim"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/general"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources/keyvault"
-	"github.com/hashicorp/terraform-plugin-framework-validators/providervalidator"
 	tfsetvalidators "github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	tfstringvalidators "github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/function"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	tfprovider "github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -350,10 +349,6 @@ type AZConnectorProviderImpl struct {
 	version string
 }
 
-type FileHashTrackerConfigModel struct {
-	FileName types.String `tfsdk:"file_name"`
-}
-
 type AzStorageAccountTableTrackerConfigModel struct {
 	AccountName   types.String `tfsdk:"account_name"`
 	TableName     types.String `tfsdk:"table_name"`
@@ -369,14 +364,13 @@ type AZConnectorProviderImplModel struct {
 
 	DisallowResourceSpecifiedWrappingKey types.Bool                               `tfsdk:"disallow_resource_specified_wrapping_key"`
 	DefaultDestinationVaultName          types.String                             `tfsdk:"default_destination_vault_name"`
-	Labels                               types.Set                                `tfsdk:"labels"`
-	FileHashTrackerConfig                *FileHashTrackerConfigModel              `tfsdk:"file_hash_tracker"`
+	Constraints                          types.Set                                `tfsdk:"constraints"`
 	StorageAccountTracker                *AzStorageAccountTableTrackerConfigModel `tfsdk:"storage_account_tracker"`
 }
 
 func (pm *AZConnectorProviderImplModel) GetProviderLabels(ctx context.Context) []string {
-	rv := make([]string, len(pm.Labels.Elements()))
-	pm.Labels.ElementsAs(ctx, &rv, false)
+	rv := make([]string, len(pm.Constraints.Elements()))
+	pm.Constraints.ElementsAs(ctx, &rv, false)
 	return rv
 }
 
@@ -403,15 +397,6 @@ func (p *AZConnectorProviderImpl) Metadata(_ context.Context, _ tfprovider.Metad
 
 //go:embed provider_description.md
 var providerDescription string
-
-func (p *AZConnectorProviderImpl) ConfigValidators(_ context.Context) []tfprovider.ConfigValidator {
-	return []tfprovider.ConfigValidator{
-		providervalidator.Conflicting(
-			path.MatchRoot("file_hash_tracker"),
-			path.MatchRoot("storage_account_tracker"),
-		),
-	}
-}
 
 func (p *AZConnectorProviderImpl) Schema(_ context.Context, _ tfprovider.SchemaRequest, resp *tfprovider.SchemaResponse) {
 	resp.Schema = schema.Schema{
@@ -443,9 +428,9 @@ func (p *AZConnectorProviderImpl) Schema(_ context.Context, _ tfprovider.SchemaR
 					tfstringvalidators.LengthAtLeast(1),
 				},
 			},
-			"labels": schema.SetAttribute{
-				MarkdownDescription: "Labels associated with this provider. These labels are used to ensure that the " +
-					"the encrypted message can be processed. A practical application of provider labelling is to " +
+			"constraints": schema.SetAttribute{
+				MarkdownDescription: "Constraints associated with this provider. These are labels are used to ensure that the " +
+					"the encrypted message is processed in the intended Terraform project. A practical application of provider labelling is to " +
 					"implement environmental or regional separation of various projects. For example, adding " +
 					"`labels = [\"test\", \"acceptance\"]` may be used to designate infrastructure intended for " +
 					"for testing and (user) acceptance that **cannot** contain production objects of any kind.",
@@ -454,18 +439,6 @@ func (p *AZConnectorProviderImpl) Schema(_ context.Context, _ tfprovider.SchemaR
 				Validators: []validator.Set{
 					tfsetvalidators.SizeAtLeast(1),
 					// Require at least one element in the labels.
-				},
-			},
-			"file_hash_tracker": schema.SingleNestedAttribute{
-				MarkdownDescription: "Configures local file being used to track created objects",
-				Description:         "Configures local file being used to track created objects",
-				Optional:            true,
-				Attributes: map[string]schema.Attribute{
-					"file_name": schema.StringAttribute{
-						MarkdownDescription: "File on a local machine where to track created objects",
-						Description:         "File on a local machine where to track created objects",
-						Required:            true,
-					},
 				},
 			},
 			"storage_account_tracker": schema.SingleNestedAttribute{
@@ -539,7 +512,7 @@ func (p *AZConnectorProviderImpl) Resources(ctx context.Context) []func() resour
 	}
 }
 
-func (p *AZConnectorProviderImpl) ConfigureHashTracker(ctx context.Context, data AZConnectorProviderImplModel, cred azcore.TokenCredential) (ObjectHashTracker, error) {
+func (p *AZConnectorProviderImpl) ConfigureHashTracker(_ context.Context, data AZConnectorProviderImplModel, cred azcore.TokenCredential) (ObjectHashTracker, error) {
 	if data.StorageAccountTracker != nil {
 		return NewAzStorageAccountTracker(
 			cred,
@@ -548,11 +521,7 @@ func (p *AZConnectorProviderImpl) ConfigureHashTracker(ctx context.Context, data
 			data.StorageAccountTracker.PartitionName.ValueString(),
 		)
 	}
-	if data.FileHashTrackerConfig != nil {
-		return NewLocalFileTracker(ctx, data.FileHashTrackerConfig.FileName.ValueString())
-	} else {
-		return nil, nil
-	}
+	return nil, nil
 }
 
 func (p *AZConnectorProviderImpl) Configure(ctx context.Context, req tfprovider.ConfigureRequest, resp *tfprovider.ConfigureResponse) {
