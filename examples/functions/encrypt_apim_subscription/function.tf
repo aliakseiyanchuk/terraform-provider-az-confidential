@@ -20,8 +20,8 @@ locals {
 output "encrypted_named_value" {
   value = provider::az-confidential::encrypt_apim_subscription(
     {
-      primary_key   = "a"
-      secondary_key = "b"
+      primary_key   = "primary-key-value"
+      secondary_key = "secondary-key-value"
     },
     {
       az_subscription_id  = "123421"

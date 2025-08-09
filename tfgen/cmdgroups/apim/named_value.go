@@ -38,7 +38,8 @@ func (ap *NamedValueCLIParams) SpecifiesTarget() bool {
 func CreateNamedValuedArgParser() (*NamedValueCLIParams, *flag.FlagSet) {
 	var nvParms NamedValueCLIParams
 
-	var nvCmd = flag.NewFlagSet("named-value", flag.ExitOnError)
+	var nvCmd = flag.NewFlagSet("named_"+
+		"value", flag.ExitOnError)
 
 	nvCmd.StringVar(&nvParms.inputFile,
 		"named-value-file",

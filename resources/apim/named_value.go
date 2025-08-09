@@ -491,6 +491,9 @@ func DecryptNamedValueMessage(em core.EncryptedMessage, decrypted core.RSADecryp
 	return helper.Header, helper.KnowValue, err
 }
 
+//go:embed encrypt_apim_named_value_destpaarm.md
+var encryptApimNamedValueDestParamMD string
+
 func NewNamedValueEncryptorFunction() function.Function {
 	rv := resources.FunctionTemplate[string, resources.ResourceProtectionParams, DestinationNamedValueModel]{
 		Name:                "encrypt_apim_named_value",
@@ -506,7 +509,7 @@ func NewNamedValueEncryptorFunction() function.Function {
 		ProtectionParameterSupplier: func() resources.ResourceProtectionParams { return resources.ResourceProtectionParams{} },
 		DestinationParameter: function.ObjectParameter{
 			Name:               "destination_named_value",
-			Description:        "Destination API management service and named value",
+			Description:        "Destination API management service and named value. See the description of this parameter above",
 			AllowNullValue:     true,
 			AllowUnknownValues: true,
 
@@ -521,7 +524,8 @@ func NewNamedValueEncryptorFunction() function.Function {
 				&NamedValueDestinationFunctionParmaValidator{},
 			},
 		},
-		ConfidentialModelSupplier: func() string { return "" },
+		DestinationParameterMarkdownDescription: encryptApimNamedValueDestParamMD,
+		ConfidentialModelSupplier:               func() string { return "" },
 		DestinationModelSupplier: func() *DestinationNamedValueModel {
 			var ptr *DestinationNamedValueModel
 			return ptr

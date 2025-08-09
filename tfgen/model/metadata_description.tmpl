@@ -2,8 +2,8 @@
   # ---------------------------------------------------------------------------
   # Ciphertext usage constraints overview
   #
-  # The ciphertext embed the constraints described in the comments below. Creating
-  # {{ .ObjectSingular }} should succeed provided that ALL of these constraints are met
+  # The ciphertext embeds the constraints described in the comments below. Creating
+  # {{ .ObjectSingular }} should succeed provided that ALL of these constraints are met.
   # The operations on the resource will break -- per design -- when either of the
   # constraints will become unsatisfied. Renew the ciphertext periodically.
   {{- if .LimitsUsage  }}
@@ -16,8 +16,8 @@
   #
   # This {{ .ObjectSingular }} can be created only ONCE.
   {{- end }}
-  # NOTE: This control is only effective if the provider is allowed performing decrypt operation with
-  # the key wrapping key is also configured to track the use of the ciphertext. Provider that is not
+  # NOTE: This control is only effective if the provider is also configured to track the use
+  of the ciphertext. Provider that is not
   # configured to track objects will refuse creating this {{ .ObjectSingular }}.
   {{- else }}
   #

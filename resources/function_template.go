@@ -135,15 +135,16 @@ func (p LimitedCreateProtectionParam) Into(c *core.SecondaryProtectionParameters
 }
 
 type FunctionTemplate[TMdl any, TProtection ProtectionParameterized, DestMdl any] struct {
-	Name                        string
-	Summary                     string
-	MarkdownDescription         string
-	DataParameter               function.Parameter
-	ProtectionParameterSupplier core.Supplier[TProtection]
-	DestinationParameter        function.Parameter
-	ConfidentialModelSupplier   core.Supplier[TMdl]
-	DestinationModelSupplier    core.Supplier[*DestMdl]
-	CreatEncryptedMessage       func(confidentialModel TMdl, dest *DestMdl, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error)
+	Name                                    string
+	Summary                                 string
+	MarkdownDescription                     string
+	DataParameter                           function.Parameter
+	ProtectionParameterSupplier             core.Supplier[TProtection]
+	DestinationParameter                    function.Parameter
+	DestinationParameterMarkdownDescription string
+	ConfidentialModelSupplier               core.Supplier[TMdl]
+	DestinationModelSupplier                core.Supplier[*DestMdl]
+	CreatEncryptedMessage                   func(confidentialModel TMdl, dest *DestMdl, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, error)
 }
 
 func (f *FunctionTemplate[TMdl, TProtection, DestMdl]) Metadata(_ context.Context, _ function.MetadataRequest, resp *function.MetadataResponse) {
@@ -178,9 +179,13 @@ func (f *FunctionTemplate[TMdl, TProtection, DestMdl]) Definition(_ context.Cont
 	)
 
 	resp.Definition = function.Definition{
-		Summary:             f.Summary,
-		MarkdownDescription: f.MarkdownDescription + "\n" + protectionParam.GetMarkdownDescription(),
-		Return:              function.StringReturn{},
+		Summary: f.Summary,
+		MarkdownDescription: f.MarkdownDescription +
+			"\n" +
+			protectionParam.GetMarkdownDescription() +
+			"\n" +
+			f.DestinationParameterMarkdownDescription,
+		Return: function.StringReturn{},
 
 		Parameters: funcParams,
 	}

@@ -3,20 +3,185 @@
 page_title: "az-confidential_apim_subscription Resource - az-confidential"
 subcategory: ""
 description: |-
-  Creates a subscription in the Azure API management service with pre-set primary and secondary subscription keys
+  Creates a subscription with specified primary and secondary subscription
+  keys without revealing these  value in state.
+  This resource can be used e.g. in a situation where an Terraform practitioner
+  needs to manage a high number of periodically rotated subscription keys for
+  multiple API consumers where (a) storing these keys in the Terraform code in the
+  clear is not desired while (b) storing these keys in a Key Vault service
+  creates a maintenance overhead.
+  How to create the ciphertext
+  The ciphertext (i.e. the value of the content attribute) can be created with the encrypt_apim_subscription function.
+  This function will generate only the ciphertext. A complimentary tfgen https://github.com/aliakseiyanchuk/terraform-provider-az-confidential-tfgen
+  tool can used to generate both ciphertext
+  and the Terraform code template.
+  As a pre-requisite, you need to have a public key of the key-encryption key the action provider instance will
+  be using.
+  Example how to create ciphertext using Terraform provider
+  Consider the following example that creates a ciphertext that can be used for test and acceptance purposes for
+  next year when the content should not be read more that 50 times:
+  
+  variable "primary_key" {
+    type        = string
+    description = "Primary subscription key value"
+  }
+  variable "secondary_key" {
+    type        = string
+    description = "Secondary subscription key value"
+  }
+  
+  variable "public_key_file" {
+    type        = string
+    description = "Public key file"
+  }
+  
+  locals {
+    public_key = file(var.public_key_file)
+  }
+  
+  output "encrypted_named_value" {
+    value = provider::az-confidential::encrypt_apim_subscription (
+      {
+        primary_key   = var.primary_key
+        secondary_key = var.secondary_key
+      },
+      {
+        # These parameters are typically known upfront and can be considered
+        # long-lived or fixed. If desired, these values can also be expressed
+        # as variables.
+        az_subscription_id  = "123421"
+        resource_group      = "rg"
+        api_management_name = "apim"
+        apim_subscription_id : "subscriptionId",
+        api_id     = "",
+        product_id = "productId"
+        user_id    = "abc-def"
+      },
+      {
+        create_limit  = "72h"
+        expires_after = 365
+        num_uses      = 50
+        provider_constraints = toset(["test", "acceptance"])
+      },
+      local.public_key
+    )
+  }
+  
+  
+  Please refer to the encrypt_apim_subscription function documentation ../functions/encrypt_apim_subscription.md
+  for the description of the parameters the function accepts.
+  Create ciphertext using tfgen tool
+  The ciphertext as well as a complete Terraform datasource template can be obtained using the tfgen command-line tool
+  (see source code https://github.com/aliakseiyanchuk/terraform-provider-az-confidential-tfgen.)
+  The prompt equivalent to the function invocation illustrated above is:
+  
+  tfgen -pubkey [path to the public key] \
+    -provider-constraints demo,acceptance \
+    -num-uses 50 \
+    apim subscription
+  
+  The tool will prompt for the interactive content input. Further options can be obtained by tfgen -help and
+  tfgen apim subscription -help commands.
 ---
 
 # az-confidential_apim_subscription (Resource)
 
-Creates a subscription in the Azure API management service with pre-set primary and secondary subscription keys
+Creates a subscription with specified primary and secondary subscription
+keys without revealing these  value in state.
+
+This resource can be used e.g. in a situation where an Terraform practitioner
+needs to manage a high number of periodically rotated subscription keys for 
+multiple API consumers where (a) storing these keys in the Terraform code in the 
+clear is not desired while (b) storing these keys in a Key Vault service
+creates a maintenance overhead.
+
+## How to create the ciphertext
+The ciphertext (i.e. the value of the `content` attribute) can be created with the `encrypt_apim_subscription` function.
+This function will generate only the ciphertext. A complimentary [`tfgen`](https://github.com/aliakseiyanchuk/terraform-provider-az-confidential-tfgen)
+tool can used to generate both ciphertext
+and the Terraform code template.
+
+As a pre-requisite, you need to have a public key of the key-encryption key the action provider instance will
+be using.
+
+### Example how to create ciphertext using Terraform provider
+
+Consider the following example that creates a ciphertext that can be used for test and acceptance purposes for
+next year when the content should not be read more that 50 times:
+
+```terraform
+variable "primary_key" {
+  type        = string
+  description = "Primary subscription key value"
+}
+variable "secondary_key" {
+  type        = string
+  description = "Secondary subscription key value"
+}
+
+variable "public_key_file" {
+  type        = string
+  description = "Public key file"
+}
+
+locals {
+  public_key = file(var.public_key_file)
+}
+
+output "encrypted_named_value" {
+  value = provider::az-confidential::encrypt_apim_subscription (
+    {
+      primary_key   = var.primary_key
+      secondary_key = var.secondary_key
+    },
+    {
+      # These parameters are typically known upfront and can be considered
+      # long-lived or fixed. If desired, these values can also be expressed
+      # as variables.
+      az_subscription_id  = "123421"
+      resource_group      = "rg"
+      api_management_name = "apim"
+      apim_subscription_id : "subscriptionId",
+      api_id     = "",
+      product_id = "productId"
+      user_id    = "abc-def"
+    },
+    {
+      create_limit  = "72h"
+      expires_after = 365
+      num_uses      = 50
+      provider_constraints = toset(["test", "acceptance"])
+    },
+    local.public_key
+  )
+}
+
+```
+
+Please refer to the [`encrypt_apim_subscription` function documentation](../functions/encrypt_apim_subscription.md)
+for the description of the parameters the function accepts.
+
+### Create ciphertext using `tfgen` tool
+
+The ciphertext as well as a complete Terraform datasource template can be obtained using the `tfgen` command-line tool
+(see [source code](https://github.com/aliakseiyanchuk/terraform-provider-az-confidential-tfgen).)
+The prompt equivalent to the function invocation illustrated above is:
+```shell
+tfgen -pubkey [path to the public key] \
+  -provider-constraints demo,acceptance \
+  -num-uses 50 \
+  apim subscription
+```
+The tool will prompt for the interactive content input. Further options can be obtained by `tfgen -help` and
+`tfgen apim subscription -help` commands.
 
 ## Example Usage
 
 ```terraform
 resource "az-confidential_apim_subscription" "subscription" {
-  content = "H4sIAAAAAAAA/1TSuba6OACA8Z6nmD5nDkvYLKYQiFy2AAoIdBFuQARZFIU8/Zz5d/OVX/37+78MZDv4LzPECcLJn8M1c6QwyQ2agVTuKywnqClijq/vw7Kc5Saa6uHw25TPBuZRIYEiVbZkUJEw8J1Fx/TNKQNvmyxw23HpIhL0Qi0kF7xIYDHg2yHNd8zTvu5smDgf6ykO0qGFBIH+ic05psLKMeNXFIDqz5dRe7k2lM37PGkv0Ms6HGqqhLukZFfLts8l0Au8yfoVkNt4mtRHztz5wV1CzyzgyNuXdU6KFH4VeK+/xg2bpczKTOZjk62ATErr9rGmm7TrRnbVI0JSdVoHnQvaRrWzDQ4ihmizwEcmvtjoWwiGTyIW7+RcrcUE9jz2vM1/KL+IGi8CCu0pzG3d5JyZ3JvdfdDXkJ2Cw1yM+1LqkSlpH3OkUO6O6V26h6mHPVfPhF7x8HGnBHjVxtqhrB/c070APkP2kUq9Pzm5da+Z9QpL6jrpfspTJ4g7xYRhYrba8tmM4xklKLB833+WxQsvXBULHxbW9GT2okDk1L7WtJQTno4kf0W3YLF++uDePbFWMP+mHzuG6kjNxt+0wUvy2DhIQi+ll5bvhfitQOehMprwlep4/pZSTd7LH8lzID7KrhF3YIkc/dwg1hxiCTm7tHLz7fz+8mQMrJDOE0n86kn7UfZKookLjD5lPYtrdSrw5Vyh9SuM/o9asuYNesjii5ZyOzYefkFvgZWB1WivMsKkQUMUK3gDI8vD63yyx77IKvQP9wcvwtb/Mf8bAAD//55aK1blAgAA"
-  display_name = "confidentialSubscription"
-  state = "active"
+  content       = "H4sIAAAAAAAA/1TSuba6OACA8Z6nmD5nDkvYLKYQiFy2AAoIdBFuQARZFIU8/Zz5d/OVX/37+78MZDv4LzPECcLJn8M1c6QwyQ2agVTuKywnqClijq/vw7Kc5Saa6uHw25TPBuZRIYEiVbZkUJEw8J1Fx/TNKQNvmyxw23HpIhL0Qi0kF7xIYDHg2yHNd8zTvu5smDgf6ykO0qGFBIH+ic05psLKMeNXFIDqz5dRe7k2lM37PGkv0Ms6HGqqhLukZFfLts8l0Au8yfoVkNt4mtRHztz5wV1CzyzgyNuXdU6KFH4VeK+/xg2bpczKTOZjk62ATErr9rGmm7TrRnbVI0JSdVoHnQvaRrWzDQ4ihmizwEcmvtjoWwiGTyIW7+RcrcUE9jz2vM1/KL+IGi8CCu0pzG3d5JyZ3JvdfdDXkJ2Cw1yM+1LqkSlpH3OkUO6O6V26h6mHPVfPhF7x8HGnBHjVxtqhrB/c070APkP2kUq9Pzm5da+Z9QpL6jrpfspTJ4g7xYRhYrba8tmM4xklKLB833+WxQsvXBULHxbW9GT2okDk1L7WtJQTno4kf0W3YLF++uDePbFWMP+mHzuG6kjNxt+0wUvy2DhIQi+ll5bvhfitQOehMprwlep4/pZSTd7LH8lzID7KrhF3YIkc/dwg1hxiCTm7tHLz7fz+8mQMrJDOE0n86kn7UfZKookLjD5lPYtrdSrw5Vyh9SuM/o9asuYNesjii5ZyOzYefkFvgZWB1WivMsKkQUMUK3gDI8vD63yyx77IKvQP9wcvwtb/Mf8bAAD//55aK1blAgAA"
+  display_name  = "confidentialSubscription"
+  state         = "active"
   allow_tracing = false
 
   # A display name of this named value. It doesn't play a role in the actual operation;

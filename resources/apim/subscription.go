@@ -3,7 +3,10 @@ package apim
 import (
 	"context"
 	"crypto/rsa"
+	_ "embed"
 	"fmt"
+	"regexp"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
@@ -22,7 +25,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-	"regexp"
 )
 
 func CreateDestinationSubscription(azSubscriptionId,
@@ -455,7 +457,7 @@ func (s *SubscriptionSpecializer) DoDelete(ctx context.Context, planData *Subscr
 	return rvDiag
 }
 
-// TODO: write and embed a readme
+//go:embed subscription.md
 var subscriptionResourceMarkdownDescription string
 
 func CreateSubscriptionEncryptedMessage(subscriptionKeys SubscriptionDataFunctionParameter, dest *DestinationSubscriptionCoordinateModel, md core.SecondaryProtectionParameters, pubKey *rsa.PublicKey) (core.EncryptedMessage, core.SecondaryProtectionParameters, error) {
@@ -666,6 +668,9 @@ func (n *SubscriptionDestinationFunctionParmaValidator) ValidateParameterObject(
 	// These are minimal requirements for target locking.
 }
 
+//go:embed encrypt_apim_subscription_destparam.md
+var encryptApimSubscriptionDestinationParmaMD string
+
 func NewSubscriptionEncryptorFunction() function.Function {
 	rv := resources.FunctionTemplate[SubscriptionDataFunctionParameter, resources.ResourceProtectionParams, DestinationSubscriptionCoordinateModel]{
 		Name:                "encrypt_apim_subscription",
@@ -708,7 +713,8 @@ func NewSubscriptionEncryptorFunction() function.Function {
 				&SubscriptionDestinationFunctionParmaValidator{},
 			},
 		},
-		ConfidentialModelSupplier: func() SubscriptionDataFunctionParameter { return SubscriptionDataFunctionParameter{} },
+		DestinationParameterMarkdownDescription: encryptApimSubscriptionDestinationParmaMD,
+		ConfidentialModelSupplier:               func() SubscriptionDataFunctionParameter { return SubscriptionDataFunctionParameter{} },
 		DestinationModelSupplier: func() *DestinationSubscriptionCoordinateModel {
 			var ptr *DestinationSubscriptionCoordinateModel
 			return ptr
