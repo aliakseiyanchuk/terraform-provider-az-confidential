@@ -21,13 +21,13 @@ output "encrypted_secret" {
   value = provider::az-confidential::encrypt_keyvault_secret(
     "This is a secret password",
     {
-      vault_name: "vaultname123",
-      name: "secretName123",
+      vault_name : "vaultname123",
+      name : "secretName123",
     },
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -39,9 +39,9 @@ output "encrypted_secret_without_destination_lock" {
     "This is a secret password",
     null,
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
