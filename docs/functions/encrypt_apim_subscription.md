@@ -9,6 +9,59 @@ description: |-
 # function: encrypt_apim_subscription
 
 Encrypts an APIM subscription keys without the use of the `tfgen` tool
+# Secondary protection parameters
+The primary protection of the confidential content is achieved with RSA encryption.
+
+The secondary protection parameters can be additionally embedded into the
+ciphertext that limits the usage the `az-confidential` provider
+will observe.
+Where any of these  parameters of is not met, the `az-confidential` provider
+will generate an error. Removing an error will require re-encryption of the ciphertext
+by the original confidential asset owner or a removal of the associated resource from the state.
+
+> Note that secondary protection measures are implemented only by the `az-confidential` provider
+> as a means to prevent inadvertent mix-ups and to enforce ciphertext re-encryption (which is
+> equivalent of re-authenticating a user session after a prolonged use). Secondary protection is a
+> _complimentary_ measure to RSA encryption and not a replacement thereof as any process or persona
+> with the permission to decrypt the ciphertext using the matching private key wil be able
+> to read the confidential material.
+
+If this parameter is set to `null`, this will remove all secondary protection from the
+ciphertext completely.
+
+Available secondary protection parameter options are:
+- `create_limit`: a time frame within which the object must be created. The value should
+  be a valid Golang duration expression specifying hours, mines, and seconds. For example,
+  `72h` expression limits the creation of the resource within 3 calendar days. To disable this
+  limit, set this parameter to an empty string (`""`).
+  > As a secure practice, the creation limit should be short-lived just enough to get the
+  > actual resource created in Azure for production resource. Where the practitioner seeks
+  > to recreate objects e.g., in ephemeral test environments, limiting expiry with `expirys_after`
+  > and `num_uses` offers a suitable alternative.
+- `expires_after`: number of days the before the ciphertext will be considered "expired." Set to
+  `0` to mark the ciphertext perpetually valid.
+- `num_uses`: number of times this ciphertext may be read before considered "depleted." Set to
+  `0` to mark the ciphertext as non-depletable.
+- `provider_constraints`: a set of strings indicating the tags an instance of `az-confidential`
+  provider must be configured with. The primary use of this configuration is to add environmental
+  constraints into the ciphertext to prevent production confidential material being accidentally used, 
+  e.g. in the test environments.
+## Destination parameter
+When specified, "locks" the destination subscription in the specific API management
+instance into which this subscription can be unpacked. 
+
+The object has the following fields:
+  - `az_subscription_id` Azure subscription Id containing the API management service. Required to lock destination.
+    > Note: this parameter contains `az_` prefix to differentiate between Azure 
+    > and API management subscriptions.
+  - `resource_group` resource group containing the API management service. Required to lock destination.
+  - `api_management_name` API management service name in the resource group. Required to lock destination.
+  - `apim_subscription_id` specific API subscription id to assign ot thi subscription
+  - `api_id` an identifier of the API to link this subscription to. A non-empty value is mutually exclusive  
+     with `product_id` set to an non-empty string.
+  - `product_id` an identifier of the API production to link subscription to. A non-empty value is mutually exclusive  
+    with `api_id` set to an non-empty string.
+  - `user_id` an id of the owner to be associated with this subscription.
 
 ## Example Usage
 
@@ -35,22 +88,22 @@ locals {
 output "encrypted_named_value" {
   value = provider::az-confidential::encrypt_apim_subscription(
     {
-      primary_key = "a"
+      primary_key   = "a"
       secondary_key = "b"
     },
     {
-      az_subscription_id = "123421"
-      resource_group = "rg"
-      api_management_name =  "apim"
-      apim_subscription_id: "subscriptionId",
-      api_id = "",
-      product_id="productId"
-      user_id="abc-def"
+      az_subscription_id  = "123421"
+      resource_group      = "rg"
+      api_management_name = "apim"
+      apim_subscription_id : "subscriptionId",
+      api_id     = "",
+      product_id = "productId"
+      user_id    = "abc-def"
     },
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -60,14 +113,14 @@ output "encrypted_named_value" {
 output "encrypted_named_value_without_destination_lock" {
   value = provider::az-confidential::encrypt_apim_subscription(
     {
-      primary_key = "a"
+      primary_key   = "a"
       secondary_key = "b"
     },
     null,
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -77,7 +130,7 @@ output "encrypted_named_value_without_destination_lock" {
 output "encrypted_named_value_without_protection" {
   value = provider::az-confidential::encrypt_apim_subscription(
     {
-      primary_key = "a"
+      primary_key   = "a"
       secondary_key = "b"
     },
     null,
@@ -99,6 +152,6 @@ encrypt_apim_subscription(subscription_keys object, destination_subscription obj
 <!-- arguments generated by tfplugindocs -->
 1. `subscription_keys` (Object) Subscription keys that need to be created in the target APIM service
 1. `destination_subscription` (Object, Nullable) Destination API management subscription
-1. `content_protection` (Object, Nullable) Secondary content protection parameters to be embedded into  output ciphertext
+1. `content_protection` (Object, Nullable) Secondary content protection parameters to be embedded into the output ciphertext. See the details about the object fields above.
 1. `public_key` (String) Public key of the Key-Wrapping Key
 
