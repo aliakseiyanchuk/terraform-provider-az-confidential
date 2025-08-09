@@ -2,7 +2,7 @@ Creates a version of a key in the destination key vault from the
 provided ciphertext and additional parameters supplied as
 resource attributes.
 
-The resource can import RSA or Elliptic curve.
+The resource can import RSA or Elliptic curve keys.
 
 # How to create the ciphertext
 The ciphertext (i.e. the value of the `content` attribute) can be created with the `encrypt_keyvault_key` function.
