@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	_ "embed"
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
@@ -358,7 +359,7 @@ func NewSecretResource() resource.Resource {
 	return &resources.ConfidentialGenericResource[SecretModel, int, core.ConfidentialStringData, azsecrets.Secret]{
 		Specializer:    kvSecretSpecializer,
 		ImmutableRU:    kvSecretSpecializer,
-		ResourceName:   "secret",
+		ResourceName:   "keyvault_secret",
 		ResourceSchema: resourceSchema,
 	}
 }
@@ -402,11 +403,14 @@ func DecryptSecretMessage(em core.EncryptedMessage, decrypted core.RSADecrypter)
 	return helper.Header, helper.KnowValue, err
 }
 
+//go:embed encrypt_keyvault_secret_destparam.md
+var encryptSecretDestParamDescriptionMD string
+
 func NewSecretEncryptorFunction() function.Function {
 	rv := resources.FunctionTemplate[string, resources.ResourceProtectionParams, core.AzKeyVaultObjectCoordinateModel]{
 		Name:                "encrypt_keyvault_secret",
 		Summary:             "Produces a ciphertext string suitable for use with az-confidential_secret resource",
-		MarkdownDescription: "Encrypts a secret string without the use of the `tfgen` tool",
+		MarkdownDescription: "Generates the encrypted (cipher text) version of a secret string which then van can be used by `az-confidential_keyvault_secret` resource to create an actual secret in the key vault.",
 
 		DataParameter: function.StringParameter{
 			Name:        "secret",
@@ -428,7 +432,8 @@ func NewSecretEncryptorFunction() function.Function {
 				&AzKVObjectCoordinateParamValidator{},
 			},
 		},
-		ConfidentialModelSupplier: func() string { return "" },
+		DestinationParameterMarkdownDescription: encryptSecretDestParamDescriptionMD,
+		ConfidentialModelSupplier:               func() string { return "" },
 		DestinationModelSupplier: func() *core.AzKeyVaultObjectCoordinateModel {
 			var ptr *core.AzKeyVaultObjectCoordinateModel
 			return ptr
