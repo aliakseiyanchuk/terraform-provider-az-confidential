@@ -105,6 +105,6 @@ resource "az-confidential_keyvault_certificate" "cert" {
 
   destination_certificate = {
     vault_name = "demo-vault"
-    name = "demo"
+    name       = "demo"
   }
 }
