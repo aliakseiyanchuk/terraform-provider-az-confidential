@@ -42,7 +42,7 @@ provider "az-confidential" {
   client_id       = var.az_client_id
   client_secret   = var.az_client_secret
 
-  labels       = ["acceptance-testing"]
+  constraints = ["acceptance-testing"]
 
   default_destination_vault_name = var.az_default_vault_name
 
