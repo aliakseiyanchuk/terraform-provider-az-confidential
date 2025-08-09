@@ -19,7 +19,7 @@ description: |-
   be using.
   Example how to create ciphertext using Terraform provider
   Consider the following example that creates a ciphertext that can be used for test and acceptance purposes for
-  next year when the content should not be read more that 50 times:
+  next year when the content should not be read more than 50 times:
   
   variable "primary_key" {
     type        = string
@@ -39,7 +39,7 @@ description: |-
     public_key = file(var.public_key_file)
   }
   
-  output "encrypted_named_value" {
+  output "encrypted_apim_subscription" {
     value = provider::az-confidential::encrypt_apim_subscription (
       {
         primary_key   = var.primary_key
@@ -107,7 +107,7 @@ be using.
 ### Example how to create ciphertext using Terraform provider
 
 Consider the following example that creates a ciphertext that can be used for test and acceptance purposes for
-next year when the content should not be read more that 50 times:
+next year when the content should not be read more than 50 times:
 
 ```terraform
 variable "primary_key" {
@@ -128,7 +128,7 @@ locals {
   public_key = file(var.public_key_file)
 }
 
-output "encrypted_named_value" {
+output "encrypted_apim_subscription" {
   value = provider::az-confidential::encrypt_apim_subscription (
     {
       primary_key   = var.primary_key
