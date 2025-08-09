@@ -3,11 +3,12 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"os"
-	"testing"
 )
 
 func getTestAzCredential(t *testing.T) *azidentity.ClientSecretCredential {
@@ -96,7 +97,7 @@ func Test_AZTATT_ObjectCounting_Integration(t *testing.T) {
 	trackStoreErr := tracker.TrackObjectId(ctx, testUUID)
 	assert.Nil(t, trackStoreErr)
 
-	fmt.Println("---check first ujse--")
+	fmt.Println("---check first use--")
 
 	tracked, trackCheckErr = tracker.GetTackedObjectUses(ctx, testUUID)
 	assert.Nil(t, trackCheckErr)
