@@ -81,7 +81,7 @@ func (p ResourceProtectionParams) GetAttributeTypes() map[string]attr.Type {
 	return rv
 }
 
-//go:embed resource_template.go
+//go:embed resource_protection_params.md
 var resourceProtectionParamsMarkdown string
 
 func (p ResourceProtectionParams) GetMarkdownDescription() string {

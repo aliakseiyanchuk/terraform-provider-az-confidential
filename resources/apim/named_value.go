@@ -3,6 +3,7 @@ package apim
 import (
 	"context"
 	"crypto/rsa"
+	_ "embed"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement"
@@ -346,6 +347,7 @@ func (n *NamedValueSpecializer) DoUpdate(ctx context.Context, data *NamedValueMo
 
 }
 
+//go:embed named_value.md
 var namedValueResourceMarkdownDescription string
 
 const NamedValueObjectType = "api management/named value"
@@ -415,7 +417,6 @@ func NewNamedValueResource() resource.Resource {
 	}
 
 	resourceSchema := schema.Schema{
-		Description:         "Creates a named value in API Management without revealing its value in state",
 		MarkdownDescription: namedValueResourceMarkdownDescription,
 
 		Attributes: resources.WrappedConfidentialMaterialModelSchema(specificAttrs, false),
