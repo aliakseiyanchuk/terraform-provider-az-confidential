@@ -5,7 +5,7 @@
 # it is not sensitive enough to require placing e.g. into a Key Vault.
 # ----------------------------------------------------------------------------
 
-data "az-confidential_content" "{{ .TFBlockName }}" {
+data "az-confidential_general_content" "{{ .TFBlockName }}" {
     content = <<-CIPHERTEXT
            {{- range $value := fold80 .EncryptedContent.TerraformExpression }}
            {{ $value }}

@@ -1,6 +1,8 @@
 package acceptance
 
 import (
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core/testkeymaterial"
@@ -10,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/lestrrat-go/jwx/v3/jwk"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func generatePEMEncodedRsaKeyResource(t *testing.T) string {
@@ -79,9 +80,9 @@ func TestAccConfidentialRsaKey(t *testing.T) {
 				Config: providerConfig + generatePEMEncodedRsaKeyResource(t),
 				Check: resource.ComposeTestCheckFunc(
 					// Validate that the secret version is set after creation
-					resource.TestCheckResourceAttrSet("az-confidential_key.rsa_key", "key_version"),
-					resource.TestCheckResourceAttrSet("az-confidential_key.rsa_key", "public_key_pem"),
-					resource.TestCheckResourceAttr("az-confidential_key.rsa_key", "enabled", "true"),
+					resource.TestCheckResourceAttrSet("az-confidential_keyvault_key.rsa_key", "key_version"),
+					resource.TestCheckResourceAttrSet("az-confidential_keyvault_key.rsa_key", "public_key_pem"),
+					resource.TestCheckResourceAttr("az-confidential_keyvault_key.rsa_key", "enabled", "true"),
 				),
 			},
 		},

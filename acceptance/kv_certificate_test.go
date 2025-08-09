@@ -1,6 +1,8 @@
 package acceptance
 
 import (
+	"testing"
+
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core/testkeymaterial"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/cmdgroups/keyvault"
@@ -8,7 +10,6 @@ import (
 	_ "github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func generatePEMEncodedCertificateResource(t *testing.T) string {
@@ -57,13 +58,13 @@ func TestAccConfidentialPEMEncodedCertificate(t *testing.T) {
 				Config: providerConfig + generatePEMEncodedCertificateResource(t),
 				Check: resource.ComposeTestCheckFunc(
 					// Validate that the secret version is set after creation
-					resource.TestCheckResourceAttrSet("az-confidential_certificate.cert", "secret_id"),
-					resource.TestCheckResourceAttrSet("az-confidential_certificate.cert", "versionless_secret_id"),
-					resource.TestCheckResourceAttrSet("az-confidential_certificate.cert", "version"),
-					resource.TestCheckResourceAttrSet("az-confidential_certificate.cert", "thumbprint"),
-					resource.TestCheckResourceAttrSet("az-confidential_certificate.cert", "certificate_data"),
-					resource.TestCheckResourceAttrSet("az-confidential_certificate.cert", "certificate_data_base64"),
-					resource.TestCheckResourceAttr("az-confidential_certificate.cert", "enabled", "true"),
+					resource.TestCheckResourceAttrSet("az-confidential_keyvault_certificate.cert", "secret_id"),
+					resource.TestCheckResourceAttrSet("az-confidential_keyvault_certificate.cert", "versionless_secret_id"),
+					resource.TestCheckResourceAttrSet("az-confidential_keyvault_certificate.cert", "version"),
+					resource.TestCheckResourceAttrSet("az-confidential_keyvault_certificate.cert", "thumbprint"),
+					resource.TestCheckResourceAttrSet("az-confidential_keyvault_certificate.cert", "certificate_data"),
+					resource.TestCheckResourceAttrSet("az-confidential_keyvault_certificate.cert", "certificate_data_base64"),
+					resource.TestCheckResourceAttr("az-confidential_keyvault_certificate.cert", "enabled", "true"),
 				),
 			},
 		},

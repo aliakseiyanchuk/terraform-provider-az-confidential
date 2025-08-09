@@ -1,13 +1,14 @@
 package acceptance
 
 import (
+	"testing"
+
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/cmdgroups/general"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 	_ "github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func generateContentDataSource(t *testing.T) string {
@@ -41,7 +42,7 @@ func TestAccConfidentialContentDataSourceBasicStringConfiguration(t *testing.T) 
 				Config: providerConfig + generateContentDataSource(t),
 				Check: resource.ComposeTestCheckFunc(
 					// Validate that the message is set
-					resource.TestCheckResourceAttr("data.az-confidential_content.content", "plaintext", "this is a very secret string"),
+					resource.TestCheckResourceAttr("data.az-confidential_general_content.content", "plaintext", "this is a very secret string"),
 				),
 			},
 		},

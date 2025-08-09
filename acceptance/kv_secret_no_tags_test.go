@@ -1,13 +1,14 @@
 package acceptance
 
 import (
+	"testing"
+
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/cmdgroups/keyvault"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 	_ "github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func generateSecretResourceNoTags(t *testing.T) string {
@@ -50,8 +51,8 @@ func TestAccConfidentialSecretWithoutTags(t *testing.T) {
 				Config: providerConfig + generateSecretResourceNoTags(t),
 				Check: resource.ComposeTestCheckFunc(
 					// Validate that the secret version is set after creation
-					resource.TestCheckResourceAttrSet("az-confidential_secret.secret", "secret_version"),
-					resource.TestCheckResourceAttr("az-confidential_secret.secret", "enabled", "true"),
+					resource.TestCheckResourceAttrSet("az-confidential_keyvault_secret.secret", "secret_version"),
+					resource.TestCheckResourceAttr("az-confidential_keyvault_secret.secret", "enabled", "true"),
 				),
 			},
 		},
