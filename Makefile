@@ -53,7 +53,7 @@ only_acceptance_test: install
 	TF_ACC=1 go test -v -cover ./acceptance
 
 acceptance_test: install
-	TF_ACC=1 go test -cover ./...
+	TF_ACC=1 go test -cover ./acceptance
 
 tfgen:
 	go build -o ${TF_GEN_BINARY} ./bin/tfgen
