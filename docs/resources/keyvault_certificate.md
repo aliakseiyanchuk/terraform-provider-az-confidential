@@ -33,7 +33,7 @@ description: |-
   }
   
   output "encrypted_keyvault_certificate" {
-    value = provider::az-confidential::encrypt_apim_named_value(
+    value = provider::az-confidential::encrypt_keyvault_certificate(
       {
         certificate = local.cert_data,
         password    = var.password,
@@ -106,7 +106,7 @@ locals {
 }
 
 output "encrypted_keyvault_certificate" {
-  value = provider::az-confidential::encrypt_apim_named_value(
+  value = provider::az-confidential::encrypt_keyvault_certificate(
     {
       certificate = local.cert_data,
       password    = var.password,
@@ -254,7 +254,7 @@ resource "az-confidential_keyvault_certificate" "cert" {
 
   destination_certificate = {
     vault_name = "demo-vault"
-    name = "demo"
+    name       = "demo"
   }
 }
 ```

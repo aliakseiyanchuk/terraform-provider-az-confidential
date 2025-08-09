@@ -11,6 +11,8 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
@@ -31,7 +33,6 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwk"
 	"github.com/segmentio/asm/base64"
 	"golang.org/x/crypto/ssh"
-	"math/big"
 )
 
 type KeyModel struct {
@@ -537,7 +538,7 @@ func NewKeyResource() resource.Resource {
 	return &resources.ConfidentialGenericResource[KeyModel, int, jwk.Key, azkeys.KeyBundle]{
 		Specializer:    kvKeySpecializer,
 		ImmutableRU:    kvKeySpecializer,
-		ResourceName:   "key",
+		ResourceName:   "keyvault_key",
 		ResourceSchema: resourceSchema,
 	}
 }
@@ -672,15 +673,21 @@ func DecryptKeyMessage(em core.EncryptedMessage, decrypter core.RSADecrypter) (c
 
 }
 
+//go:embed encrypt_keyvault_key_destparam.md
+var encryptKeyDestinationParameterMD string
+
 func NewKeyEncryptorFunction() function.Function {
 	rv := resources.FunctionTemplate[KeyDataFunctionParameter, resources.ResourceProtectionParams, core.AzKeyVaultObjectCoordinateModel]{
 		Name:                "encrypt_keyvault_key",
 		Summary:             "Produces a ciphertext string suitable for use with az-confidential_key resource",
-		MarkdownDescription: "Encrypts an RSA or elliptic curve key without the use of the `tfgen` tool",
+		MarkdownDescription: "Generates the encrypted (cipher text) version of key material which then van can be used by `az-confidential_keyvault_key` resource to create an actual key in the key vault.",
 
 		DataParameter: function.ObjectParameter{
 			Name:        "key_data",
-			Description: "Private key to be encrypted",
+			Description: "Private key data to be encrypted",
+			MarkdownDescription: "Object specifying `key` field containing plain-text (for PEM-encoded) or Base-64 (for DER-encoded keys) " +
+				"of the key material. Where the key material is password-protected, the `password` field must be set " +
+				"to the value of the password. Otherwise it should be an empty string.",
 
 			AttributeTypes: map[string]attr.Type{
 				"key":      types.StringType,
@@ -707,7 +714,8 @@ func NewKeyEncryptorFunction() function.Function {
 				&AzKVObjectCoordinateParamValidator{},
 			},
 		},
-		ConfidentialModelSupplier: func() KeyDataFunctionParameter { return KeyDataFunctionParameter{} },
+		DestinationParameterMarkdownDescription: encryptKeyDestinationParameterMD,
+		ConfidentialModelSupplier:               func() KeyDataFunctionParameter { return KeyDataFunctionParameter{} },
 		DestinationModelSupplier: func() *core.AzKeyVaultObjectCoordinateModel {
 			var ptr *core.AzKeyVaultObjectCoordinateModel
 			return ptr

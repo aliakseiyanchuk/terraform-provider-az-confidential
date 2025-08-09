@@ -16,26 +16,26 @@ locals {
               -----END PUBLIC KEY-----
               PUBLIC_KEY
 
-  plain_private_key = file("${path.module}/ephemeral_private_key.pem")
-  plain_ec_private_key = file("${path.module}/private-ec-key-prime256v1.pem")
+  plain_private_key         = file("${path.module}/ephemeral_private_key.pem")
+  plain_ec_private_key      = file("${path.module}/private-ec-key-prime256v1.pem")
   plain_der_rsa_private_key = file("${path.module}/ephemeral-rsa-private-key-encrypted.pem")
-  # Note: der-encrypted files cannot be read by Terraform directly.
+  encrypted_der_key         = filebase64("${path.module}/ephemeral-rsa-private-key-encrypted.der")
 }
 
 output "encrypted_rsa_key" {
   value = provider::az-confidential::encrypt_keyvault_key(
     {
-      key = local.plain_private_key,
+      key      = local.plain_private_key,
       password = "",
     },
     {
       vault_name = "vaultname123",
-      name =  "keyName123",
+      name       = "keyName123",
     },
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -45,17 +45,17 @@ output "encrypted_rsa_key" {
 output "encrypted_ec_key" {
   value = provider::az-confidential::encrypt_keyvault_key(
     {
-      key = local.plain_ec_private_key,
+      key      = local.plain_ec_private_key,
       password = "",
     },
     {
       vault_name = "vaultname123",
-      name =  "keyName123",
+      name       = "keyName123",
     },
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -65,17 +65,37 @@ output "encrypted_ec_key" {
 output "encrypted_der_rsa_key" {
   value = provider::az-confidential::encrypt_keyvault_key(
     {
-      key = local.plain_der_rsa_private_key,
+      key      = local.plain_der_rsa_private_key,
       password = "s1cr3t",
     },
     {
       vault_name = "vaultname123",
-      name =  "keyName123",
+      name       = "keyName123",
     },
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
+      provider_constraints = toset(["test", "acceptance"])
+    },
+    local.public_key
+  )
+}
+
+output "encrypted_der_encrypted_rsa_key" {
+  value = provider::az-confidential::encrypt_keyvault_key(
+    {
+      key      = local.encrypted_der_key,
+      password = "s1cr3t",
+    },
+    {
+      vault_name = "vaultname123",
+      name       = "keyName123",
+    },
+    {
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key

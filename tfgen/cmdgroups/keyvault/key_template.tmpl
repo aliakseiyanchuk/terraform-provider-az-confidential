@@ -1,8 +1,12 @@
+# ----------------------------------------------------------------------------
 #
-# Minimal terraform code for your example:
+# Azure Key Vault Key
+#
+# The resource allows importing RSA and EC keys into the key vault form the
+# encrypted (cipher-text) version of private key material.
 # ----------------------------------------------------------------------------
 
-resource "az-confidential_key" "{{ .TFBlockName }}" {
+resource "az-confidential_keyvault_key" "{{ .TFBlockName }}" {
   content = <<-CIPHERTEXT
          {{- range $value := fold80 .EncryptedContent.TerraformExpression }}
          {{ $value }}

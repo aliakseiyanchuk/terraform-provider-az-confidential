@@ -8,7 +8,51 @@ description: |-
 
 # function: encrypt_keyvault_key
 
-Encrypts an RSA or elliptic curve key without the use of the `tfgen` tool
+Generates the encrypted (cipher text) version of key material which then van can be used by `az-confidential_keyvault_key` resource to create an actual key in the key vault.
+# Secondary protection parameters
+The primary protection of the confidential content is achieved with RSA encryption.
+
+The secondary protection parameters can be additionally embedded into the
+ciphertext that limits the usage the `az-confidential` provider
+will observe.
+Where any of these  parameters of is not met, the `az-confidential` provider
+will generate an error. Removing an error will require re-encryption of the ciphertext
+by the original confidential asset owner or a removal of the associated resource from the state.
+
+> Note that secondary protection measures are implemented only by the `az-confidential` provider
+> as a means to prevent inadvertent mix-ups and to enforce ciphertext re-encryption (which is
+> equivalent of re-authenticating a user session after a prolonged use). Secondary protection is a
+> _complimentary_ measure to RSA encryption and not a replacement thereof as any process or persona
+> with the permission to decrypt the ciphertext using the matching private key wil be able
+> to read the confidential material.
+
+If this parameter is set to `null`, this will remove all secondary protection from the
+ciphertext completely.
+
+Available secondary protection parameter options are:
+- `create_limit`: a time frame within which the object must be created. The value should
+  be a valid Golang duration expression specifying hours, mines, and seconds. For example,
+  `72h` expression limits the creation of the resource within 3 calendar days. To disable this
+  limit, set this parameter to an empty string (`""`).
+  > As a secure practice, the creation limit should be short-lived just enough to get the
+  > actual resource created in Azure for production resource. Where the practitioner seeks
+  > to recreate objects e.g., in ephemeral test environments, limiting expiry with `expirys_after`
+  > and `num_uses` offers a suitable alternative.
+- `expires_after`: number of days the before the ciphertext will be considered "expired." Set to
+  `0` to mark the ciphertext perpetually valid.
+- `num_uses`: number of times this ciphertext may be read before considered "depleted." Set to
+  `0` to mark the ciphertext as non-depletable.
+- `provider_constraints`: a set of strings indicating the tags an instance of `az-confidential`
+  provider must be configured with. The primary use of this configuration is to add environmental
+  constraints into the ciphertext to prevent production confidential material being accidentally used, 
+  e.g. in the test environments.
+## Destination parameter
+When specified, "locks" the destination key vault and key name into which this 
+key data will be unpacked. 
+
+The object has the following fields:
+  - `vault_name`  a name of Azure key vault
+  - `name` target name of the key
 
 ## Example Usage
 
@@ -31,26 +75,26 @@ locals {
               -----END PUBLIC KEY-----
               PUBLIC_KEY
 
-  plain_private_key = file("${path.module}/ephemeral_private_key.pem")
-  plain_ec_private_key = file("${path.module}/private-ec-key-prime256v1.pem")
+  plain_private_key         = file("${path.module}/ephemeral_private_key.pem")
+  plain_ec_private_key      = file("${path.module}/private-ec-key-prime256v1.pem")
   plain_der_rsa_private_key = file("${path.module}/ephemeral-rsa-private-key-encrypted.pem")
-  # Note: der-encrypted files cannot be read by Terraform directly.
+  encrypted_der_key         = filebase64("${path.module}/ephemeral-rsa-private-key-encrypted.der")
 }
 
 output "encrypted_rsa_key" {
   value = provider::az-confidential::encrypt_keyvault_key(
     {
-      key = local.plain_private_key,
+      key      = local.plain_private_key,
       password = "",
     },
     {
       vault_name = "vaultname123",
-      name =  "keyName123",
+      name       = "keyName123",
     },
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -60,17 +104,17 @@ output "encrypted_rsa_key" {
 output "encrypted_ec_key" {
   value = provider::az-confidential::encrypt_keyvault_key(
     {
-      key = local.plain_ec_private_key,
+      key      = local.plain_ec_private_key,
       password = "",
     },
     {
       vault_name = "vaultname123",
-      name =  "keyName123",
+      name       = "keyName123",
     },
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -80,17 +124,37 @@ output "encrypted_ec_key" {
 output "encrypted_der_rsa_key" {
   value = provider::az-confidential::encrypt_keyvault_key(
     {
-      key = local.plain_der_rsa_private_key,
+      key      = local.plain_der_rsa_private_key,
       password = "s1cr3t",
     },
     {
       vault_name = "vaultname123",
-      name =  "keyName123",
+      name       = "keyName123",
     },
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
+      provider_constraints = toset(["test", "acceptance"])
+    },
+    local.public_key
+  )
+}
+
+output "encrypted_der_encrypted_rsa_key" {
+  value = provider::az-confidential::encrypt_keyvault_key(
+    {
+      key      = local.encrypted_der_key,
+      password = "s1cr3t",
+    },
+    {
+      vault_name = "vaultname123",
+      name       = "keyName123",
+    },
+    {
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -108,8 +172,8 @@ encrypt_keyvault_key(key_data object, destination_key object, content_protection
 ## Arguments
 
 <!-- arguments generated by tfplugindocs -->
-1. `key_data` (Object) Private key to be encrypted
+1. `key_data` (Object) Object specifying `key` field containing plain-text (for PEM-encoded) or Base-64 (for DER-encoded keys) of the key material. Where the key material is password-protected, the `password` field must be set to the value of the password. Otherwise it should be an empty string.
 1. `destination_key` (Object, Nullable) Destination vault and key name
-1. `content_protection` (Object, Nullable) Secondary content protection parameters to be embedded into  output ciphertext
+1. `content_protection` (Object, Nullable) Secondary content protection parameters to be embedded into the output ciphertext. See the details about the object fields above.
 1. `public_key` (String) Public key of the Key-Wrapping Key
 
