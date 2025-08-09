@@ -34,24 +34,27 @@ encrypt_keyvault_secret:
 	${LABELS} ${OPTIONS} \
 	kv secret \
 	-destination-vault ${OUTPUT_VAULT_NAME} -destination-secret-name ${OUTPUT_VAULT_OBJECT} \
+	${CMD_OPTIONS}
 
 # Encrypt text secret read from the command-line
 encrypt_general_content:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
 	${LABELS} ${OPTIONS} \
-	general content
+	general content ${CMD_OPTIONS}
 
 encrypt_keyvault_key:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
 	${LABELS} ${OPTIONS}\
 	kv key \
 	-destination-vault ${OUTPUT_VAULT_NAME} -destination-key-name ${OUTPUT_VAULT_OBJECT} \
+	${CMD_OPTIONS}
 
 encrypt_keyvault_certificate:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \
 	${LABELS} ${OPTIONS} \
 	kv certificate \
 	-destination-vault ${OUTPUT_VAULT_NAME} -destination-cert-name ${OUTPUT_VAULT_OBJECT} \
+	${CMD_OPTIONS}
 
 encrypt_apim_named_value:
 	${TFGEN_EXEC} -pubkey ${PUBKEY} \

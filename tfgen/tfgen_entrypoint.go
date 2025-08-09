@@ -5,16 +5,17 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/cmdgroups/apim"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/cmdgroups/general"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/cmdgroups/keyvault"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/io"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
-	"os"
-	"strings"
-	"sync"
-	"time"
 )
 
 const (

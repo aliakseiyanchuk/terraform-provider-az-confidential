@@ -15,7 +15,6 @@ provider "az-confidential" {
   client_secret   = var.az_client_secret
 
   constraints         = ["test", "demo", "experimentation"]
-  require_label_match = "provider-labels"
 
   default_wrapping_key = {
     vault_name = var.az_default_vault_name
@@ -24,5 +23,11 @@ provider "az-confidential" {
   }
 
   default_destination_vault_name = var.az_default_vault_name
+
+  storage_account_tracker = {
+    account_name   = var.az_storage_account_name
+    table_name     = var.az_storage_account_table_name
+    partition_name = var.az_storage_account_table_partition
+  }
 }
 

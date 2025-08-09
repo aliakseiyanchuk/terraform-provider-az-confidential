@@ -7,13 +7,14 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/resources"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 // ConfidentialContentModel Model for the encrypted password in the configuration that can be unwrapped into the state file.
@@ -41,16 +42,22 @@ func (cpm *ConfidentialContentModel) Accept(uuid string, unwrappedPayload core.C
 	}
 }
 
+func (cpm *ConfidentialContentModel) Drop() {
+	cpm.Plaintext = types.StringValue("----- N/A ------")
+	cpm.PlaintextBase64 = types.StringNull()
+	cpm.PlaintextHex = types.StringNull()
+}
+
 type ConfidentialContentDataSource struct {
 	resources.ConfidentialDatasourceBase
 }
 
 func (d *ConfidentialContentDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_content"
+	resp.TypeName = req.ProviderTypeName + "_general_content"
 }
 
 //go:embed content.md
-var passwordDataSourceMarkdownDescription string
+var contentDataSourceMarkdownDescription string
 
 func (d *ConfidentialContentDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	specificAttr := map[string]schema.Attribute{
@@ -76,7 +83,7 @@ func (d *ConfidentialContentDataSource) Schema(_ context.Context, _ datasource.S
 
 	resp.Schema = schema.Schema{
 		Description:         "Datasource unwrapping a content into state",
-		MarkdownDescription: passwordDataSourceMarkdownDescription,
+		MarkdownDescription: contentDataSourceMarkdownDescription,
 
 		Attributes: resources.WrappedConfidentialMaterialModelDatasourceSchema(specificAttr),
 	}
@@ -102,14 +109,15 @@ func (d *ConfidentialContentDataSource) Read(ctx context.Context, req datasource
 	var data ConfidentialContentModel
 
 	// Read Terraform configuration data into the model
-	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
+	dg := &resp.Diagnostics
+	dg.Append(req.Config.Get(ctx, &data)...)
+	if dg.HasError() {
 		return
 	}
 
 	em := core.EncryptedMessage{}
 	if emImportErr := em.FromBase64PEM(data.EncryptedSecret.ValueString()); emImportErr != nil {
-		resp.Diagnostics.AddError(
+		dg.AddError(
 			"Confidential content does not conform to the expected format",
 			fmt.Sprintf("Received this error while trying to parse the confidential message: %s. Confidential content shoud be produced either by tfgen tool or vai appropriate function", emImportErr.Error()),
 		)
@@ -118,7 +126,7 @@ func (d *ConfidentialContentDataSource) Read(ctx context.Context, req datasource
 
 	header, content, err := DecryptContentMessage(em, d.Factory.GetDecrypterFor(ctx, data.WrappingKeyCoordinate))
 	if err != nil {
-		resp.Diagnostics.AddError(
+		dg.AddError(
 			"Cannot process plain-text data",
 			fmt.Sprintf("The plain-text data does not conform to the minimal expected data structure requirements: %s", err.Error()),
 		)
@@ -126,25 +134,66 @@ func (d *ConfidentialContentDataSource) Read(ctx context.Context, req datasource
 		return
 	}
 
-	d.CheckCiphertextExpiry(header, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// TODO: also control the number of uses
-
-	d.Factory.EnsureCanPlaceLabelledObjectAt(ctx, header.ProviderConstraints, nil, "password", nil, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx, "checking possibility to place this object raised an error")
-		return
-	}
+	d.CheckUnpackCondition(ctx, header, dg)
 
 	if len(content.GetStingData()) == 0 {
-		resp.Diagnostics.AddWarning("Empty confidential data", "Confidential data that this password encrypts seems to be empty")
+		dg.AddWarning("Empty confidential data", "Confidential data that this content encrypts seems to be empty")
 	}
 
-	data.Accept(header.Uuid, content)
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	if !dg.HasError() {
+		data.Accept(header.Uuid, content)
+	} else {
+		data.Drop()
+	}
+
+	dg.Append(resp.State.Set(ctx, &data)...)
+
+	if header.NumUses > 0 {
+		if trackErr := d.Factory.TrackObjectId(ctx, header.Uuid); trackErr != nil {
+			dg.AddError(
+				"Content usage cannot be tracked",
+				fmt.Sprintf("This content has a limit as to how much time it can be read. Trackign the usage returned this error: %s", trackErr.Error()),
+			)
+		}
+	}
+}
+
+func (d *ConfidentialContentDataSource) CheckUnpackCondition(ctx context.Context, header core.ConfidentialDataJsonHeader, dg *diag.Diagnostics) {
+	d.CheckCiphertextExpiry(header, dg)
+	if dg.HasError() {
+		return
+	}
+
+	d.Factory.EnsureCanPlaceLabelledObjectAt(ctx, header.ProviderConstraints, nil, ContentObjectType, nil, dg)
+	if dg.HasError() {
+		return
+	}
+
+	if header.NumUses > 0 {
+		if !d.Factory.IsObjectTrackingEnabled() {
+			dg.AddError(
+				"Object tracking is not enabled",
+				"This content has a limit as to how many times it can be read. Enable object tracking in the provider configuration",
+			)
+		} else {
+			if numUses, useCheckErr := d.Factory.GetTackedObjectUses(ctx, header.Uuid); useCheckErr != nil {
+				dg.AddError(
+					"Object tracking errored",
+					fmt.Sprintf("This content has a limit as to how many times it can be read. Attempting to read usage returned this error: %s", useCheckErr.Error()),
+				)
+			} else if numUses >= header.NumUses {
+				dg.AddError(
+					"Content usage limit has been reached",
+					fmt.Sprintf("This content has a limit as to how many times it can be read, and limit has been reached. Re-encrypt original content and replace the ciphertext to continue"),
+				)
+			} else if header.NumUses-numUses < 10 {
+				dg.AddWarning(
+					"Content use is almost depleted",
+					fmt.Sprintf("This content has a limit as to how many times it can be read, and this limit is almost reached. Re-encrypt original content and replace the ciphertext to prevent plan/apply runs failing due to depleted usage"),
+				)
+			}
+		}
+	}
 }
 
 // Ensure provider defined types fully satisfy framework interfaces.

@@ -3,11 +3,14 @@ package general
 import (
 	"context"
 	"crypto/rsa"
+	"testing"
+	"time"
+
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core/testkeymaterial"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestConfidentialContentModelAcceptTest(t *testing.T) {
@@ -85,4 +88,132 @@ func Test_CreateContentEncryptedMessage_EncryptedMessage(t *testing.T) {
 		hdr.ProviderConstraints,
 	))
 	assert.Nil(t, hdr.PlacementConstraints)
+}
+
+func Test_Content_CheckUnpackCondition_IfCiphertextExpired(t *testing.T) {
+	ds := ConfidentialContentDataSource{}
+	dg := diag.Diagnostics{}
+
+	hdr := core.ConfidentialDataJsonHeader{
+		Expiry: time.Now().Unix() - 10,
+	}
+
+	ds.CheckUnpackCondition(context.Background(), hdr, &dg)
+	assert.True(t, dg.HasError())
+	assert.Equal(t, "Ciphertext has expired", dg[0].Summary())
+}
+
+func Test_Content_CheckUnpackCondition_IfPlacementIsNotPossible(t *testing.T) {
+	mock := FactoryMock{}
+	ds := ConfidentialContentDataSource{}
+	ds.Factory = &mock
+
+	dg := diag.Diagnostics{}
+
+	hdr := core.ConfidentialDataJsonHeader{
+		Expiry: time.Now().Unix() + 60*24*60*60,
+	}
+
+	mock.GivenEnsureCanPlaceLabelledObjectAtRaisesError(ContentObjectType)
+
+	ds.CheckUnpackCondition(context.Background(), hdr, &dg)
+	assert.True(t, dg.HasError())
+	assert.Equal(t, "Can't place object unit test error", dg[0].Summary())
+
+	mock.AssertExpectations(t)
+}
+
+func Test_Content_CheckUnpackCondition_IfNumberOfUserForUnconfiguredFactory(t *testing.T) {
+	mock := FactoryMock{}
+	ds := ConfidentialContentDataSource{}
+	ds.Factory = &mock
+
+	dg := diag.Diagnostics{}
+
+	hdr := core.ConfidentialDataJsonHeader{
+		Expiry:  time.Now().Unix() + 60*24*60*60,
+		NumUses: 10,
+	}
+
+	mock.GivenEnsureCanPlaceLabelledObject(ContentObjectType)
+	mock.GivenIsObjectTrackingEnabled(false)
+
+	ds.CheckUnpackCondition(context.Background(), hdr, &dg)
+	assert.True(t, dg.HasError())
+	assert.Equal(t, "Object tracking is not enabled", dg[0].Summary())
+
+	mock.AssertExpectations(t)
+}
+
+func Test_Content_CheckUnpackCondition_IfNumberOfUsesErrs(t *testing.T) {
+	mock := FactoryMock{}
+	ds := ConfidentialContentDataSource{}
+	ds.Factory = &mock
+
+	dg := diag.Diagnostics{}
+
+	hdr := core.ConfidentialDataJsonHeader{
+		Uuid:    "uuid",
+		Expiry:  time.Now().Unix() + 60*24*60*60,
+		NumUses: 10,
+	}
+
+	mock.GivenEnsureCanPlaceLabelledObject(ContentObjectType)
+	mock.GivenIsObjectTrackingEnabled(true)
+	mock.GivenGetTackedObjectUsesErrs("uuid", "uses-unit-test-error")
+
+	ds.CheckUnpackCondition(context.Background(), hdr, &dg)
+	assert.True(t, dg.HasError())
+	assert.Equal(t, "Object tracking errored", dg[0].Summary())
+
+	mock.AssertExpectations(t)
+}
+
+func Test_Content_CheckUnpackCondition_IfUsesDepleted(t *testing.T) {
+	mock := FactoryMock{}
+	ds := ConfidentialContentDataSource{}
+	ds.Factory = &mock
+
+	dg := diag.Diagnostics{}
+
+	hdr := core.ConfidentialDataJsonHeader{
+		Uuid:    "uuid",
+		Expiry:  time.Now().Unix() + 60*24*60*60,
+		NumUses: 10,
+	}
+
+	mock.GivenEnsureCanPlaceLabelledObject(ContentObjectType)
+	mock.GivenIsObjectTrackingEnabled(true)
+	mock.GivenGetTackedObjectUses("uuid", 10)
+
+	ds.CheckUnpackCondition(context.Background(), hdr, &dg)
+	assert.True(t, dg.HasError())
+	assert.Equal(t, "Content usage limit has been reached", dg[0].Summary())
+
+	mock.AssertExpectations(t)
+}
+
+func Test_Content_CheckUnpackCondition_IfUsesAlmostDepleted(t *testing.T) {
+	mock := FactoryMock{}
+	ds := ConfidentialContentDataSource{}
+	ds.Factory = &mock
+
+	dg := diag.Diagnostics{}
+
+	hdr := core.ConfidentialDataJsonHeader{
+		Uuid:    "uuid",
+		Expiry:  time.Now().Unix() + 60*24*60*60,
+		NumUses: 10,
+	}
+
+	mock.GivenEnsureCanPlaceLabelledObject(ContentObjectType)
+	mock.GivenIsObjectTrackingEnabled(true)
+	mock.GivenGetTackedObjectUses("uuid", 5)
+
+	ds.CheckUnpackCondition(context.Background(), hdr, &dg)
+	assert.False(t, dg.HasError())
+	assert.Equal(t, "Content use is almost depleted", dg[0].Summary())
+	assert.Equal(t, "Warning", dg[0].Severity().String())
+
+	mock.AssertExpectations(t)
 }
