@@ -21,15 +21,15 @@ output "encrypted_named_value" {
   value = provider::az-confidential::encrypt_apim_named_value(
     "This is a secret named value",
     {
-      az_subscription_id = "123421"
-      resource_group = "rg"
-      api_management_name =  "apim"
-      name: "namedValue123",
+      az_subscription_id  = "123421"
+      resource_group      = "rg"
+      api_management_name = "apim"
+      name : "namedValue123",
     },
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
@@ -41,9 +41,9 @@ output "encrypted_named_value_without_destination_lock" {
     "This is a secret named value",
     null,
     {
-      create_limit = "72h"
-      expires_in = 200
-      num_uses = 10
+      create_limit         = "72h"
+      expires_in           = 200
+      num_uses             = 10
       provider_constraints = toset(["test", "acceptance"])
     },
     local.public_key
