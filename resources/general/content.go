@@ -158,7 +158,7 @@ func NewPasswordEncryptionFunction() function.Function {
 	rv := resources.FunctionTemplate[string, resources.ProtectionParams, int]{
 		Name:                        "encrypt_general_content",
 		Summary:                     "Encrypts a content",
-		MarkdownDescription:         "Encrypts a content string to be used with `az-confidential_content` data source",
+		MarkdownDescription:         "Generates the encrypted (cipher text) version of a content string which then van can be used by `az-confidential_content` data source to unpack this value into the Terraform state",
 		ProtectionParameterSupplier: func() resources.ProtectionParams { return resources.ProtectionParams{} },
 		DataParameter: function.StringParameter{
 			Name:        "content",

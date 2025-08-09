@@ -494,8 +494,8 @@ func DecryptNamedValueMessage(em core.EncryptedMessage, decrypted core.RSADecryp
 func NewNamedValueEncryptorFunction() function.Function {
 	rv := resources.FunctionTemplate[string, resources.ResourceProtectionParams, DestinationNamedValueModel]{
 		Name:                "encrypt_apim_named_value",
-		Summary:             "Produces a ciphertext string suitable for use with az-confidential_apim_named_value resource",
-		MarkdownDescription: "Encrypts an APIM named value without the use of the `tfgen` tool",
+		Summary:             "Encrypts a named value",
+		MarkdownDescription: "Generates the encrypted (cipher text) version of the the named value which then van can be used by `apim_named_value` resource to create an actual named value in the API Management service",
 
 		DataParameter: function.StringParameter{
 			Name:               "named_value",
@@ -506,7 +506,7 @@ func NewNamedValueEncryptorFunction() function.Function {
 		ProtectionParameterSupplier: func() resources.ResourceProtectionParams { return resources.ResourceProtectionParams{} },
 		DestinationParameter: function.ObjectParameter{
 			Name:               "destination_named_value",
-			Description:        "Destination vault and secret name",
+			Description:        "Destination API management service and named value",
 			AllowNullValue:     true,
 			AllowUnknownValues: true,
 
