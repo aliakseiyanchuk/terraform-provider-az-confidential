@@ -19,7 +19,6 @@ locals {
   plain_cert   = file("${path.module}/ephemeral-certificate.pem")
   enc_pem_cert = file("${path.module}/ephemeral-certificate-encrypted.pem")
   der_cert     = filebase64("${path.module}/cert.pkcs12", )
-  # Note: der-encrypted files cannot be read by Terraform directly.
 }
 
 output "encrypted_plain_certificate" {
