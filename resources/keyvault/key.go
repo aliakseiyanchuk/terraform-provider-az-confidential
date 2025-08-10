@@ -249,7 +249,7 @@ func (a *AzKeyVaultKeyResourceSpecializer) NewTerraformModel() KeyModel {
 	return KeyModel{}
 }
 
-func (a *AzKeyVaultKeyResourceSpecializer) ConvertToTerraform(azObj azkeys.KeyBundle, tfModel *KeyModel) diag.Diagnostics {
+func (a *AzKeyVaultKeyResourceSpecializer) ConvertToTerraform(_ context.Context, azObj azkeys.KeyBundle, tfModel *KeyModel) diag.Diagnostics {
 	dg := diag.Diagnostics{}
 	tfModel.Accept(azObj, &dg)
 	return dg

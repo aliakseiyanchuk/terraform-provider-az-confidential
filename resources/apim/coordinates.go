@@ -1,12 +1,15 @@
 package apim
 
 import (
+	"context"
 	"fmt"
+	"regexp"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"regexp"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 type DestinationApiManagement struct {
@@ -34,10 +37,10 @@ func (d *DestinationSubscriptionCoordinateModel) GetLabel() string {
 		d.UserIdentifier.ValueString())
 }
 
-var productRegexp = regexp.MustCompile("^/products/(.+)$")
-var apisRegexp = regexp.MustCompile("^/apis/(.+)$")
+var productRegexp = regexp.MustCompile("^/subscriptions/(.+)/resourceGroups/(.+)/providers/Microsoft.ApiManagement/service/(.+)/products/(.+)$")
+var apisRegexp = regexp.MustCompile("^/subscriptions/(.+)/resourceGroups/(.+)/providers/Microsoft.ApiManagement/service/(.+)/apis/(.+)$")
 
-func (d *DestinationSubscriptionCoordinateModel) Accept(props *armapimanagement.SubscriptionContractProperties) {
+func (d *DestinationSubscriptionCoordinateModel) Accept(ctx context.Context, props *armapimanagement.SubscriptionContractProperties) {
 	if props == nil {
 		core.StringToOptionalTerraform("", &d.ProductIdentifier)
 		core.StringToOptionalTerraform("", &d.APIIdentifier)
@@ -50,10 +53,12 @@ func (d *DestinationSubscriptionCoordinateModel) Accept(props *armapimanagement.
 	apiId := ""
 
 	scope := *props.Scope
+	tflog.Info(ctx, fmt.Sprintf("Accepting scope: %s", *props.Scope))
+
 	if prodMatcher := productRegexp.FindStringSubmatch(scope); prodMatcher != nil {
-		productId = prodMatcher[1]
+		productId = prodMatcher[4]
 	} else if apiMatcher := apisRegexp.FindStringSubmatch(scope); apiMatcher != nil {
-		apiId = apiMatcher[1]
+		apiId = apiMatcher[4]
 	}
 
 	core.StringToOptionalTerraform(productId, &d.ProductIdentifier)

@@ -5,9 +5,10 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // SecondaryProtectionParameters secondary protection parameters (in addition to the access to the private key)
@@ -216,6 +217,7 @@ func (vcd *VersionedConfidentialDataHelperTemplate[T, TAtRest]) ToEncryptedMessa
 				),
 				",",
 			),
+			"NumUses":        fmt.Sprintf("%d", vcd.Header.NumUses),
 			"Type":           vcd.Header.Type,
 			"ModelReference": vcd.Header.ModelReference,
 		},

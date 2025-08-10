@@ -19,12 +19,14 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 func CreateDestinationSubscription(azSubscriptionId,
@@ -157,7 +159,9 @@ func (sm *SubscriptionModel) ToUpdateOptions() armapimanagement.SubscriptionUpda
 	return rv
 }
 
-func (sm *SubscriptionModel) Accept(r armapimanagement.SubscriptionContract) {
+var subscriptionIdRegexp = regexp.MustCompile("^/subscriptions/(.+)/resourceGroups/(.+)/providers/Microsoft.ApiManagement/service/(.+)/subscriptions/(.+)$")
+
+func (sm *SubscriptionModel) Accept(ctx context.Context, r armapimanagement.SubscriptionContract) {
 	core.ConvertStingPrtToTerraform(r.ID, &sm.Id)
 	if r.Properties != nil {
 		core.ConvertBoolPrtToTerraform(r.Properties.AllowTracing, &sm.AllowTracing)
@@ -169,7 +173,17 @@ func (sm *SubscriptionModel) Accept(r armapimanagement.SubscriptionContract) {
 		sm.AllowTracing = types.BoolNull()
 	}
 
-	sm.DestinationSubscription.Accept(r.Properties)
+	// Sync the subscription Id from azure object id.
+	if subIdMatcher := subscriptionIdRegexp.FindStringSubmatch(*r.ID); subIdMatcher != nil {
+		sm.SubscriptionId = types.StringValue(subIdMatcher[4])
+	} else {
+		tflog.Warn(
+			ctx,
+			fmt.Sprintf("Subscription id (%s) does not match expected resource regular expression", *r.ID),
+		)
+	}
+
+	sm.DestinationSubscription.Accept(ctx, r.Properties)
 }
 
 type SubscriptionSpecializer struct {
@@ -184,8 +198,8 @@ func (s *SubscriptionSpecializer) NewTerraformModel() SubscriptionModel {
 	return SubscriptionModel{}
 }
 
-func (s *SubscriptionSpecializer) ConvertToTerraform(azObj armapimanagement.SubscriptionContract, tfModel *SubscriptionModel) diag.Diagnostics {
-	tfModel.Accept(azObj)
+func (s *SubscriptionSpecializer) ConvertToTerraform(ctx context.Context, azObj armapimanagement.SubscriptionContract, tfModel *SubscriptionModel) diag.Diagnostics {
+	tfModel.Accept(ctx, azObj)
 	return nil
 }
 
@@ -487,6 +501,9 @@ func NewSubscriptionResource() resource.Resource {
 		"subscription_id": schema.StringAttribute{
 			Computed:    true,
 			Description: "Id of the subscription that actually created. Useful in case where destination_subscription does not set a required Id",
+			PlanModifiers: []planmodifier.String{
+				stringplanmodifier.UseStateForUnknown(),
+			},
 		},
 		"state": schema.StringAttribute{
 			Computed:    true,
@@ -503,17 +520,26 @@ func NewSubscriptionResource() resource.Resource {
 				),
 			},
 			Default: stringdefault.StaticString("active"),
+			PlanModifiers: []planmodifier.String{
+				stringplanmodifier.UseStateForUnknown(),
+			},
 		},
 		"display_name": schema.StringAttribute{
 			Optional:    true,
 			Computed:    true,
 			Description: "Display name of this subscription. Defaults to subscription Id if unspecified",
+			PlanModifiers: []planmodifier.String{
+				stringplanmodifier.UseStateForUnknown(),
+			},
 		},
 		"allow_tracing": schema.BoolAttribute{
 			Optional:    true,
 			Computed:    true,
 			Description: "Whether to allow the tracing of policy execution for this subscription",
 			Default:     booldefault.StaticBool(false),
+			PlanModifiers: []planmodifier.Bool{
+				boolplanmodifier.UseStateForUnknown(),
+			},
 		},
 		"destination_subscription": schema.SingleNestedAttribute{
 			Required:            true,

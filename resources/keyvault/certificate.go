@@ -151,7 +151,7 @@ func (a *AzKeyVaultCertificateResourceSpecializer) NewTerraformModel() Certifica
 	return CertificateModel{}
 }
 
-func (a *AzKeyVaultCertificateResourceSpecializer) ConvertToTerraform(azObj azcertificates.Certificate, tfModel *CertificateModel) diag.Diagnostics {
+func (a *AzKeyVaultCertificateResourceSpecializer) ConvertToTerraform(_ context.Context, azObj azcertificates.Certificate, tfModel *CertificateModel) diag.Diagnostics {
 	tfModel.Accept(azObj)
 	return diag.Diagnostics{}
 }

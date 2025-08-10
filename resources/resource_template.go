@@ -52,7 +52,7 @@ type ConfidentialMaterialLocator[TMdl any] func(mdl TMdl) ConfidentialMaterialMo
 type CommonConfidentialResourceSpecialization[TMdl any, TConfData any, AZAPIObject any] interface {
 	SetFactory(factory core.AZClientsFactory)
 	NewTerraformModel() TMdl
-	ConvertToTerraform(azObj AZAPIObject, tfModel *TMdl) diag.Diagnostics
+	ConvertToTerraform(ctx context.Context, azObj AZAPIObject, tfModel *TMdl) diag.Diagnostics
 	GetConfidentialMaterialFrom(mdl TMdl) ConfidentialMaterialModel
 	Decrypt(ctx context.Context, em core.EncryptedMessage, decr core.RSADecrypter) (core.ConfidentialDataJsonHeader, TConfData, error)
 	CheckPlacement(ctx context.Context, providerConstraints []core.ProviderConstraint, placementConstraints []core.PlacementConstraint, tfModel *TMdl) diag.Diagnostics
@@ -208,7 +208,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 	if resourceExistenceCheck == ResourceNotFound {
 		resp.RemoveResource(ctx)
 	} else if resourceExistenceCheck == ResourceExists || resourceExistenceCheck == ResourceConfidentialDataDrift {
-		convertDiagnostics := d.Specializer.ConvertToTerraform(azObj, &data)
+		convertDiagnostics := d.Specializer.ConvertToTerraform(ctx, azObj, &data)
 		if len(convertDiagnostics) > 0 {
 			resp.Diagnostics.Append(convertDiagnostics...)
 		}
@@ -327,7 +327,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		return
 	}
 
-	convertDiagnostics := d.Specializer.ConvertToTerraform(azObj, &data)
+	convertDiagnostics := d.Specializer.ConvertToTerraform(ctx, azObj, &data)
 	if len(convertDiagnostics) > 0 {
 		resp.Diagnostics.Append(convertDiagnostics...)
 	}
@@ -437,7 +437,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) U
 		return
 	}
 
-	convertDiagnostics := d.Specializer.ConvertToTerraform(azObj, &data)
+	convertDiagnostics := d.Specializer.ConvertToTerraform(ctx, azObj, &data)
 	if len(convertDiagnostics) > 0 {
 		resp.Diagnostics.Append(convertDiagnostics...)
 	}

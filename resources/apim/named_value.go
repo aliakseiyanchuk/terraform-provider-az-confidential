@@ -129,7 +129,7 @@ func (n *NamedValueSpecializer) NewTerraformModel() NamedValueModel {
 	return NamedValueModel{}
 }
 
-func (n *NamedValueSpecializer) ConvertToTerraform(azObj armapimanagement.NamedValueContract, tfModel *NamedValueModel) diag.Diagnostics {
+func (n *NamedValueSpecializer) ConvertToTerraform(_ context.Context, azObj armapimanagement.NamedValueContract, tfModel *NamedValueModel) diag.Diagnostics {
 	tfModel.Accept(azObj)
 	return nil
 }

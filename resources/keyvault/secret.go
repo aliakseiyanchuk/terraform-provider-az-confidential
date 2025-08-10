@@ -109,7 +109,7 @@ func (a *AzKeyVaultSecretResourceSpecializer) NewTerraformModel() SecretModel {
 	return SecretModel{}
 }
 
-func (a *AzKeyVaultSecretResourceSpecializer) ConvertToTerraform(secret azsecrets.Secret, tfModel *SecretModel) diag.Diagnostics {
+func (a *AzKeyVaultSecretResourceSpecializer) ConvertToTerraform(_ context.Context, secret azsecrets.Secret, tfModel *SecretModel) diag.Diagnostics {
 	tfModel.Accept(secret)
 	return nil
 }

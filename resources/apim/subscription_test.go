@@ -2,6 +2,8 @@ package apim
 
 import (
 	"context"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/apimanagement/armapimanagement"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
@@ -10,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 //----------------------------------------------------------------------------------------------------------
@@ -21,7 +22,7 @@ func Test_SubscriptionModel_Accept(t *testing.T) {
 	p := armapimanagement.SubscriptionContract{
 		ID: to.Ptr("/subscriptions/azSid/resourceGroups/rg/providers/Microsoft.ApiManagement/service/sn/subscriptions/subId"),
 		Properties: &armapimanagement.SubscriptionContractProperties{
-			Scope:        to.Ptr("/apis/abc"),
+			Scope:        to.Ptr("/subscriptions/subId/resourceGroups/rg/providers/Microsoft.ApiManagement/service/sn/apis/abc"),
 			State:        to.Ptr(armapimanagement.SubscriptionStateActive),
 			AllowTracing: to.Ptr(true),
 			DisplayName:  to.Ptr("sd-displayName"),
@@ -29,7 +30,7 @@ func Test_SubscriptionModel_Accept(t *testing.T) {
 		},
 	}
 
-	sm.Accept(p)
+	sm.Accept(context.Background(), p)
 
 	assert.Equal(t, "/subscriptions/azSid/resourceGroups/rg/providers/Microsoft.ApiManagement/service/sn/subscriptions/subId", sm.Id.ValueString())
 	assert.Equal(t, "abc", sm.DestinationSubscription.APIIdentifier.ValueString())

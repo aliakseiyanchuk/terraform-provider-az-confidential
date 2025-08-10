@@ -4,14 +4,15 @@ import (
 	"context"
 	"crypto/rsa"
 	"errors"
+	"testing"
+	"time"
+
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core/testkeymaterial"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"testing"
-	"time"
 )
 
 type ParamMatcher[TValue any] func(req TValue) bool
@@ -203,8 +204,8 @@ func (sm *SpecializerMock[TMdl, TConfData, AzAPIObject]) NewTerraformModel() TMd
 	return args.Get(0).(TMdl)
 }
 
-func (sm *SpecializerMock[TMdl, TConfData, AzAPIObject]) ConvertToTerraform(azObj AzAPIObject, tfModel *TMdl) diag.Diagnostics {
-	args := sm.Called(azObj, tfModel)
+func (sm *SpecializerMock[TMdl, TConfData, AzAPIObject]) ConvertToTerraform(ctx context.Context, azObj AzAPIObject, tfModel *TMdl) diag.Diagnostics {
+	args := sm.Called(ctx, azObj, tfModel)
 	return args.Get(0).(diag.Diagnostics)
 }
 
@@ -234,7 +235,7 @@ func (sm *SpecializerMock[TMdl, TConfData, AzAPIObject]) CheckPlacement(ctx cont
 }
 
 func (s *SpecializerMock[TMdl, TConfData, AzAPIObject]) ThenAzValueIsConvertedToTerraform(azValue AzAPIObject, modelValue TMdl, c core.Comparator[TMdl]) {
-	s.On("ConvertToTerraform", azValue, mock.MatchedBy(PtrMatcher(modelValue, c))).
+	s.On("ConvertToTerraform", mock.Anything, azValue, mock.MatchedBy(PtrMatcher(modelValue, c))).
 		Once().
 		Return(diag.Diagnostics{})
 }
