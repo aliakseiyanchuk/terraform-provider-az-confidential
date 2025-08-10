@@ -15,7 +15,6 @@ provider "az-confidential" {
   # Ensure that the provider will only unwrap the confidential objects
   # that are intended for this provider.
   constraints         = ["test", "demo", "experimentation"]
-  require_label_match = "provider-labels"
 
   default_destination_vault_name = var.az_default_vault_name
 
