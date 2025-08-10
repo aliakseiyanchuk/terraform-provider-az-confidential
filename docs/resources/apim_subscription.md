@@ -179,7 +179,24 @@ The tool will prompt for the interactive content input. Further options can be o
 
 ```terraform
 resource "az-confidential_apim_subscription" "subscription" {
-  content       = "H4sIAAAAAAAA/1TSuba6OACA8Z6nmD5nDkvYLKYQiFy2AAoIdBFuQARZFIU8/Zz5d/OVX/37+78MZDv4LzPECcLJn8M1c6QwyQ2agVTuKywnqClijq/vw7Kc5Saa6uHw25TPBuZRIYEiVbZkUJEw8J1Fx/TNKQNvmyxw23HpIhL0Qi0kF7xIYDHg2yHNd8zTvu5smDgf6ykO0qGFBIH+ic05psLKMeNXFIDqz5dRe7k2lM37PGkv0Ms6HGqqhLukZFfLts8l0Au8yfoVkNt4mtRHztz5wV1CzyzgyNuXdU6KFH4VeK+/xg2bpczKTOZjk62ATErr9rGmm7TrRnbVI0JSdVoHnQvaRrWzDQ4ihmizwEcmvtjoWwiGTyIW7+RcrcUE9jz2vM1/KL+IGi8CCu0pzG3d5JyZ3JvdfdDXkJ2Cw1yM+1LqkSlpH3OkUO6O6V26h6mHPVfPhF7x8HGnBHjVxtqhrB/c070APkP2kUq9Pzm5da+Z9QpL6jrpfspTJ4g7xYRhYrba8tmM4xklKLB833+WxQsvXBULHxbW9GT2okDk1L7WtJQTno4kf0W3YLF++uDePbFWMP+mHzuG6kjNxt+0wUvy2DhIQi+ll5bvhfitQOehMprwlep4/pZSTd7LH8lzID7KrhF3YIkc/dwg1hxiCTm7tHLz7fz+8mQMrJDOE0n86kn7UfZKookLjD5lPYtrdSrw5Vyh9SuM/o9asuYNesjii5ZyOzYefkFvgZWB1WivMsKkQUMUK3gDI8vD63yyx77IKvQP9wcvwtb/Mf8bAAD//55aK1blAgAA"
+  content = <<-CIPHERTEXT
+            H4sIAAAAAAAA/3SUTY+6SBfF93yK3vP4gLwIdNKZgA00yIuIqLiZFEWhCFJIVSHy6Sf/nv9iepKpTSW/
+            m3vvuWdxFr+eZbte9LaOo70d7b8Jtx4QoCio7zV9f1tqqqIbirgyOHvq6+H1jVRNkn6hEJeo3aEKDaiD
+            6P0N9PWfd9CBC7qjjgqEFQQOdU9r3Anjktu2AH5X1rgjdAB1R8n7G5gXcNGCArXvgvCjhwiioalQA/qi
+            qIpioUADLgpVkRZqqRuSBIuyWiJhQASzASJ3wKwnAsRdVZeoozVoF80o9AMe6xINRAhrOGCCK/p/s6/D
+            f+hEw1hDJAAIUU9BB9G/ZPwB+vrj16CSQfrx+/dKgRE0fHDb3wt+XFWiO/4fRYTW3YXbv/q/3Xn7D3c4
+            zvUT6Lj5aJs+DF6xAtl1BuBhE8P1DudLLsmby2rOW6T1VrN64cdOvky1+1xuiufgnCsOrbaYuTNbeoZd
+            4i5vH657wMc5OrGTstaYIDraw92JvBpDLL/Obdj7ijm50gOdEx5o3C32KmAvO6nWc5sx/BWdNl+vhEck
+            m+XJSjuNxNMtOyRVlk6aX+hsoi5O2wOxSkNe91zCHm1p6ZkMpg4rUzHOe3CxNU+SHteKTMzzmXU0PZBX
+            ztdLtAvHwfrYbK2qOEmnPV5ypnzzLkcM4k8ZmGM8FJmYhWbX+uujesJM3lZAq8KsS2IcXM+ddmKi78f+
+            UbjcYzPJfU4iU+PxvEifAQyO3kpBu3a/UtZL0RSHqTnPjhYh4Znt9fOGVvzlvh6XgzQpLXPrVV8pnI9K
+            218H0c5yAv01htWBN0M1y2n2nLPrhs+omOPac8FSI89Gqs47Q7wXfBUcw85NoxWXXvttlhDLSUNPFm/e
+            LLYsxSckO41pjUiXDTclcXbckOt11dQ3f9l4l1ZLnyGgiAYKh3TBCwJaGYk0ig5tguSzCJiwqSJrNW70
+            RMXh2O7K25GUa+Vq8rY1CmN7jyxRonVXPDmRQorC50CsfNL6q506G7y/fM1rE3XGuTNNMWj4sjuPX7F6
+            G/Uj8/t+sl9qc0tjpchj7ks9pjcX9OkcyEEIolzkGXwcYBV7k2/H29vnYdxtPyVvn3xw35FhR58/I+Sv
+            AAAA//8eo3x1WwQAAA==
+            CIPHERTEXT
+
   display_name  = "confidentialSubscription"
   state         = "active"
   allow_tracing = false

@@ -166,19 +166,21 @@ The tool will prompt for the interactive content input. Further options can be o
 
 resource "az-confidential_apim_named_value" "named_value" {
   content = <<-CIPHERTEXT
-            H4sIAAAAAAAA/1TTT/d6SgDH8f08ivbuPYjE95y7SDQoEhplNzHk39CQ6NHf8/vufp/la/HZvf/9M92E
-            trfan73I9KJfAXtG8EhOZVuOPytxu5HVjaIoCjDnvmTLH1IVUZJkRQFul5EmIDlhhKbkZ5V2jPDDyEpa
-            8JMI/AanpCV03Hd0GBku6Tj8rIDPuqnMCPtLM9J2/4xkGEtagGjpyc8K9+WqxRQXvx88xS3JVhNu3gSA
-            zrV7OQ+Vds133lmH85a3OWfzzo8BU1NPuslGRk6WCgMa8X3cO4WYeRw2En/o3kGUA9vk5MZn6hZNTlHC
-            ZXGOtEqwFY0M0cSOtQdx5by7a2h9eYsf3DdmcryJ/Is9cYieCJCS4/r+mxVOKyH6vmUS5+hO/jEO2eZx
-            CDnBr9x3M56JRpqyOmeTuKC1fqNouqaxWp0BJonPpjC6ake7zWDglQWTteN1mMkax2N+OnH5Yi9rv+L3
-            AZZ8qhmXAeNXYG8fJ7dCQECm8zC26Q0xKXX2yJLv0l17XWY9e5Y0IptI8r/YfbbP4k4Ph30PjcrJwngR
-            6HKqiQKI9+jhzVBfFx8KtvwJdqe1IcNmJ/iQaruUn+VA0PV2zqV5kNImNZ8YMkny6/F2xRYEfdy2dNtN
-            no+912cKt1LRdHOCw63qCqNnndhdVfqE7jgIlbwy1axJM78upHoojughA5URr/uiZRwkXavG3YHT0S0q
-            ZpHCSl+q7vPigqBGwnIdIDaLt4ad5alYxE01CfZ1D3bVPk7phZt2uX69P+vaVj/o6N6/UWnVH9Ux9FoY
-            Ys7XzfSrrp9cEcR752s06MsT5ShEILkEifHCexoP2HpP+ee0HuxPsVPDjSrk7QZdRPhF5Kp8y+FytS5n
-            9RZfxfJQHHqDCUQELBxc6xgRazvvpldqxbxDRREX4lENeU4PE77NWi6pYVP8B34LMz3j7+L+DwAA//+j
-            T7ncigMAAA==
+            H4sIAAAAAAAA/1SUzZKyOBRA9zyFe8YJKL9dNQtQUbH5EVGRXQgBoxAiBBSefqq7pmrqu8uzOPfezZn/
+            jL3Z7v3ZKvDjjR//EmHVYsjxN6kJ/5rJuqoYqibrprD5MNKOv0jVDOUHeU2OqwgXuMUU4a8ZaloMOt4S
+            WoJBFsIKIlxjylcN7XgLCeXd1wxOczSvYIarLwBA12cdagnjpKEdkExdRTo05lmRZXMFmWieqcpiruaG
+            uVigLC9kDFrcNX2L8LZtetYB1NCC5JhyAqv5cwCsbQaS47YDHkFt0zUF/9tixIMUlr/XgA63A0EYQIQw
+            45AiDCiscX6BVY+7Hxzjjlt9KUtC+J/tjxdyXDd/cdxxQkshHhn+mkFGZvX/K359s+FHKAhhQEGWyOKT
+            niTv0HuQSnHmcj+VOzUekzMyS0pkz1+la2d/ilrWX7/Dl3bUm+vtbaSK8C2uDo8eHZqPpvQVi26D1C5N
+            zf9YncSS6ciDy90Y0o09jEMPxZOtqvlZgutKT+Sjjybheve2S3GzVNsiMBJKr+ndWGQSqN/GdMvydKks
+            ApkswwRWmqIfSJQbSTzpD9kp1VW3rYVQrOEaDW4QlvxMkB5IO9FR0PfdvNVe6Ei2fG70GysG586yfepy
+            L3uihm7WblHzCfsC91fucQL5WT266BLxz95/mR/dbQ+VTG44d1ZnhzQmHXV7z/ra5QBcgvayTOxk7Zea
+            LFxhxI9VZRzp4VVaU2Ktpepk7d0xcGtQANfwp+UxNpVvVXROahJtXo+3JFoXLVOeoRXbwvGjvT+sOEWf
+            BdU+nZ7gqL9hSYMntUlQGPV27E7pZ3VZ7arJFYdXQrRYVmKgHSAbx4ewhGq0FVdaWY5deCj8FExJCmDi
+            LJzKToKTruB1u3ShrybpatykgTc9lldflkGxLWVfEvA2kJ/B3SOP8/J2vBmNOdU5Gz6vi2HbH0VlJy1f
+            vMOTaheEdT1UNuiYs7PtRzV7vcVSsEhcnOT0LSNzl0uWFb0iR7tngbnjUF+z4WBcxHIn6fsXtZr4MnH9
+            Yu1H++QdesXZrjdC0aXOK77S8DwuzO/mGVk7ZrIzGh+jOCxDb0ezHcgu/C4q/wi/Odj46z/z8G8AAAD/
+            /zsyfw03BAAA
             CIPHERTEXT
 
 
