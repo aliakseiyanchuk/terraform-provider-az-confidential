@@ -3,13 +3,14 @@ package resources
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
+
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"regexp"
-	"strings"
 )
 
 type ResourceExistenceCheck int
@@ -171,7 +172,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) R
 			return
 		}
 
-		d.CheckCiphertextExpiry(header, resp.Diagnostics)
+		d.CheckCiphertextExpiry(ctx, header, resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -278,7 +279,12 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		return
 	}
 
-	d.CheckCiphertextExpiry(header, resp.Diagnostics)
+	d.CheckCiphertextExpiry(ctx, header, resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	d.CheckCiphertextCreateExpiry(ctx, header, resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -344,7 +350,7 @@ func (d *ConfidentialGenericResource[TMdl, TIdentity, TConfData, AZAPIObject]) C
 		} else if numTracked == header.NumUses && header.NumUses > 1 {
 			resp.Diagnostics.AddWarning(
 				"No more resource create are possible",
-				"The ciphertext allows limited number of times to create Azure objects. No further users are possible. Please recreate ciphertext of this resource ",
+				"The ciphertext allows limited number of times to create Azure objects. This was the last allowed create operation; no further creates using this ciphertext are possible. Recreate ciphertext of this resource",
 			)
 		}
 	}

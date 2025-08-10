@@ -159,7 +159,7 @@ func (d *ConfidentialContentDataSource) Read(ctx context.Context, req datasource
 }
 
 func (d *ConfidentialContentDataSource) CheckUnpackCondition(ctx context.Context, header core.ConfidentialDataJsonHeader, dg *diag.Diagnostics) {
-	d.CheckCiphertextExpiry(header, dg)
+	d.CheckCiphertextExpiry(ctx, header, dg)
 	if dg.HasError() {
 		return
 	}

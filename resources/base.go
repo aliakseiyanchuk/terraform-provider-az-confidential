@@ -3,6 +3,9 @@ package resources
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/schemasupport"
@@ -21,8 +24,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"regexp"
-	"time"
 )
 
 var validDateTime = regexp.MustCompile(`^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z`)
@@ -350,9 +351,11 @@ type CommonConfidentialResource struct {
 	Factory core.AZClientsFactory
 }
 
-func (d *CommonConfidentialResource) CheckCiphertextExpiry(header core.ConfidentialDataJsonHeader, dg *diag.Diagnostics) {
+func (d *CommonConfidentialResource) CheckCiphertextExpiry(ctx context.Context, header core.ConfidentialDataJsonHeader, dg *diag.Diagnostics) {
 	if header.Expiry > 0 {
 		now := time.Now()
+
+		tflog.Info(ctx, fmt.Sprintf("Checking expiry limits: now unix is %d; header's expirty is %d", now.Unix(), header.Expiry))
 
 		if now.Unix() > header.Expiry {
 			dg.AddError(
@@ -371,30 +374,25 @@ func (d *CommonConfidentialResource) CheckCiphertextExpiry(header core.Confident
 				"Ciphertext has less than 30 days remaining in the allowed use. Re-encrypt and replace the ciphertext of this resource before it expires",
 			)
 		}
+	} else {
+		tflog.Info(ctx, "Ciphertext never expires")
 	}
 }
 
-func (d *CommonConfidentialResource) CheckCiphertextCreateLimit(rawMsg core.ConfidentialDataMessageJson, dg *diag.Diagnostics) {
-	if rawMsg.Header.CreateLimit > 0 {
+func (d *CommonConfidentialResource) CheckCiphertextCreateExpiry(ctx context.Context, header core.ConfidentialDataJsonHeader, dg *diag.Diagnostics) {
+	if header.CreateLimit > 0 {
 		now := time.Now()
 
-		if now.Unix() > rawMsg.Header.CreateLimit {
-			dg.AddError(
-				"Ciphertext create window has expired",
-				"The ciphertext may no longer be used to create Azure objects. Re-encrypt and replace the ciphertext of this resource",
-			)
-			return
-		}
+		tflog.Info(ctx, fmt.Sprintf("Checking create limits: now unix is %d; header's create limit is %d", now.Unix(), header.Expiry))
 
-		warningDuration := time.Hour * 24
-		expiryTime := time.Unix(rawMsg.Header.Expiry, 0)
-		diff := expiryTime.Sub(time.Now())
-		if diff < warningDuration {
-			dg.AddWarning(
-				"Ciphertext create window is about to expire",
-				"Ciphertext has less than 24 hours remaining to create Azure objects. Re-encrypt and replace the ciphertext of this resource before it expires",
+		if now.Unix() > header.CreateLimit {
+			dg.AddError(
+				"Time to create Azure objects from this ciphertext has elapsed",
+				"The ciphertext author has placed the timing limits to create Azure object using the confidential material of this resource. These limits have now lapsed. Re-encrypt and replace the ciphertext of this resource",
 			)
 		}
+	} else {
+		tflog.Info(ctx, "Ciphertext does not constraint create limits")
 	}
 }
 
