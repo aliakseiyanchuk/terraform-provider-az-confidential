@@ -365,6 +365,9 @@ func NewNamedValueResource() resource.Resource {
 			Validators: []validator.String{
 				stringvalidator.RegexMatches(displayNameRegexp, "NamedValue (display name) may contain only letters, digits, periods, dashes and underscores"),
 			},
+			PlanModifiers: []planmodifier.String{
+				stringplanmodifier.UseStateForUnknown(),
+			},
 		},
 		"secret": schema.BoolAttribute{
 			Optional:    true,
