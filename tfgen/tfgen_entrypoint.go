@@ -298,8 +298,9 @@ func printSubcommandSelectionHelp(f *flag.FlagSet) {
 
 func init() {
 	CommandGroups = []string{
-		"kv",
-		"apim",
+		GeneralGroup,
+		ApimGroup,
+		KeyVaultGroup,
 	}
 }
 
