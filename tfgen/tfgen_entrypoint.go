@@ -43,6 +43,7 @@ const (
 	CreateOnceOption             model.CLIOption = "create-once"
 	NoUsageLimitOption           model.CLIOption = "no-usage-limit"
 	CiphertextOnlyOption         model.CLIOption = "ciphertext-only"
+	CiphertextNoFoldOption       model.CLIOption = "no-ciphertext-fold"
 )
 
 var CommandGroups []string
@@ -55,6 +56,7 @@ type EntryPointCLIArgs struct {
 	ConstraintTarget    bool
 
 	PrintCiphertextOnly bool
+	DoNotFoldCiphertext bool
 
 	CreateLimit time.Duration
 	ExpiryDays  int
@@ -153,6 +155,12 @@ func CreateCommonCLIArgs() (*EntryPointCLIArgs, *flag.FlagSet) {
 		CiphertextOnlyOption.String(),
 		false,
 		"Output only ciphertext (i.e. do not output associated Terraform code template)",
+	)
+
+	baseFlags.BoolVar(&rv.DoNotFoldCiphertext,
+		CiphertextNoFoldOption.String(),
+		false,
+		"Do not fold ciphertext output with -ciphertext-only option",
 	)
 
 	return rv, baseFlags
@@ -315,9 +323,13 @@ func MainEntryPoint() {
 	}
 
 	if cliArgs.PrintCiphertextOnly {
-		fld := model.FoldString(en.ToBase64PEM(), 80)
-		for _, v := range strings.Join(fld, "\n") {
-			fmt.Println(v)
+		if cliArgs.DoNotFoldCiphertext {
+			fmt.Println(en.ToBase64PEM())
+		} else {
+			fld := model.FoldString(en.ToBase64PEM(), 80)
+			for _, v := range fld {
+				fmt.Println(v)
+			}
 		}
 	} else {
 		fmt.Println(tfCode)
