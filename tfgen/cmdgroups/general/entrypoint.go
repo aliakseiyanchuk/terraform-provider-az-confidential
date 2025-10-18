@@ -2,12 +2,13 @@ package general
 
 import (
 	"fmt"
-	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 	"os"
+
+	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/tfgen/model"
 )
 
 var subcommands = []string{
-	"password",
+	ContentCommand,
 }
 
 // EntryPoint entry point that a wrapping CLI tool should use to trigger the CLI pocessing.
