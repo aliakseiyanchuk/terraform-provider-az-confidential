@@ -5,10 +5,11 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/aliakseiyanchuk/terraform-provider-az-confidential/core/testkeymaterial"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 import _ "github.com/stretchr/testify/assert"
 
@@ -37,7 +38,10 @@ func TestAESEncryption(t *testing.T) {
 }
 
 func TestGZipCompression(t *testing.T) {
-	input := []byte("this is an input string string string string string string")
+	// Change noticed in Gp 1.27: the input string needs to be of a considerable
+	// size in order to trigger compression. Strings having fewer than 108 bytes are NOT
+	// getting compressed; only GZIP header is added.
+	input := []byte("this is an input string string string string string string string string string string string string a string")
 	gzippedStr := GZipCompress(input)
 	assert.True(t, len(gzippedStr) < len(input))
 
