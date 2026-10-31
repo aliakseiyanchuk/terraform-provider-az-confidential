@@ -17,15 +17,16 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
-	"github.com/lestrrat-go/jwx/v3/jwa"
-	"github.com/lestrrat-go/jwx/v3/jwk"
 	"io"
 	"os"
 	"regexp"
 	"strings"
 	"sync"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
+	"github.com/lestrrat-go/jwx/v3/jwa"
+	"github.com/lestrrat-go/jwx/v3/jwk"
 
 	"github.com/youmark/pkcs8"
 )
@@ -299,7 +300,11 @@ func RsaDecryptBytes(key *rsa.PrivateKey, ciphertext []byte, label []byte) ([]by
 
 func GZipCompress(data []byte) []byte {
 	var buf bytes.Buffer
-	zw := gzip.NewWriter(&buf)
+	zw, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	if err != nil {
+		zw = gzip.NewWriter(&buf)
+	}
+
 	_, _ = zw.Write(data)
 	_ = zw.Close()
 
